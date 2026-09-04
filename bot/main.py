@@ -17,6 +17,7 @@ from __future__ import annotations
 import datetime as dt
 import logging
 import os
+import re
 import sys
 
 import telebot
@@ -49,11 +50,22 @@ class ShortNetworkErrors(logging.Filter):
     NOISE = ("Connection aborted", "ConnectionResetError", "ConnectionError",
              "ReadTimeout", "Max retries exceeded", "Connection reset")
 
+    # Первая строка сообщения у telebot — служебное «Exception traceback:»,
+    # а настоящая причина лежит в самом низу полотна. Её и достаём.
+    CAUSE = re.compile(r"^\s*(?:\w+\.)*(\w*(?:Error|Exception))\b[:\s](.*)$")
+
+    def _cause(self, text: str) -> str:
+        for line in reversed(text.strip().splitlines()):
+            m = self.CAUSE.match(line)
+            if m:
+                return f"{m.group(1)}: {m.group(2).strip()}"[:110]
+        return text.strip().splitlines()[0][:110]
+
     def filter(self, record: logging.LogRecord) -> bool:
         text = str(record.getMessage())
         if any(n in text for n in self.NOISE):
-            first = text.strip().splitlines()[0][:120]
-            record.msg = f"связь с Telegram оборвалась, переподключаюсь ({first})"
+            record.msg = ("связь с Telegram оборвалась, переподключаюсь — "
+                          + self._cause(text))
             record.args = ()
             record.exc_info = None
             record.levelno, record.levelname = logging.WARNING, "WARNING"
