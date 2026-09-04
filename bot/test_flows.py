@@ -25,6 +25,7 @@ from . import keyboards as kbs                                     # noqa: E402
 from . import main as B                                            # noqa: E402
 from . import schedule_api as api                                  # noqa: E402
 from telebot import types                                          # noqa: E402
+from telebot.apihelper import ApiTelegramException                 # noqa: E402
 
 ok = fail = 0
 
@@ -41,10 +42,13 @@ def check(name: str, cond: bool, detail: str = "") -> None:
 
 # ─────────────────────── фикстура расписания ───────────────────────
 
+KIND_CLS = {"Лекция": "lek", "Практика": "pr", "Лабораторная": "lab"}
+
+
 def _lesson(day, week, pair, frm, to, subj, kind, emoji, teacher, room):
     return {"day": day, "week": week, "pair": pair, "from": frm, "to": to,
-            "subject": subj, "kind": kind, "emoji": emoji, "flags": [],
-            "teacher": teacher, "room": room}
+            "subject": subj, "kind": kind, "kindCls": KIND_CLS.get(kind, "oth"),
+            "emoji": emoji, "flags": [], "teacher": teacher, "room": room}
 
 
 FIXTURE = {
@@ -222,7 +226,8 @@ check("клавиатура пересобрана", tg.edited[0]["markup"] is n
 print("\n6. Неделя, сегодня, поправка")
 tg.reset(); press("w|1|ПИН-31")
 check("свод недели: все шесть дней",
-      all(d in tg.edited[0]["text"] for d in ("Пн", "Вт", "Ср", "Чт", "Пт", "Сб")))
+      all(d in tg.edited[0]["text"] for d in
+          ("Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота")))
 tg.reset(); press("today|ПИН-31")
 check("«Сегодня» отредактировало сообщение", len(tg.edited) == 1)
 tg.reset(); press("shift|2")
@@ -284,6 +289,55 @@ check("обрезано по границе блока, тег не разорв
       big.count("<blockquote>") == big.count("</blockquote>"),
       f"{big.count('<blockquote>')} открытых, {big.count('</blockquote>')} закрытых")
 check("сказано, что показано не всё", "не всё" in big)
+
+print("\n12. Премиум-эмодзи и откат на обычные")
+fancy = render.schedule_card("ПИН-31", FIXTURE, 0, 1, 0, custom=True)
+plain = render.schedule_card("ПИН-31", FIXTURE, 0, 1, 0, custom=False)
+check("с премиумом в разметке есть tg-emoji", "<tg-emoji emoji-id=" in fancy)
+check("без премиума тега нет вовсе", "<tg-emoji" not in plain)
+check("запасной эмодзи виден и без премиума", "📖" in plain and "👤" in plain)
+check("каждый tg-emoji закрыт и несёт запасной внутри",
+      fancy.count("<tg-emoji") == fancy.count("</tg-emoji>")
+      and ">📖</tg-emoji>" in fancy)
+check("структура карточки от премиума не зависит",
+      plain.count("blockquote") == fancy.count("blockquote"))
+
+B._custom_emoji["direct"] = True
+calls = []
+
+
+def refusing(custom):
+    """Telegram отказывает в премиум-эмодзи, обычные принимает."""
+    calls.append(custom)
+    if custom:
+        raise ApiTelegramException("sendMessage", None, {
+            "error_code": 400,
+            "description": "Bad Request: CUSTOM_EMOJI_INVALID"})
+    return "отправлено"
+
+
+res = B.with_emoji_fallback(refusing)
+check("после отказа повторил обычными", calls == [True, False], str(calls))
+check("результат вернулся вызывающему", res == "отправлено")
+check("отказ запомнен", B._custom_emoji["direct"] is False)
+calls.clear()
+B.with_emoji_fallback(refusing)
+check("второй раз премиум уже не пробует", calls == [False], str(calls))
+B._custom_emoji["direct"] = True
+
+
+def broken(custom):
+    """Наша же ошибка в разметке — прятать её откатом нельзя."""
+    raise ApiTelegramException("sendMessage", None, {
+        "error_code": 400, "description": "Bad Request: can't parse entities"})
+
+
+try:
+    B.with_emoji_fallback(broken)
+    check("ошибка разметки не маскируется откатом", False, "исключения не было")
+except ApiTelegramException:
+    check("ошибка разметки не маскируется откатом", True)
+check("чужая ошибка флаг не сбрасывает", B._custom_emoji["direct"] is True)
 
 print("\n" + "=" * 58)
 print(f"пройдено {ok}, провалено {fail}")

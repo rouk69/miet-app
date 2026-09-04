@@ -23,6 +23,11 @@ UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
 TTL = 6 * 60 * 60          # расписание меняется редко, но не «никогда»
 GROUPS_TTL = 24 * 60 * 60
 
+# Версия формата разобранного расписания. Меняется, когда в записи пары
+# появляются новые поля: старые файлы кеша тогда просто перестают находиться,
+# а не отдают наружу записи без нужных ключей.
+CACHE_VERSION = 2
+
 CACHE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".cache")
 os.makedirs(CACHE_DIR, exist_ok=True)
 
@@ -57,7 +62,7 @@ def _lock_for(key: str) -> threading.Lock:
 
 def _cache_path(key: str) -> str:
     safe = re.sub(r"[^0-9A-Za-zА-Яа-яёЁ_-]", "_", key)
-    return os.path.join(CACHE_DIR, f"{safe}.json")
+    return os.path.join(CACHE_DIR, f"v{CACHE_VERSION}_{safe}.json")
 
 
 def _cache_get(key: str, ttl: int):
@@ -115,7 +120,9 @@ def human_date(d: dt.date) -> str:
 
 # ─────────────────────── разбор предмета ───────────────────────
 
-KIND_MAP = {"лек": ("Лекция", "📘"), "пр": ("Практика", "✏️"), "лаб": ("Лабораторная", "🔬")}
+KIND_MAP = {"лек": ("Лекция", "📘", "lek"),
+            "пр": ("Практика", "✏️", "pr"),
+            "лаб": ("Лабораторная", "🔬", "lab")}
 
 
 def parse_subject(raw: str) -> dict:
@@ -136,14 +143,15 @@ def parse_subject(raw: str) -> dict:
     name = re.sub(r"\s{2,}", " ", name).strip()
 
     low = kind.lower()
-    label, emoji = "", "📗"
-    for pref, (lbl, emo) in KIND_MAP.items():
+    label, emoji, cls = kind, "📗", "oth"
+    for pref, (lbl, emo, code) in KIND_MAP.items():
         if low.startswith(pref):
-            label, emoji = lbl, emo
+            label, emoji, cls = lbl, emo, code
             break
-    else:
-        label = kind
-    return {"name": name, "kind": label, "emoji": emoji, "flags": flags}
+    # cls повторяет kindCls из js/schedule.js: по нему и веб, и бот выбирают
+    # оформление типа занятия, и коды обязаны совпадать.
+    return {"name": name, "kind": label, "emoji": emoji, "cls": cls,
+            "flags": flags}
 
 
 _hhmm = lambda s: (re.search(r"T(\d{2}:\d{2})", s or "") or [None, ""])[1] \
@@ -185,6 +193,7 @@ def _normalize(js: dict) -> dict:
             "to": _time_of((d.get("Time") or {}).get("TimeTo")),
             "subject": s["name"],
             "kind": s["kind"],
+            "kindCls": s["cls"],
             "emoji": s["emoji"],
             "flags": s["flags"],
             "teacher": cls.get("Teacher") or cls.get("TeacherFull") or "",

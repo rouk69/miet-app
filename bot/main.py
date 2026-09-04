@@ -113,6 +113,40 @@ BOT_USERNAME = ""
 INLINE_LIMIT = 4     # сколько вариантов показать в inline-подсказке
 INLINE_FETCH = 2     # из них — за сколькими можно сходить в сеть
 
+# Премиум-эмодзи Telegram отдаёт не всем: в личку их можно слать, если
+# владелец бота — Premium, а во вставленные через inline сообщения — только
+# если у бота куплено имя на Fragment. Заранее это не проверить, поэтому
+# пробуем и запоминаем отказ: один раз получили ошибку — дальше шлём
+# обычными эмодзи, не дёргая Telegram впустую.
+_custom_emoji = {"direct": True, "inline": True}
+
+
+def _custom_emoji_rejected(e: Exception) -> bool:
+    """
+    Только про премиум-эмодзи. Ловить здесь «can't parse entities» нельзя:
+    это была бы наша же ошибка в разметке, а откат на обычные эмодзи её
+    молча спрятал бы — сообщение ушло бы, а баг остался.
+    """
+    text = str(e).upper()
+    return "CUSTOM_EMOJI" in text or "CUSTOM EMOJI" in text
+
+
+def with_emoji_fallback(send, scope: str = "direct"):
+    """
+    Вызывает send(custom=True); если Telegram отказал именно из-за
+    премиум-эмодзи — повторяет с обычными и запоминает это для scope.
+    """
+    if _custom_emoji.get(scope):
+        try:
+            return send(True)
+        except ApiTelegramException as e:
+            if not _custom_emoji_rejected(e):
+                raise
+            _custom_emoji[scope] = False
+            log.warning("Telegram не принял премиум-эмодзи (%s): %s — "
+                        "перехожу на обычные", scope, e)
+    return send(False)
+
 
 # ─────────────────────────── помощники ───────────────────────────
 
@@ -127,7 +161,7 @@ def today_day() -> int:
 
 
 def build_day(group: str, week: int | None = None, day: int | None = None,
-              shift: int = 0, webapp: bool = True
+              shift: int = 0, webapp: bool = True, custom: bool = True
               ) -> tuple[str, types.InlineKeyboardMarkup, dict, int]:
     """
     Готовит текст и клавиатуру карточки дня.
@@ -140,7 +174,7 @@ def build_day(group: str, week: int | None = None, day: int | None = None,
     cur_week = api.week_of_cycle(dt.date.today(), sched["semestr"], shift)
     w = cur_week if week is None else week % 4
     d = today_day() if day is None else max(1, min(6, day))
-    text = render.schedule_card(group, sched, w, d, cur_week)
+    text = render.schedule_card(group, sched, w, d, cur_week, custom=custom)
     kb = kbs.day_keyboard(group, sched, w, d, cur_week,
                           (WEBAPP_URL or None) if webapp else None)
     return text, kb, sched, cur_week
@@ -174,6 +208,16 @@ def group_saved_text(group: str) -> str:
         text += ("\n\nКинь одногруппникам — у них выберется та же группа:\n"
                  f"{link}")
     return text
+
+
+def edit_day(call: types.CallbackQuery, group: str, week: int | None,
+             day: int | None, shift: int, scope: str) -> None:
+    """Перерисовывает карточку дня в уже отправленном сообщении."""
+    webapp = not call.inline_message_id      # web_app в inline запрещён
+    with_emoji_fallback(
+        lambda c: safe_edit(call, *build_day(group, week, day, shift,
+                                             webapp=webapp, custom=c)[:2]),
+        scope)
 
 
 def ask_group(chat_id: int) -> None:
@@ -287,12 +331,18 @@ def cmd_shift(m: types.Message) -> None:
 
 def send_day(chat_id: int, group: str, week: int | None = None,
              day: int | None = None, shift: int = 0) -> None:
+    def attempt(custom: bool):
+        text, kb, _, _ = build_day(group, week, day, shift, custom=custom)
+        return bot.send_message(chat_id, text, reply_markup=kb,
+                                disable_web_page_preview=True)
     try:
-        text, kb, _, _ = build_day(group, week, day, shift)
+        with_emoji_fallback(attempt)
+    except ApiTelegramException as e:
+        log.warning("не отправилось: %s", e)
+        bot.send_message(chat_id, f"⚠️ Telegram не принял сообщение: {e}")
     except Exception as e:
         log.exception("расписание не загрузилось")
-        return bot.send_message(chat_id, f"⚠️ Не получилось загрузить расписание: {e}")
-    bot.send_message(chat_id, text, reply_markup=kb, disable_web_page_preview=True)
+        bot.send_message(chat_id, f"⚠️ Не получилось загрузить расписание: {e}")
 
 
 # ─────────────────── свободный текст: поиск группы ───────────────────
@@ -340,24 +390,26 @@ def on_callback(call: types.CallbackQuery) -> None:
         if action == "noop":
             return bot.answer_callback_query(call.id)
 
+        scope = "inline" if call.inline_message_id else "direct"
+
         if action == "d":                       # день конкретной недели
             week, day, group = int(parts[1]), int(parts[2]), parts[3]
-            text, kb, _, _ = build_day(group, week, day, shift)
-            safe_edit(call, text, kb)
+            edit_day(call, group, week, day, shift, scope)
             return bot.answer_callback_query(call.id)
 
         if action == "today":                   # вернуться на сегодня
             group = parts[1]
-            text, kb, _, _ = build_day(group, None, None, shift)
-            safe_edit(call, text, kb)
+            edit_day(call, group, None, None, shift, scope)
             return bot.answer_callback_query(call.id, "Сегодня")
 
         if action == "w":                       # свод на неделю
             week, group = int(parts[1]) % 4, parts[2]
             sched = api.fetch_schedule(group)
             cur = api.week_of_cycle(dt.date.today(), sched["semestr"], shift)
-            safe_edit(call, render.week_card(group, sched, week, cur),
-                      kbs.week_keyboard(group, week, WEBAPP_URL or None))
+            webapp = None if call.inline_message_id else (WEBAPP_URL or None)
+            with_emoji_fallback(lambda c: safe_edit(
+                call, render.week_card(group, sched, week, cur, custom=c),
+                kbs.week_keyboard(group, week, webapp)), scope)
             return bot.answer_callback_query(call.id)
 
         if action == "grp":                     # сменить группу
@@ -375,8 +427,7 @@ def on_callback(call: types.CallbackQuery) -> None:
         if action == "set":                     # выбор из найденных
             group = parts[1]
             storage.set_group(uid, group, call.from_user.username)
-            text, kb, _, _ = build_day(group, None, None, shift)
-            safe_edit(call, text, kb)
+            edit_day(call, group, None, None, shift, scope)
             return bot.answer_callback_query(call.id, f"Группа {group}")
 
         if action == "shift":                   # поправка недели
@@ -384,8 +435,7 @@ def on_callback(call: types.CallbackQuery) -> None:
             bot.answer_callback_query(call.id, "Сохранено")
             ctx = user_ctx(uid)
             if ctx["group"] and call.message:
-                text, kb, _, _ = build_day(ctx["group"], None, None, ctx["shift"])
-                return safe_edit(call, text, kb)
+                return edit_day(call, ctx["group"], None, None, ctx["shift"], scope)
             return
 
         bot.answer_callback_query(call.id)
@@ -439,7 +489,8 @@ def on_inline(q: types.InlineQuery) -> None:
             fetched += 1
         try:
             text, kb, sched, cur = build_day(group, None, None, ctx["shift"],
-                                             webapp=False)
+                                             webapp=False,
+                                             custom=_custom_emoji["inline"])
         except Exception:
             log.warning("inline: расписание %s не загрузилось", group)
             continue
@@ -457,9 +508,19 @@ def on_inline(q: types.InlineQuery) -> None:
         if len(results) >= INLINE_LIMIT:
             break
 
-    bot.answer_inline_query(q.id, results, cache_time=60, is_personal=True,
-                            switch_pm_text="Настроить группу",
-                            switch_pm_parameter="start")
+    try:
+        bot.answer_inline_query(q.id, results, cache_time=60, is_personal=True,
+                                switch_pm_text="Настроить группу",
+                                switch_pm_parameter="start")
+    except ApiTelegramException as e:
+        if not _custom_emoji_rejected(e) or not _custom_emoji["inline"]:
+            raise
+        # Во вставляемых сообщениях премиум-эмодзи разрешены только ботам
+        # с именем, купленным на Fragment. Отказ — собираем заново простыми.
+        _custom_emoji["inline"] = False
+        log.warning("премиум-эмодзи в inline недоступны (нужно имя с Fragment)"
+                    " — перехожу на обычные")
+        return on_inline(q)
 
 
 # ─────────────────────────── запуск ───────────────────────────
