@@ -10,6 +10,7 @@ import datetime as dt
 import html
 import re
 
+from . import emoji as em
 from . import schedule_api as api
 
 
@@ -41,10 +42,6 @@ def clamp(text: str, limit: int = TG_LIMIT) -> str:
     return cut + tail
 
 
-PAIR_BADGE = {1: "1️⃣", 2: "2️⃣", 3: "3️⃣", 4: "4️⃣",
-              5: "5️⃣", 6: "6️⃣", 7: "7️⃣", 8: "8️⃣"}
-
-
 def short_semestr(s: str) -> str:
     m = re.search(r"(\d{4})\s*/\s*(\d{4})", s or "")
     season = "осень" if re.search(r"осен", s or "", re.I) else \
@@ -61,27 +58,31 @@ def room_label(room: str) -> str:
     return f"ауд. {esc(r)}" if re.match(r"^\d", r) else esc(r)
 
 
-def lesson_block(l: dict, live: bool = False) -> str:
-    """Одна пара — blockquote с номером, временем, предметом и деталями."""
-    badge = PAIR_BADGE.get(l.get("pair"), "•")
-    head = f"{badge} <b>{esc(l['from'])}–{esc(l['to'])}</b>"
+def lesson_block(l: dict, live: bool = False, custom: bool = True) -> str:
+    """
+    Одна пара. Три строки, как в эталоне: номер с временем, предмет с типом,
+    преподаватель с аудиторией. Тип занятия задаёт иконку — лекция, практика
+    и лабораторная различаются с одного взгляда, не вчитываясь.
+    """
+    num = em.pair_num(l.get("pair"), custom)
+    head = f"{num} <b>{esc(l['from'])}</b>–{esc(l['to'])}"
     if live:
-        head += "  ← <i>идёт сейчас</i>"
+        head += f"  {em.ico('bell', custom)} <i>идёт сейчас</i>"
 
-    meta = []
+    subject = f"{em.kind_ico(l.get('kindCls', 'oth'), custom)} <b>{esc(l['subject'])}</b>"
     if l.get("kind"):
-        meta.append(esc(l["kind"]))
+        subject += f" · {esc(l['kind']).lower()}"
+    for f in l.get("flags", []):
+        subject += f" <code>{esc(f)}</code>"
+
+    tail = []
     if l.get("teacher"):
-        meta.append(esc(l["teacher"]))
+        tail.append(f"{em.ico('teacher', custom)} <i>{esc(l['teacher'])}</i>")
     if l.get("room"):
-        meta.append(room_label(l["room"]))
-    tail = " · ".join(meta)
+        tail.append(f"{em.ico('room', custom)} <i>{room_label(l['room'])}</i>")
 
-    flags = "".join(f" <code>{esc(f)}</code>" for f in l.get("flags", []))
-
-    return (f"<blockquote>{head}\n"
-            f"{l.get('emoji', '📗')} <b>{esc(l['subject'])}</b>{flags}\n"
-            f"{tail}</blockquote>")
+    lines = [head, subject] + ([" · ".join(tail)] if tail else [])
+    return "<blockquote>" + "\n".join(lines) + "</blockquote>"
 
 
 def _now_pair(lessons: list[dict], now: dt.datetime) -> dict | None:
@@ -95,8 +96,8 @@ def _now_pair(lessons: list[dict], now: dt.datetime) -> dict | None:
     return None
 
 
-def schedule_card(group: str, sched: dict, week: int, day: int,
-                  cur_week: int, now: dt.datetime | None = None) -> str:
+def schedule_card(group: str, sched: dict, week: int, day: int, cur_week: int,
+                  now: dt.datetime | None = None, custom: bool = True) -> str:
     """Основная карточка расписания на конкретный день."""
     now = now or dt.datetime.now()
     date = api.date_for(week, day, cur_week, now.date())
@@ -105,27 +106,28 @@ def schedule_card(group: str, sched: dict, week: int, day: int,
     lessons = api.lessons_of(sched, week, day)
     live = _now_pair(lessons, now) if is_today else None
 
-    title = api.DAY_NAMES[day]
-    head = f"🗓 <b>{title} · {api.human_date(date)}</b>"
+    head = f"{em.ico('calendar', custom)} <b>{api.DAY_NAMES[day]} · {api.human_date(date)}</b>"
     if is_today:
-        head += "  <i>· сегодня</i>"
+        head += " <i>· сегодня</i>"
 
     sub_bits = [f"{week + 1}-я неделя", esc(group)]
     sem = short_semestr(sched.get("semestr", ""))
     if sem:
         sub_bits.append(sem)
-    sub = " · ".join(sub_bits)
+    sub = "<i>" + " · ".join(sub_bits) + "</i>"
 
     if not lessons:
         body = "\n<blockquote>☕ <b>Пар нет</b>\nМожно выдохнуть</blockquote>"
     else:
         body = "\n" + "\n".join(
-            lesson_block(l, live is not None and l is live) for l in lessons)
+            lesson_block(l, live is not None and l is live, custom)
+            for l in lessons)
 
     footer = ""
     if lessons:
         n = len(lessons)
-        footer = (f"\n\n<i>{n} {plural(n, 'пара', 'пары', 'пар')} · "
+        footer = (f"\n\n{em.ico('time', custom)} <i>{n} "
+                  f"{plural(n, 'пара', 'пары', 'пар')} · "
                   f"с {lessons[0]['from']} до {lessons[-1]['to']}</i>")
 
     return clamp(f"{head}\n{sub}\n{body}{footer}")
@@ -140,24 +142,27 @@ def plural(n: int, one: str, few: str, many: str) -> str:
     return many
 
 
-def week_card(group: str, sched: dict, week: int, cur_week: int) -> str:
-    """Свод на всю неделю — компактно, по дням."""
+def week_card(group: str, sched: dict, week: int, cur_week: int,
+              custom: bool = True) -> str:
+    """Свод на всю неделю. Дни с парами разворачиваются по нажатию."""
     counts = api.day_counts(sched, week)
-    lines = [f"🗓 <b>{week + 1}-я неделя</b> · {esc(group)}", ""]
+    lines = [f"{em.ico('calendar', custom)} <b>{week + 1}-я неделя</b> · "
+             f"<i>{esc(group)}</i>", ""]
     for d in range(1, 7):
         lessons = api.lessons_of(sched, week, d)
         date = api.date_for(week, d, cur_week)
+        head = f"<b>{api.DAY_NAMES[d]}</b>, {date.strftime('%d.%m')}"
         if not lessons:
-            lines.append(f"<blockquote><b>{api.DAY_SHORT[d]} {date.strftime('%d.%m')}</b> — "
-                         f"<i>пар нет</i></blockquote>")
+            lines.append(f"<blockquote>{head} — <i>пар нет</i></blockquote>")
             continue
         rows = "\n".join(
-            f"{l['from']} · {esc(l['subject'])}"
-            + (f" · {esc(l['room'])}" if l.get("room") else "")
+            f"{em.pair_num(l.get('pair'), custom)} <b>{l['from']}</b> "
+            f"{esc(l['subject'])}"
+            + (f" · <i>{room_label(l['room'])}</i>" if l.get("room") else "")
             for l in lessons)
-        lines.append(f"<blockquote expandable><b>{api.DAY_SHORT[d]} {date.strftime('%d.%m')}</b>"
-                     f" — {counts[d]} {plural(counts[d], 'пара', 'пары', 'пар')}\n"
-                     f"{rows}</blockquote>")
+        lines.append(
+            f"<blockquote expandable>{head} — {counts[d]} "
+            f"{plural(counts[d], 'пара', 'пары', 'пар')}\n{rows}</blockquote>")
     return clamp("\n".join(lines))
 
 

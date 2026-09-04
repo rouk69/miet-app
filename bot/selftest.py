@@ -82,8 +82,9 @@ card = render.schedule_card("ПИН-31", sched, cur, 3, cur)
 check("карточка не пустая", len(card) > 80)
 check("есть blockquote", "<blockquote>" in card)
 check("уложились в лимит Telegram (4096)", len(card) < 4096, f"длина {len(card)}")
-tags = set(re.findall(r"</?([a-z]+)", card))
-allowed = {"b", "i", "u", "s", "a", "code", "pre", "blockquote", "tg-spoiler"}
+tags = set(re.findall(r"</?([a-z-]+)", card))
+allowed = {"b", "i", "u", "s", "a", "code", "pre", "blockquote",
+           "tg-spoiler", "tg-emoji"}
 check(f"только разрешённые теги: {sorted(tags)}", tags <= allowed,
       f"лишние: {tags - allowed}")
 
