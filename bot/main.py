@@ -127,14 +127,22 @@ def today_day() -> int:
 
 
 def build_day(group: str, week: int | None = None, day: int | None = None,
-              shift: int = 0) -> tuple[str, types.InlineKeyboardMarkup, dict, int]:
-    """Готовит текст и клавиатуру карточки дня."""
+              shift: int = 0, webapp: bool = True
+              ) -> tuple[str, types.InlineKeyboardMarkup, dict, int]:
+    """
+    Готовит текст и клавиатуру карточки дня.
+
+    webapp=False обязателен для inline-результатов: Telegram запрещает
+    кнопки web_app во вставляемых сообщениях и отклоняет весь
+    answerInlineQuery целиком, а не просто игнорирует кнопку.
+    """
     sched = api.fetch_schedule(group)
     cur_week = api.week_of_cycle(dt.date.today(), sched["semestr"], shift)
     w = cur_week if week is None else week % 4
     d = today_day() if day is None else max(1, min(6, day))
     text = render.schedule_card(group, sched, w, d, cur_week)
-    kb = kbs.day_keyboard(group, sched, w, d, cur_week, WEBAPP_URL or None)
+    kb = kbs.day_keyboard(group, sched, w, d, cur_week,
+                          (WEBAPP_URL or None) if webapp else None)
     return text, kb, sched, cur_week
 
 
@@ -158,6 +166,16 @@ def safe_edit(call: types.CallbackQuery, text: str,
             raise
 
 
+def group_saved_text(group: str) -> str:
+    """Подтверждение выбора + ссылка, по которой настроятся одногруппники."""
+    text = f"✅ Группа <b>{render.esc(group)}</b> сохранена"
+    if BOT_USERNAME:
+        link = kbs.share_link(BOT_USERNAME, group)
+        text += ("\n\nКинь одногруппникам — у них выберется та же группа:\n"
+                 f"{link}")
+    return text
+
+
 def ask_group(chat_id: int) -> None:
     bot.send_message(
         chat_id,
@@ -177,15 +195,21 @@ def cmd_start(m: types.Message) -> None:
     # в одно нажатие по присланной ссылке.
     parts = (m.text or "").split(maxsplit=1)
     payload = parts[1].strip() if len(parts) > 1 else ""
-    if payload and payload.lower() != "start":
-        try:
-            matches = api.resolve_group(payload.replace("_", " "), api.fetch_groups())
-        except Exception:
-            matches = []
-        if len(matches) == 1:
-            storage.set_group(m.from_user.id, matches[0], m.from_user.username)
-            ctx = user_ctx(m.from_user.id)
-            bot.send_message(m.chat.id, f"✅ Группа <b>{render.esc(matches[0])}</b> сохранена")
+    if payload:
+        # Названия групп кириллические, а в start-параметр Telegram пускает
+        # только [A-Za-z0-9_-] — поэтому там лежит base64url, а не сам текст.
+        wanted = kbs.decode_group(payload)
+        if wanted:
+            try:
+                matches = api.resolve_group(wanted, api.fetch_groups())
+            except Exception:
+                matches = []
+            if len(matches) == 1:
+                storage.set_group(m.from_user.id, matches[0], m.from_user.username)
+                ctx = user_ctx(m.from_user.id)
+                bot.send_message(
+                    m.chat.id,
+                    f"✅ Группа <b>{render.esc(matches[0])}</b> сохранена")
 
     bot.send_message(
         m.chat.id,
@@ -293,7 +317,8 @@ def on_text(m: types.Message) -> None:
     if len(matches) == 1:
         g = matches[0]
         storage.set_group(m.from_user.id, g, m.from_user.username)
-        bot.send_message(m.chat.id, f"✅ Группа <b>{render.esc(g)}</b> сохранена")
+        bot.send_message(m.chat.id, group_saved_text(g),
+                         disable_web_page_preview=True)
         return send_day(m.chat.id, g, shift=user_ctx(m.from_user.id)["shift"])
 
     bot.send_message(
@@ -336,16 +361,16 @@ def on_callback(call: types.CallbackQuery) -> None:
             return bot.answer_callback_query(call.id)
 
         if action == "grp":                     # сменить группу
-            target = call.message.chat.id if call.message else uid
+            # Всегда в личку: карточка могла быть вставлена в общий чат, и
+            # вопрос «какая у тебя группа» там увидели бы все остальные.
             try:
-                ask_group(target)
+                ask_group(uid)
             except ApiTelegramException:
-                # Кнопку нажали во вставленном сообщении, а бота в личке не
-                # запускали — писать туда нельзя, объясняем всплывающим окном.
+                # Бота в личке не запускали — писать туда нельзя.
                 return bot.answer_callback_query(
-                    call.id, "Открой бота в личке, чтобы выбрать группу",
+                    call.id, "Напиши боту в личку, чтобы выбрать группу",
                     show_alert=True)
-            return bot.answer_callback_query(call.id)
+            return bot.answer_callback_query(call.id, "Написал в личку")
 
         if action == "set":                     # выбор из найденных
             group = parts[1]
@@ -353,6 +378,10 @@ def on_callback(call: types.CallbackQuery) -> None:
             text, kb, _, _ = build_day(group, None, None, shift)
             safe_edit(call, text, kb)
             return bot.answer_callback_query(call.id, f"Группа {group}")
+
+        if action == "share":                   # ссылка для одногруппников
+            return bot.answer_callback_query(
+                call.id, kbs.share_link(BOT_USERNAME, parts[1]), show_alert=True)
 
         if action == "shift":                   # поправка недели
             storage.set_shift(uid, int(parts[1]))
@@ -413,7 +442,8 @@ def on_inline(q: types.InlineQuery) -> None:
                 continue
             fetched += 1
         try:
-            text, kb, sched, cur = build_day(group, None, None, ctx["shift"])
+            text, kb, sched, cur = build_day(group, None, None, ctx["shift"],
+                                             webapp=False)
         except Exception:
             log.warning("inline: расписание %s не загрузилось", group)
             continue

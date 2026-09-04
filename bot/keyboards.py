@@ -7,6 +7,7 @@
 """
 from __future__ import annotations
 
+import base64
 from urllib.parse import quote
 
 from telebot import types
@@ -14,6 +15,34 @@ from telebot import types
 from . import schedule_api as api
 
 SEP = "|"
+
+
+def encode_group(group: str) -> str:
+    """
+    Упаковывает название группы в start-параметр диплинка.
+
+    Telegram пускает в него только [A-Za-z0-9_-], а все группы МИЭТ на
+    кириллице — «ПИН-31» ссылкой не передать. base64url укладывается в
+    разрешённый алфавит: «ПИН-31» → «0J_QmNCdLTMx», 12 символов при лимите 64.
+    """
+    return base64.urlsafe_b64encode(group.encode()).decode().rstrip("=")
+
+
+def decode_group(payload: str) -> str | None:
+    """Обратная операция. Возвращает None, если пришёл мусор."""
+    if not payload:
+        return None
+    try:
+        pad = "=" * (-len(payload) % 4)
+        name = base64.urlsafe_b64decode(payload + pad).decode()
+    except (ValueError, UnicodeDecodeError):
+        return None
+    return name if 1 < len(name) < 40 else None
+
+
+def share_link(bot_username: str, group: str) -> str:
+    """Ссылка «нажми — и у тебя настроена та же группа»."""
+    return f"https://t.me/{bot_username}?start={encode_group(group)}"
 
 
 def webapp_link(url: str | None, group: str | None = None) -> str | None:
@@ -72,6 +101,10 @@ def day_keyboard(group: str, sched: dict, week: int, day: int, cur_week: int,
         types.InlineKeyboardButton("🗓 Неделя", callback_data=cb("w", week, group)),
         types.InlineKeyboardButton("👥 Группа", callback_data=cb("grp")),
     )
+
+    # Переслать расписание одногруппникам, не выходя из чата.
+    kb.row(types.InlineKeyboardButton(
+        "📤 Отправить в чат", switch_inline_query=group))
 
     link = webapp_link(webapp_url, group)
     if link:

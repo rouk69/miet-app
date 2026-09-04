@@ -13,8 +13,32 @@ import re
 from . import schedule_api as api
 
 
+TG_LIMIT = 4096
+
+
 def esc(t) -> str:
     return html.escape(str(t or ""), quote=False)
+
+
+def clamp(text: str, limit: int = TG_LIMIT) -> str:
+    """
+    Не даёт сообщению выйти за лимит Telegram.
+
+    Резать вслепую нельзя: обрыв внутри тега («<blockquo») роняет разбор
+    HTML, и Telegram отвечает 400 на всё сообщение целиком. Поэтому режем
+    по границе блока — по последнему закрытому </blockquote>.
+    """
+    if len(text) <= limit:
+        return text
+    tail = "\n\n<i>…показано не всё, открой приложение</i>"
+    cut = text[:limit - len(tail)]
+    end = cut.rfind("</blockquote>")
+    if end != -1:
+        cut = cut[:end + len("</blockquote>")]
+    else:
+        nl = cut.rfind("\n")
+        cut = cut[:nl] if nl > 0 else cut
+    return cut + tail
 
 
 PAIR_BADGE = {1: "1️⃣", 2: "2️⃣", 3: "3️⃣", 4: "4️⃣",
@@ -104,7 +128,7 @@ def schedule_card(group: str, sched: dict, week: int, day: int,
         footer = (f"\n\n<i>{n} {plural(n, 'пара', 'пары', 'пар')} · "
                   f"с {lessons[0]['from']} до {lessons[-1]['to']}</i>")
 
-    return f"{head}\n{sub}\n{body}{footer}"
+    return clamp(f"{head}\n{sub}\n{body}{footer}")
 
 
 def plural(n: int, one: str, few: str, many: str) -> str:
@@ -134,7 +158,7 @@ def week_card(group: str, sched: dict, week: int, cur_week: int) -> str:
         lines.append(f"<blockquote expandable><b>{api.DAY_SHORT[d]} {date.strftime('%d.%m')}</b>"
                      f" — {counts[d]} {plural(counts[d], 'пара', 'пары', 'пар')}\n"
                      f"{rows}</blockquote>")
-    return "\n".join(lines)
+    return clamp("\n".join(lines))
 
 
 def no_group_text() -> str:
