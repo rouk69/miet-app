@@ -1,0 +1,625 @@
+/* Стили приложения МИЭТ поверх токенов «си» из дизайн-кита.
+   Здесь только то, чего нет в tokens.css: экраны, обложки, расписание,
+   галереи, поиск. Всё остальное верстается классами кита. */
+
+/* ─────────────── Загрузка ─────────────── */
+
+.boot {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+}
+
+.boot-logo {
+  font-size: 34px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  color: var(--primary);
+}
+
+.boot-spinner,
+.spinner {
+  width: 22px;
+  height: 22px;
+  border: 2.5px solid var(--border);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ─────────────── Экран и шапка ─────────────── */
+
+/* Экраны сменяют друг друга внутри #app: активный виден, остальных нет
+   в DOM — состояние прокрутки хранит роутер, а не браузер. */
+.screen-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.screen-top .h1-page { flex: 1; min-width: 0; }
+
+.h1-page.small { font-size: 24px; }
+
+.header-actions { display: flex; gap: 8px; flex-shrink: 0; }
+
+.section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 22px 2px 10px;
+}
+
+.section-head:first-child { margin-top: 0; }
+
+.section-link {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--primary);
+  flex-shrink: 0;
+}
+
+.stack { display: flex; flex-direction: column; gap: 10px; }
+.stack-lg { display: flex; flex-direction: column; gap: 16px; }
+.muted { color: var(--text-secondary); }
+.tnum { font-variant-numeric: tabular-nums; }
+
+/* ─────────────── Карточка «сейчас» ─────────────── */
+
+.now-card {
+  background: var(--primary);
+  color: #fff;
+  border-radius: var(--radius-lg);
+  padding: 18px;
+  box-shadow: 0 8px 24px rgba(76, 110, 245, 0.22);
+}
+
+.now-card.rest {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow-card);
+}
+
+.now-kicker {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  opacity: 0.75;
+}
+
+.now-title {
+  font-size: 21px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  margin: 6px 0 0;
+  line-height: 1.24;
+}
+
+.now-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  margin-top: 12px;
+  font-size: 14px;
+  font-weight: 600;
+  opacity: 0.92;
+}
+
+.now-meta span { display: inline-flex; align-items: center; gap: 5px; }
+
+.now-progress {
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.28);
+  margin-top: 14px;
+  overflow: hidden;
+}
+
+.now-progress i {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+  background: #fff;
+  transition: width 0.3s ease;
+}
+
+.now-card.rest .now-progress { background: var(--border); }
+.now-card.rest .now-progress i { background: var(--primary); }
+
+/* ─────────────── Сетка быстрых действий ─────────────── */
+
+.quick-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+}
+
+.quick-item {
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  padding: 14px 6px 11px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  text-align: center;
+  box-shadow: var(--shadow-card);
+  transition: transform 0.15s ease;
+}
+
+.quick-item:active { transform: scale(0.96); }
+
+.quick-emoji { font-size: 22px; line-height: 1; }
+
+.quick-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  line-height: 1.2;
+}
+
+/* ─────────────── Новости ─────────────── */
+
+.news-card {
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: var(--shadow-card);
+  transition: transform 0.15s ease;
+}
+
+.news-card:active { transform: scale(0.985); }
+
+.news-cover {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  display: block;
+  background: var(--surface-2);
+}
+
+.news-body { padding: 14px 16px 16px; }
+
+.news-title {
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.32;
+  letter-spacing: -0.01em;
+}
+
+.news-date {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-top: 6px;
+}
+
+/* Компактная строка новости — для блока «Свежее» на главной */
+.news-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.news-row:last-child { border-bottom: none; }
+
+.news-row img {
+  width: 62px;
+  height: 62px;
+  border-radius: 14px;
+  object-fit: cover;
+  flex-shrink: 0;
+  background: var(--surface-2);
+}
+
+.news-row-title {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.32;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Статья */
+.article-cover {
+  width: calc(100% + 36px);
+  margin: -8px -18px 0;
+  aspect-ratio: 16 / 10;
+  object-fit: cover;
+  display: block;
+}
+
+.article-title {
+  font-size: 25px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.22;
+  margin: 18px 0 8px;
+}
+
+.article-text {
+  font-size: 16px;
+  line-height: 1.62;
+  color: var(--text);
+  white-space: pre-wrap;
+}
+
+.article-text p { margin: 0 0 14px; }
+
+.tag-row { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.tag {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 5px 11px;
+  border-radius: var(--radius-pill);
+  background: var(--primary-dim);
+  color: var(--primary);
+}
+
+.gallery {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.gallery img {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  border-radius: 14px;
+  background: var(--surface-2);
+}
+
+/* ─────────────── Расписание ─────────────── */
+
+.week-strip {
+  display: flex;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.week-day {
+  flex: 1;
+  background: var(--surface);
+  border-radius: 16px;
+  padding: 9px 2px 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.week-day-name {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+}
+
+.week-day-num {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.week-day.active { background: var(--primary); }
+.week-day.active .week-day-name { color: rgba(255, 255, 255, 0.8); }
+.week-day.active .week-day-num { color: #fff; }
+
+.week-day.today .week-day-num { color: var(--primary); }
+.week-day.active.today .week-day-num { color: #fff; }
+
+.week-day .dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--primary);
+}
+
+.week-day.active .dot { background: rgba(255, 255, 255, 0.9); }
+.week-day .dot.empty { background: transparent; }
+
+/* Пара */
+.lesson {
+  display: flex;
+  gap: 12px;
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  padding: 14px 16px;
+  box-shadow: var(--shadow-card);
+  position: relative;
+  overflow: hidden;
+}
+
+.lesson.live::before {
+  content: "";
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 4px;
+  background: var(--primary);
+}
+
+.lesson.past { opacity: 0.55; }
+
+.lesson-time {
+  flex-shrink: 0;
+  width: 52px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.lesson-from {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.lesson-to {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-tertiary);
+}
+
+.lesson-body { flex: 1; min-width: 0; }
+
+.lesson-name {
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.32;
+  letter-spacing: -0.01em;
+}
+
+.lesson-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin-top: 7px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.lesson-meta span { display: inline-flex; align-items: center; gap: 4px; }
+
+.kind {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 9px;
+  border-radius: var(--radius-pill);
+  font-size: 11px;
+  font-weight: 700;
+  margin-top: 8px;
+}
+
+.kind.lek { background: var(--primary-dim); color: var(--primary); }
+.kind.pr  { background: #E6F9ED; color: #1F9D4D; }
+.kind.lab { background: #FFF1DC; color: #C77A0A; }
+.kind.oth { background: var(--surface-2); color: var(--text-secondary); }
+
+:root[data-theme="dark"] .kind.pr  { background: #17301F; color: #4ADE80; }
+:root[data-theme="dark"] .kind.lab { background: #33240D; color: #FBBF24; }
+
+.live-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--primary);
+  margin-top: 8px;
+}
+
+.live-badge i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--primary);
+  animation: pulse 1.6s ease infinite;
+}
+
+@keyframes pulse { 50% { opacity: 0.35; } }
+
+/* ─────────────── Кружки и разделы ─────────────── */
+
+.tile {
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: var(--shadow-card);
+  transition: transform 0.15s ease;
+}
+
+.tile:active { transform: scale(0.985); }
+
+.tile-cover {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  display: block;
+  background: var(--surface-2);
+}
+
+.tile-body { padding: 14px 16px 16px; }
+
+.tile-head { display: flex; align-items: center; gap: 9px; }
+
+.tile-emoji { font-size: 19px; }
+
+.tile-title {
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  line-height: 1.28;
+  flex: 1;
+  min-width: 0;
+}
+
+.tile-sub {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-top: 5px;
+  line-height: 1.42;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-2);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.chip.free { background: #E6F9ED; color: #1F9D4D; }
+
+:root[data-theme="dark"] .chip.free { background: #17301F; color: #4ADE80; }
+
+.chip-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+
+/* Круглая иконка-эмодзи в строке списка */
+.emoji-tile {
+  width: 34px;
+  height: 34px;
+  border-radius: 11px;
+  background: var(--surface-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 17px;
+  flex-shrink: 0;
+}
+
+/* ─────────────── Поиск ─────────────── */
+
+.search-box {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  background: var(--surface-2);
+  border-radius: var(--radius-pill);
+  padding: 11px 16px;
+}
+
+.search-box input {
+  flex: 1;
+  min-width: 0;
+  background: none;
+  border: none;
+  outline: none;
+  font-size: 16px;
+  color: var(--text);
+  font-family: inherit;
+}
+
+.search-box input::placeholder { color: var(--text-tertiary); }
+
+.search-clear {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--text-tertiary);
+  color: var(--surface);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+/* ─────────────── Мелочи ─────────────── */
+
+.info-grid { display: flex; flex-direction: column; gap: 1px; }
+
+.avatar-lg {
+  width: 68px;
+  height: 68px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--primary-dim);
+  color: var(--primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 25px;
+  font-weight: 800;
+  flex-shrink: 0;
+}
+
+.profile-head { display: flex; align-items: center; gap: 15px; margin-bottom: 20px; }
+
+.hero {
+  position: relative;
+  width: calc(100% + 36px);
+  margin: -8px -18px 18px;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+}
+
+.hero img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+.hero-fade {
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 62%;
+  background: linear-gradient(to bottom, transparent, var(--bg));
+}
+
+.sheet-list { max-height: 58vh; overflow-y: auto; }
+
+.divider { height: 1px; background: var(--border); margin: 2px 0; }
+
+.skeleton {
+  background: linear-gradient(90deg, var(--surface-2) 25%, var(--border) 50%, var(--surface-2) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.3s linear infinite;
+  border-radius: var(--radius-md);
+}
+
+@keyframes shimmer { to { background-position: -200% 0; } }
+
+.link { color: var(--primary); font-weight: 600; }
+
+.center { text-align: center; }
+
+.fab-note {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  text-align: center;
+  padding: 14px 6px 0;
+  line-height: 1.5;
+}
+
+/* Строки списка кликабельны целиком — увеличиваем зону нажатия */
+.list-row.tap { cursor: pointer; }
+.list-row.tap:active { background: var(--surface-2); }
+
+.chevron { color: var(--text-tertiary); flex-shrink: 0; }
+
+/* Кнопка «назад» вне Telegram: в клиенте её роль играет системная
+   BackButton, поэтому здесь она появляется только в обычном браузере. */
+.back-fab {
+  position: fixed;
+  top: calc(var(--safe-top) + 14px);
+  left: 14px;
+  z-index: 60;
+  box-shadow: 0 2px 10px rgba(21, 23, 28, .12);
+}
+
+/* Заголовок уступает место кнопке «назад», но только когда идёт первым —
+   над обложкой или hero кнопка лежит поверх картинки и не мешает. */
+.screen.with-back > .screen-top:first-child { padding-left: 48px; min-height: 42px; }

@@ -1,0 +1,17 @@
+# сырые выгрузки парсера — пересобираются через tools/update.py
+tools/_raw/
+tools/__pycache__/
+server/__pycache__/
+__pycache__/
+*.pyc
+.DS_Store
+Thumbs.db
+
+# кеш расписания и база пользователей бота
+bot/.cache/
+bot/users.db
+bot/users.db-wal
+bot/users.db-shm
+
+# токены — никогда в репозиторий
+.env

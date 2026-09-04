@@ -1,0 +1,639 @@
+/* Design tokens — стиль «си» (see.tg): светлая, воздушная, максимально скруглённая
+   iOS-native эстетика. Источник: skill design-si-tg. */
+
+:root {
+  --bg: #EEF0F5;
+  --surface: #FFFFFF;
+  --surface-2: #F4F5F9; /* лёгкая серая подложка для полей форм */
+  --border: #ECEDF2;
+
+  --primary: #4C6EF5;
+  --primary-dim: #E9EEFF; /* подложка активного пункта нижней навигации */
+  --primary-press: #3D5BD9;
+
+  --text: #15171C;
+  --text-secondary: #8B909C;
+  --text-tertiary: #AEB2BD;
+
+  --success: #34C759;
+  --danger: #F04438;
+  --warning: #FF9F0A;
+
+  --radius-lg: 24px;
+  --radius-md: 18px;
+  --radius-sm: 12px;
+  --radius-pill: 999px;
+
+  --shadow-card: 0 1px 2px rgba(21, 23, 28, 0.04), 0 8px 24px rgba(21, 23, 28, 0.04);
+
+  --font: 'Manrope', 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+
+  /* --tg-safe-top/bottom — считаются в src/tg.ts (applySafeArea) из
+     Telegram.WebApp.safeAreaInset + contentSafeAreaInset, то есть включают
+     не только чёлку/статусбар устройства, но и собственную шапку Telegram
+     (кнопка «Закрыть» + свернуть/меню) поверх контента в развёрнутом режиме.
+     Вне Telegram (обычный браузер) эта переменная не выставляется — падаем
+     обратно на чистый env(safe-area-inset-*). */
+  --safe-top: var(--tg-safe-top, env(safe-area-inset-top, 0px));
+  --safe-bottom: var(--tg-safe-bottom, env(safe-area-inset-bottom, 0px));
+
+  /* Нативные date/time-инпуты на iOS красят свой текст по этой схеме, а не
+     по color инпута — без неё WebKit иногда рисует цифры белым по белому
+     (видно только после фокуса/пикера). Держим в паре с темой приложения. */
+  --input-scheme: light;
+
+  /* Ширина, за которой приложение перестаёт растягиваться. Телефоны — 390–430,
+     поэтому 560 оставляет воздух, но на планшете карточка события не
+     превращается в баннер во весь экран с пустой обложкой посередине. */
+  --content-max: 560px;
+}
+
+/* Тёмная тема — переключается вручную из профиля (Тема), не следует за
+   системной темой Telegram. Держим ту же структуру токенов, меняются только
+   значения — компоненты ничего не знают о теме, только про переменные. */
+:root[data-theme="dark"] {
+  --bg: #0F1014;
+  --surface: #1C1D22;
+  --surface-2: #26272D;
+  --border: #2C2D33;
+
+  --primary: #5B7FFF;
+  --primary-dim: #23294A;
+  --primary-press: #4C6EF5;
+
+  --text: #F2F3F5;
+  --text-secondary: #9BA1AC;
+  --text-tertiary: #6B7280;
+
+  --success: #32D74B;
+  --danger: #FF453A;
+  --warning: #FF9F0A;
+
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.2), 0 8px 24px rgba(0, 0, 0, 0.24);
+
+  --input-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body, #app {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  font-variant-numeric: tabular-nums;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior-y: none;
+}
+
+button {
+  font-family: inherit;
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: inherit;
+}
+
+input, textarea, select {
+  font-family: inherit;
+}
+
+::-webkit-scrollbar {
+  display: none;
+}
+
+/* ---------- Типографика ---------- */
+
+.h1-page {
+  font-size: 30px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  margin: 0;
+  color: var(--text);
+}
+
+.subtitle-page {
+  font-size: 15px;
+  font-weight: 400;
+  color: var(--text-secondary);
+  margin: 2px 0 0;
+}
+
+.section-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.row-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.row-subtitle {
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--text-secondary);
+}
+
+.kpi-number {
+  font-size: 28px;
+  font-weight: 800;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.kpi-label {
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--text-secondary);
+}
+
+/* ---------- Layout ---------- */
+
+.screen {
+  min-height: 100%;
+  padding: calc(var(--safe-top) + 20px) 18px calc(96px + var(--safe-bottom));
+  max-width: var(--content-max);
+  margin-inline: auto;
+}
+
+.screen-header {
+  margin-bottom: 20px;
+}
+
+/* ---------- Карточки ---------- */
+
+.card {
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+}
+
+.list-card {
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.list-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  min-height: 44px;
+}
+
+.list-row:last-child {
+  border-bottom: none;
+}
+
+.list-row-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.list-row-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.list-row-value {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+/* ---------- Пилюли / сегмент-контролы ---------- */
+
+.pill-row {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  scrollbar-width: none;
+}
+
+.pill {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 16px;
+  border-radius: var(--radius-pill);
+  font-size: 14px;
+  font-weight: 600;
+  background: var(--surface);
+  color: var(--text-secondary);
+  white-space: nowrap;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.pill.active {
+  background: var(--primary);
+  color: #fff;
+}
+
+.pill-icon-tile {
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+/* внутренний segmented control (два таба на всю ширину, напр. Список/Карта) */
+.segmented {
+  display: flex;
+  background: var(--surface-2);
+  border-radius: var(--radius-pill);
+  padding: 4px;
+  gap: 4px;
+}
+
+.segmented-item {
+  flex: 1;
+  text-align: center;
+  padding: 9px 0;
+  border-radius: var(--radius-pill);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.segmented-item.active {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 1px 3px rgba(21, 23, 28, 0.08);
+}
+
+/* ---------- Кнопки ---------- */
+
+.btn-primary {
+  width: 100%;
+  padding: 16px;
+  border-radius: var(--radius-pill);
+  background: var(--primary);
+  color: #fff;
+  font-size: 16px;
+  font-weight: 700;
+  text-align: center;
+  transition: background 0.15s ease;
+}
+
+.btn-primary:active {
+  background: var(--primary-press);
+}
+
+.btn-primary:disabled {
+  background: var(--text-tertiary);
+}
+
+.btn-secondary {
+  width: 100%;
+  padding: 16px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 16px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.icon-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--surface);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 1px 3px rgba(21, 23, 28, 0.08);
+}
+
+/* ---------- Нижняя навигация ---------- */
+
+.bottom-nav {
+  position: fixed;
+  /* Раньше растягивалась от края до края: на планшете подписи разъезжались
+     по углам, и до них было не дотянуться большим пальцем. */
+  left: 50%;
+  transform: translateX(-50%);
+  width: calc(100% - 32px);
+  max-width: var(--content-max);
+  bottom: calc(14px + var(--safe-bottom));
+  background: var(--surface);
+  border-radius: var(--radius-pill);
+  box-shadow: 0 4px 24px rgba(21, 23, 28, 0.12);
+  display: flex;
+  padding: 6px;
+  z-index: 50;
+}
+
+.bottom-nav-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 8px 4px;
+  border-radius: var(--radius-pill);
+  color: var(--text-tertiary);
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.bottom-nav-item.active {
+  background: var(--primary-dim);
+  color: var(--primary);
+}
+
+.bottom-nav-label {
+  font-size: 11px;
+  font-weight: 600;
+}
+
+/* ---------- Bottom sheet ---------- */
+
+.sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(21, 23, 28, 0.4);
+  z-index: 100;
+  animation: sheet-fade 0.2s ease;
+}
+
+/* Вручение значка: короткое появление с лёгким наездом — без прыжков,
+   чтобы не спорить с системной анимацией открытия мини-аппа. */
+@keyframes badge-in {
+  from { opacity: 0; transform: scale(0.94); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes sheet-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.sheet {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100%;
+  max-width: var(--content-max);
+  bottom: 0;
+  /* 92vh одного отступа не хватает, когда Telegram рисует свою шапку
+     (Закрыть/свернуть/меню) поверх контента в fullscreen — вычитаем
+     реальную высоту этой шапки, а не гадаем фиксированным vh. */
+  max-height: calc(92vh - var(--safe-top));
+  background: var(--bg);
+  border-radius: 28px 28px 0 0;
+  z-index: 101;
+  display: flex;
+  flex-direction: column;
+  animation: sheet-up 0.25s cubic-bezier(0.32, 0.72, 0, 1);
+  padding-bottom: var(--safe-bottom);
+}
+
+@keyframes sheet-up {
+  /* translateX(-50%) центрирует шторку, поэтому его обязаны нести оба кадра:
+     transform задаётся целиком, и стоит забыть его в одном из них — шторка
+     на время анимации уезжает вправо на половину своей ширины. */
+  from { transform: translate(-50%, 100%); }
+  to { transform: translate(-50%, 0); }
+}
+
+.sheet-handle {
+  width: 36px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--border);
+  margin: 10px auto 4px;
+}
+
+.sheet-header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  padding: 10px 16px 16px;
+}
+
+.sheet-title {
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.sheet-cancel {
+  position: absolute;
+  left: 16px;
+  color: var(--primary);
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.sheet-body {
+  padding: 0 18px 18px;
+  overflow-y: auto;
+}
+
+/* ---------- Поля форм ---------- */
+
+.field-label {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+  display: block;
+}
+
+.field-input {
+  width: 100%;
+  background: var(--surface-2);
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
+  font-size: 16px;
+  color: var(--text);
+  border: none;
+  outline: none;
+  /* type="date"/"time" на iOS красят цифры по этой схеме, игнорируя color —
+     без неё текст иногда невидим (белым по белому) до фокуса. */
+  color-scheme: var(--input-scheme);
+  -webkit-text-fill-color: var(--text);
+}
+
+.field-input::placeholder {
+  color: var(--text-tertiary);
+  /* Обязательно вместе с color: -webkit-text-fill-color выше задан на самом
+     поле и в WebKit перебивает цвет подсказки — без этой строки placeholder
+     красится как обычный текст, и не отличить подсказку от введённого. */
+  -webkit-text-fill-color: var(--text-tertiary);
+  opacity: 1; /* Firefox приглушает placeholder сам — выравниваем поведение */
+}
+
+/* type="date"/"time" рендерятся браузером по-своему (Дата слева, Время
+   справа) — центрируем обе, чтобы в паре рядом не выглядели вразнобой. */
+.field-input[type="date"],
+.field-input[type="time"] {
+  text-align: center;
+}
+
+.field-group {
+  margin-bottom: 16px;
+}
+
+/* ---------- Toggle ---------- */
+
+.toggle {
+  width: 46px;
+  height: 28px;
+  border-radius: var(--radius-pill);
+  background: var(--border);
+  position: relative;
+  transition: background 0.15s ease;
+  flex-shrink: 0;
+}
+
+.toggle.on {
+  background: var(--primary);
+}
+
+.toggle-knob {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(21, 23, 28, 0.2);
+  transition: transform 0.15s ease;
+}
+
+.toggle.on .toggle-knob {
+  transform: translateX(18px);
+}
+
+/* ---------- KPI сетка ---------- */
+
+.kpi-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.kpi-tile {
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* ---------- Аватары ---------- */
+
+.avatar {
+  border-radius: 50%;
+  background: var(--primary-dim);
+  color: var(--primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  flex-shrink: 0;
+  object-fit: cover;
+}
+
+.avatar-stack {
+  display: flex;
+}
+
+.avatar-stack .avatar {
+  border: 2px solid var(--surface);
+  margin-left: -8px;
+}
+
+.avatar-stack .avatar:first-child {
+  margin-left: 0;
+}
+
+/* ---------- Тег цены ---------- */
+
+.price-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 12px;
+  border-radius: var(--radius-pill);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.price-tag.free {
+  background: #E6F9ED;
+  color: var(--success);
+}
+
+.price-tag.paid {
+  background: var(--primary-dim);
+  color: var(--primary);
+}
+
+/* ---------- Статус-точка ---------- */
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.status-dot.ok { background: var(--success); }
+.status-dot.warn { background: var(--warning); }
+.status-dot.err { background: var(--danger); }
+
+/* ---------- Пустое состояние ---------- */
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  text-align: center;
+  color: var(--text-secondary);
+  gap: 10px;
+}
+
+/* ---------- Карта: кастомные маркеры ---------- */
+
+/* Leaflet по умолчанию рисует под div-иконками белый прямоугольник с рамкой
+   (расчёт на случай, если своих стилей не передали) — у нас маркер уже
+   полностью стилизован своей разметкой, поэтому глушим дефолт. */
+.leaflet-div-icon {
+  background: transparent;
+  border: none;
+}
+
+.orbit-map-popup-btn {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--primary);
+  padding: 2px 4px;
+}
