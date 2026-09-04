@@ -26,6 +26,7 @@ from telebot.apihelper import ApiTelegramException
 
 from . import keyboards as kbs
 from . import render
+from . import rich
 from . import schedule_api as api
 from . import storage
 
@@ -120,6 +121,11 @@ INLINE_FETCH = 2     # из них — за сколькими можно схо
 # обычными эмодзи, не дёргая Telegram впустую.
 _custom_emoji = {"direct": True, "inline": True}
 
+# Rich-сообщения (Bot API 10.1+) дают настоящие таблицы и кнопки в тексте.
+# Если сервер или клиент их не примет — молча возвращаемся к обычным
+# сообщениям с цитатами: они работают везде.
+_rich = {"direct": True, "inline": True}
+
 
 def _custom_emoji_rejected(e: Exception) -> bool:
     """
@@ -160,6 +166,19 @@ def today_day() -> int:
     return d if d <= 6 else 1
 
 
+def build_rich_day(group: str, week: int | None = None, day: int | None = None,
+                   shift: int = 0, webapp: bool = True, custom: bool = True
+                   ) -> tuple[str, dict, int]:
+    """Та же карточка дня, но разметкой Rich HTML — с таблицей и кнопками."""
+    sched = api.fetch_schedule(group)
+    cur_week = api.week_of_cycle(dt.date.today(), sched["semestr"], shift)
+    w = cur_week if week is None else week % 4
+    d = today_day() if day is None else max(1, min(6, day))
+    html = rich.day_html(group, sched, w, d, cur_week, custom=custom,
+                         webapp_url=(WEBAPP_URL or None) if webapp else None)
+    return html, sched, cur_week
+
+
 def build_day(group: str, week: int | None = None, day: int | None = None,
               shift: int = 0, webapp: bool = True, custom: bool = True
               ) -> tuple[str, types.InlineKeyboardMarkup, dict, int]:
@@ -180,20 +199,25 @@ def build_day(group: str, week: int | None = None, day: int | None = None,
     return text, kb, sched, cur_week
 
 
-def safe_edit(call: types.CallbackQuery, text: str,
-              markup: types.InlineKeyboardMarkup | None) -> None:
+def safe_edit(call: types.CallbackQuery, text: str | None,
+              markup: types.InlineKeyboardMarkup | None,
+              rich_html: str | None = None) -> None:
     """
     Правит сообщение и в личке, и во вставленном через inline.
     У inline-сообщения нет message_id — только inline_message_id.
+    С rich_html уходит структурная разметка вместо обычного текста.
     """
+    kw = {"reply_markup": markup}
+    if rich_html is not None:
+        kw["rich_message"] = types.InputRichMessage(html=rich_html)
+    else:
+        kw["disable_web_page_preview"] = True
     try:
         if call.inline_message_id:
-            bot.edit_message_text(text, inline_message_id=call.inline_message_id,
-                                  reply_markup=markup, disable_web_page_preview=True)
+            bot.edit_message_text(text, inline_message_id=call.inline_message_id, **kw)
         else:
             bot.edit_message_text(text, chat_id=call.message.chat.id,
-                                  message_id=call.message.message_id,
-                                  reply_markup=markup, disable_web_page_preview=True)
+                                  message_id=call.message.message_id, **kw)
     except ApiTelegramException as e:
         # Нажали ту же кнопку ещё раз — Telegram ругается, но это не ошибка.
         if "message is not modified" not in str(e):
@@ -214,6 +238,15 @@ def edit_day(call: types.CallbackQuery, group: str, week: int | None,
              day: int | None, shift: int, scope: str) -> None:
     """Перерисовывает карточку дня в уже отправленном сообщении."""
     webapp = not call.inline_message_id      # web_app в inline запрещён
+    if _rich[scope]:
+        try:
+            return with_emoji_fallback(lambda c: safe_edit(
+                call, None, None,
+                rich_html=build_rich_day(group, week, day, shift,
+                                         webapp=webapp, custom=c)[0]), scope)
+        except ApiTelegramException as e:
+            _rich[scope] = False
+            log.warning("rich-правка недоступна (%s) — перехожу на обычные", e)
     with_emoji_fallback(
         lambda c: safe_edit(call, *build_day(group, week, day, shift,
                                              webapp=webapp, custom=c)[:2]),
@@ -302,10 +335,19 @@ def cmd_week(m: types.Message) -> None:
         return ask_group(m.chat.id)
     sched = api.fetch_schedule(ctx["group"])
     cur = api.week_of_cycle(dt.date.today(), sched["semestr"], ctx["shift"])
-    bot.send_message(m.chat.id,
-                     render.week_card(ctx["group"], sched, cur, cur),
-                     reply_markup=kbs.week_keyboard(ctx["group"], cur, WEBAPP_URL or None),
-                     disable_web_page_preview=True)
+    if _rich["direct"]:
+        try:
+            return with_emoji_fallback(lambda c: bot.send_rich_message(
+                m.chat.id, types.InputRichMessage(
+                    html=rich.week_html(ctx["group"], sched, cur, cur, custom=c,
+                                        webapp_url=WEBAPP_URL or None))))
+        except ApiTelegramException as e:
+            _rich["direct"] = False
+            log.warning("rich-свод недоступен (%s)", e)
+    with_emoji_fallback(lambda c: bot.send_message(
+        m.chat.id, render.week_card(ctx["group"], sched, cur, cur, custom=c),
+        reply_markup=kbs.week_keyboard(ctx["group"], cur, WEBAPP_URL or None),
+        disable_web_page_preview=True))
 
 
 @bot.message_handler(commands=["group"])
@@ -331,6 +373,20 @@ def cmd_shift(m: types.Message) -> None:
 
 def send_day(chat_id: int, group: str, week: int | None = None,
              day: int | None = None, shift: int = 0) -> None:
+    """Шлёт карточку дня: сначала таблицей, при отказе — цитатами."""
+    if _rich["direct"]:
+        try:
+            return with_emoji_fallback(lambda c: bot.send_rich_message(
+                chat_id,
+                types.InputRichMessage(
+                    html=build_rich_day(group, week, day, shift, custom=c)[0])))
+        except ApiTelegramException as e:
+            _rich["direct"] = False
+            log.warning("rich-сообщения недоступны (%s) — перехожу на обычные", e)
+        except Exception:
+            log.exception("расписание не загрузилось")
+            return bot.send_message(chat_id, "⚠️ Не получилось загрузить расписание")
+
     def attempt(custom: bool):
         text, kb, _, _ = build_day(group, week, day, shift, custom=custom)
         return bot.send_message(chat_id, text, reply_markup=kb,
@@ -407,6 +463,17 @@ def on_callback(call: types.CallbackQuery) -> None:
             sched = api.fetch_schedule(group)
             cur = api.week_of_cycle(dt.date.today(), sched["semestr"], shift)
             webapp = None if call.inline_message_id else (WEBAPP_URL or None)
+            if _rich[scope]:
+                try:
+                    with_emoji_fallback(lambda c: safe_edit(
+                        call, None, None,
+                        rich_html=rich.week_html(group, sched, week, cur,
+                                                 custom=c, webapp_url=webapp)),
+                        scope)
+                    return bot.answer_callback_query(call.id)
+                except ApiTelegramException as e:
+                    _rich[scope] = False
+                    log.warning("rich-свод в правке недоступен (%s)", e)
             with_emoji_fallback(lambda c: safe_edit(
                 call, render.week_card(group, sched, week, cur, custom=c),
                 kbs.week_keyboard(group, week, webapp)), scope)
@@ -497,13 +564,26 @@ def on_inline(q: types.InlineQuery) -> None:
         lessons = api.lessons_of(sched, cur, today_day())
         desc = (f"{len(lessons)} {render.plural(len(lessons), 'пара', 'пары', 'пар')} · "
                 f"{cur + 1}-я неделя") if lessons else "Сегодня пар нет"
+        content, markup = None, kb
+        if _rich["inline"]:
+            try:
+                html = build_rich_day(group, None, None, ctx["shift"],
+                                      webapp=False,
+                                      custom=_custom_emoji["inline"])[0]
+                # Кнопки уже внутри разметки — отдельная клавиатура не нужна.
+                content, markup = types.InputRichMessageContent(
+                    rich_message=types.InputRichMessage(html=html)), None
+            except Exception as e:
+                log.warning("rich в inline не собрался (%s)", e)
+        if content is None:
+            content = types.InputTextMessageContent(
+                text, parse_mode="HTML", disable_web_page_preview=True)
         results.append(types.InlineQueryResultArticle(
             id=f"day-{i}-{group}",
             title=f"📅 {group} — сегодня",
             description=desc,
-            input_message_content=types.InputTextMessageContent(
-                text, parse_mode="HTML", disable_web_page_preview=True),
-            reply_markup=kb,
+            input_message_content=content,
+            reply_markup=markup,
         ))
         if len(results) >= INLINE_LIMIT:
             break

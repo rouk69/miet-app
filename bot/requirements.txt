@@ -1,2 +1,4 @@
-pyTelegramBotAPI>=4.14
+# 4.36+ обязателен: в нём появились sendRichMessage и поля кнопок из
+# Bot API 10.x. На 4.14 таблиц и кнопок в тексте просто нет.
+pyTelegramBotAPI>=4.36.1
 requests>=2.31
