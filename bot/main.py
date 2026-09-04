@@ -379,10 +379,6 @@ def on_callback(call: types.CallbackQuery) -> None:
             safe_edit(call, text, kb)
             return bot.answer_callback_query(call.id, f"Группа {group}")
 
-        if action == "share":                   # ссылка для одногруппников
-            return bot.answer_callback_query(
-                call.id, kbs.share_link(BOT_USERNAME, parts[1]), show_alert=True)
-
         if action == "shift":                   # поправка недели
             storage.set_shift(uid, int(parts[1]))
             bot.answer_callback_query(call.id, "Сохранено")
