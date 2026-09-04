@@ -159,10 +159,3 @@ def start_keyboard(webapp_url: str | None, bot_username: str = "",
     return kb
 
 
-def link_keyboard(webapp_url: str | None) -> types.InlineKeyboardMarkup | None:
-    """Для inline-сообщений: web_app там нельзя, поэтому обычная ссылка."""
-    if not webapp_url:
-        return None
-    kb = types.InlineKeyboardMarkup()
-    kb.row(types.InlineKeyboardButton("📱 Приложение", url=webapp_url))
-    return kb
