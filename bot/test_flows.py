@@ -23,6 +23,7 @@ storage.DB_PATH = os.path.join(tempfile.mkdtemp(), "test-users.db")
 
 from . import keyboards as kbs                                     # noqa: E402
 from . import main as B                                            # noqa: E402
+from . import rich as rich_mod                                     # noqa: E402
 from . import schedule_api as api                                  # noqa: E402
 from telebot import types                                          # noqa: E402
 from telebot.apihelper import ApiTelegramException                 # noqa: E402
@@ -89,10 +90,20 @@ class FakeTelegram:
             options={}, json_string="")
 
     def edit_message_text(self, text, **kw):
+        rm = kw.get("rich_message")
         self.edited.append({"text": text, "markup": kw.get("reply_markup"),
                             "chat_id": kw.get("chat_id"),
                             "message_id": kw.get("message_id"),
-                            "inline_message_id": kw.get("inline_message_id")})
+                            "inline_message_id": kw.get("inline_message_id"),
+                            "rich": rm.html if rm else None})
+
+    def send_rich_message(self, chat_id, rich_message, **kw):
+        self.sent.append({"chat_id": chat_id, "text": rich_message.html,
+                          "rich": rich_message.html, "markup": None})
+        return types.Message(
+            message_id=len(self.sent), from_user=None, date=0,
+            chat=types.Chat(chat_id, "private"), content_type="text",
+            options={}, json_string="")
 
     def answer_callback_query(self, call_id, text=None, **kw):
         self.answers.append({"id": call_id, "text": text})
@@ -110,6 +121,7 @@ B.bot.send_message = tg.send_message
 B.bot.edit_message_text = tg.edit_message_text
 B.bot.answer_callback_query = tg.answer_callback_query
 B.bot.answer_inline_query = tg.answer_inline_query
+B.bot.send_rich_message = tg.send_rich_message
 B.bot.threaded = False           # обработчики выполняются сразу, а не в пуле
 B.BOT_USERNAME = "mietapp_bot"
 
@@ -161,6 +173,12 @@ def inline_query(q: str) -> None:
     })])
 
 
+def edited_body(i: int = 0) -> str:
+    """Текст последней правки — из rich-разметки или обычного текста."""
+    e = tg.edited[i]
+    return e["rich"] or e["text"] or ""
+
+
 def buttons(markup) -> list[str]:
     return [b.text for row in (markup.keyboard if markup else []) for b in row]
 
@@ -189,12 +207,14 @@ check("группа сохранена в базе", storage.get_user(UID)["grou
 check("подтверждение + карточка", len(tg.sent) == 2, f"сообщений: {len(tg.sent)}")
 card = tg.sent[1]
 check("в карточке есть предмет из фикстуры", "Базы данных" in card["text"])
-check("карточка размечена blockquote", "<blockquote>" in card["text"])
-check("6 кнопок дней", sum(1 for c in callbacks(card["markup"])
-                           if c.startswith("d|")) >= 6)
-check("есть «Сегодня»", any("Сегодня" in b for b in buttons(card["markup"])))
-check("есть «Отправить в чат»",
-      any("Отправить" in b for b in buttons(card["markup"])))
+check("в таблице есть выравнивание по центру", 'valign="middle"' in card["text"])
+check("карточка ушла таблицей", "<table bordered" in card["text"])
+check("6 кнопок дней в разметке",
+      card["text"].count('type="callback_data" data="d|') >= 6)
+check("есть «Сегодня»", ">Сегодня</tg-button>" in card["text"])
+check("есть «Отправить в чат»", ">Отправить в чат</tg-button>" in card["text"])
+check("кнопка недели неактивна", 'type="disabled"' in card["text"])
+check("активный день выделен цветом", 'style="primary"' in card["text"])
 check("в подтверждении есть ссылка для одногруппников",
       "t.me/mietapp_bot?start=" in tg.sent[0]["text"], tg.sent[0]["text"][:120])
 check("ссылка в подтверждении раскодируется обратно в группу",
@@ -212,8 +232,7 @@ print("\n4. Кнопки переключения дня")
 tg.reset(); press("d|2|4|ПИН-31")
 check("сообщение отредактировано", len(tg.edited) == 1)
 check("правка ушла по message_id", tg.edited[0]["message_id"] == 10)
-check("в тексте 3-я неделя", "3-я неделя" in tg.edited[0]["text"],
-      tg.edited[0]["text"][:80])
+check("в тексте 3-я неделя", "3-я неделя" in edited_body(), edited_body()[:80])
 check("на callback ответили", len(tg.answers) == 1)
 
 print("\n5. Кнопки во вставленном сообщении (inline)")
@@ -221,13 +240,14 @@ tg.reset(); press("d|1|2|ПИН-31", inline=True)
 check("правка ушла по inline_message_id",
       tg.edited[0]["inline_message_id"] == "INLINE123")
 check("chat_id не использован", tg.edited[0]["chat_id"] is None)
-check("клавиатура пересобрана", tg.edited[0]["markup"] is not None)
+check("правка ушла разметкой с кнопками",
+      tg.edited[0]["rich"] and "<tg-button" in tg.edited[0]["rich"])
 
 print("\n6. Неделя, сегодня, поправка")
 tg.reset(); press("w|1|ПИН-31")
+body = edited_body()
 check("свод недели: все шесть дней",
-      all(d in tg.edited[0]["text"] for d in
-          ("Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота")))
+      all(d in body for d in ("Пн", "Вт", "Ср", "Чт", "Пт", "Сб")))
 tg.reset(); press("today|ПИН-31")
 check("«Сегодня» отредактировало сообщение", len(tg.edited) == 1)
 tg.reset(); press("shift|2")
@@ -254,13 +274,14 @@ print("\n9. Inline-режим")
 tg.reset(); inline_query("ПИН-31")
 res = tg.inline[0]["results"]
 check("есть результат", len(res) >= 1)
-check("у результата своя клавиатура", res[0].reply_markup is not None)
-check("в тексте расписание", "Базы данных" in res[0].input_message_content.message_text)
-check("кнопки несут группу",
-      any("ПИН-31" in c for c in callbacks(res[0].reply_markup)))
+content = res[0].input_message_content
+rich_html = getattr(getattr(content, "rich_message", None), "html", None)
+check("результат ушёл rich-разметкой", bool(rich_html))
+check("в таблице есть расписание", "Базы данных" in rich_html)
+check("кнопки внутри разметки несут группу", 'data="d|' in rich_html
+      and "ПИН-31" in rich_html)
 check("web_app в inline не пробрался — Telegram его там запрещает",
-      not any(b.web_app for row in res[0].reply_markup.keyboard for b in row),
-      "web_app найден")
+      'type="web_app"' not in rich_html, "web_app найден")
 tg.reset(); inline_query("щщщ")
 check("на мусор — пустой ответ", tg.inline[0]["results"] == [])
 
@@ -338,6 +359,45 @@ try:
 except ApiTelegramException:
     check("ошибка разметки не маскируется откатом", True)
 check("чужая ошибка флаг не сбрасывает", B._custom_emoji["direct"] is True)
+
+print("\n13. Откат с rich-сообщений на обычные")
+rich_html = rich_mod.day_html("ПИН-31", FIXTURE, 0, 1, 0,
+                              webapp_url="https://example.org/app")
+check("таблица с рамками", "<table bordered compact>" in rich_html)
+check("ячейки выровнены по вертикали", 'valign="middle"' in rich_html)
+check("кнопки лежат рядами", "<tg-button-row>" in rich_html)
+check("у активного дня свой стиль", 'style="primary"' in rich_html)
+check("номер недели некликабелен", 'type="disabled"' in rich_html)
+check("кнопка приложения — web_app", 'type="web_app"' in rich_html)
+check("без адреса приложения кнопки web_app нет",
+      'type="web_app"' not in rich_mod.day_html("ПИН-31", FIXTURE, 0, 1, 0))
+check("значения атрибутов экранированы",
+      '"' not in rich_mod.esc('он сказал "да"').replace("&quot;", ""))
+
+# сервер отказал в rich — бот обязан прислать обычную карточку
+B._rich["direct"] = True
+
+
+def rich_refused(chat_id, rich_message, **kw):
+    raise ApiTelegramException("sendRichMessage", None, {
+        "error_code": 400, "description": "Bad Request: method not found"})
+
+
+B.bot.send_rich_message = rich_refused
+tg.reset()
+B.send_day(CHAT, "ПИН-31")
+check("после отказа пришла обычная карточка", len(tg.sent) == 1,
+      f"сообщений: {len(tg.sent)}")
+check("это уже цитаты, а не таблица",
+      "<blockquote>" in tg.sent[0]["text"] and "<table" not in tg.sent[0]["text"])
+check("клавиатура вернулась под сообщение", tg.sent[0]["markup"] is not None)
+check("rich больше не пробуется", B._rich["direct"] is False)
+tg.reset()
+B.send_day(CHAT, "ПИН-31")
+check("второй раз сразу обычной", len(tg.sent) == 1
+      and "<table" not in tg.sent[0]["text"])
+B.bot.send_rich_message = tg.send_rich_message
+B._rich["direct"] = True
 
 print("\n" + "=" * 58)
 print(f"пройдено {ok}, провалено {fail}")
