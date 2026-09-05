@@ -175,10 +175,12 @@ def today_day() -> int:
 
 
 def build_rich_day(group: str, week: int | None = None, day: int | None = None,
-                   shift: int = 0, webapp: bool = True, custom: bool = True
-                   ) -> tuple[str, dict, int]:
+                   shift: int = 0, webapp: bool = True, custom: bool = True,
+                   uid: int | None = None) -> tuple[str, dict, int]:
     """Та же карточка дня, но разметкой Rich HTML — с таблицей и кнопками."""
     sched = api.fetch_schedule(group)
+    if uid is not None:
+        shift = storage.shift_for(uid, sched["semestr"])
     cur_week = api.week_of_cycle(dt.date.today(), sched["semestr"], shift)
     w = cur_week if week is None else week % 4
     d = today_day() if day is None else max(1, min(6, day))
@@ -188,7 +190,8 @@ def build_rich_day(group: str, week: int | None = None, day: int | None = None,
 
 
 def build_day(group: str, week: int | None = None, day: int | None = None,
-              shift: int = 0, webapp: bool = True, custom: bool = True
+              shift: int = 0, webapp: bool = True, custom: bool = True,
+              uid: int | None = None
               ) -> tuple[str, types.InlineKeyboardMarkup, dict, int]:
     """
     Готовит текст и клавиатуру карточки дня.
@@ -198,6 +201,8 @@ def build_day(group: str, week: int | None = None, day: int | None = None,
     answerInlineQuery целиком, а не просто игнорирует кнопку.
     """
     sched = api.fetch_schedule(group)
+    if uid is not None:
+        shift = storage.shift_for(uid, sched["semestr"])
     cur_week = api.week_of_cycle(dt.date.today(), sched["semestr"], shift)
     w = cur_week if week is None else week % 4
     d = today_day() if day is None else max(1, min(6, day))
@@ -243,7 +248,8 @@ def group_saved_text(group: str) -> str:
 
 
 def edit_day(call: types.CallbackQuery, group: str, week: int | None,
-             day: int | None, shift: int, scope: str) -> None:
+             day: int | None, shift: int, scope: str,
+             uid: int | None = None) -> None:
     """Перерисовывает карточку дня в уже отправленном сообщении."""
     webapp = not call.inline_message_id      # web_app в inline запрещён
     if _rich[scope]:
@@ -251,13 +257,15 @@ def edit_day(call: types.CallbackQuery, group: str, week: int | None,
             return with_emoji_fallback(lambda c: safe_edit(
                 call, None, None,
                 rich_html=build_rich_day(group, week, day, shift,
-                                         webapp=webapp, custom=c)[0]), scope)
+                                         webapp=webapp, custom=c,
+                                         uid=uid)[0]), scope)
         except ApiTelegramException as e:
             _rich[scope] = False
             log.warning("rich-правка недоступна (%s) — перехожу на обычные", e)
     with_emoji_fallback(
         lambda c: safe_edit(call, *build_day(group, week, day, shift,
-                                             webapp=webapp, custom=c)[:2]),
+                                             webapp=webapp, custom=c,
+                                             uid=uid)[:2]),
         scope)
 
 
@@ -394,7 +402,7 @@ def cmd_start(m: types.Message) -> None:
             return
 
     if ctx["group"]:
-        send_day(m.chat.id, ctx["group"], shift=ctx["shift"])
+        send_day(m.chat.id, ctx["group"], shift=ctx["shift"], uid=m.from_user.id)
 
 
 @bot.message_handler(commands=["help"])
@@ -408,7 +416,7 @@ def cmd_today(m: types.Message) -> None:
     ctx = user_ctx(m.from_user.id)
     if not ctx["group"]:
         return ask_group(m.chat.id)
-    send_day(m.chat.id, ctx["group"], shift=ctx["shift"])
+    send_day(m.chat.id, ctx["group"], shift=ctx["shift"], uid=m.from_user.id)
 
 
 @bot.message_handler(commands=["tomorrow"])
@@ -422,7 +430,8 @@ def cmd_tomorrow(m: types.Message) -> None:
     day = tomorrow.isoweekday()
     if day > 6:                     # воскресенье — показываем понедельник
         day, week = 1, (week + 1) % 4
-    send_day(m.chat.id, ctx["group"], week=week, day=day, shift=ctx["shift"])
+    send_day(m.chat.id, ctx["group"], week=week, day=day,
+             shift=ctx["shift"], uid=m.from_user.id)
 
 
 @bot.message_handler(commands=["week"])
@@ -487,14 +496,16 @@ def cmd_shift(m: types.Message) -> None:
 
 
 def send_day(chat_id: int, group: str, week: int | None = None,
-             day: int | None = None, shift: int = 0) -> None:
+             day: int | None = None, shift: int = 0,
+             uid: int | None = None) -> None:
     """Шлёт карточку дня: сначала таблицей, при отказе — цитатами."""
     if _rich["direct"]:
         try:
             return with_emoji_fallback(lambda c: bot.send_rich_message(
                 chat_id,
                 types.InputRichMessage(
-                    html=build_rich_day(group, week, day, shift, custom=c)[0])))
+                    html=build_rich_day(group, week, day, shift, custom=c,
+                                       uid=uid)[0])))
         except ApiTelegramException as e:
             _rich["direct"] = False
             log.warning("rich-сообщения недоступны (%s) — перехожу на обычные", e)
@@ -503,7 +514,8 @@ def send_day(chat_id: int, group: str, week: int | None = None,
             return bot.send_message(chat_id, "⚠️ Не получилось загрузить расписание")
 
     def attempt(custom: bool):
-        text, kb, _, _ = build_day(group, week, day, shift, custom=custom)
+        text, kb, _, _ = build_day(group, week, day, shift, custom=custom,
+                                   uid=uid)
         return bot.send_message(chat_id, text, reply_markup=kb,
                                 disable_web_page_preview=True)
     try:
@@ -540,7 +552,8 @@ def on_text(m: types.Message) -> None:
         storage.set_group(m.from_user.id, g, m.from_user.username)
         bot.send_message(m.chat.id, group_saved_text(g),
                          disable_web_page_preview=True)
-        return send_day(m.chat.id, g, shift=user_ctx(m.from_user.id)["shift"])
+        return send_day(m.chat.id, g, shift=user_ctx(m.from_user.id)["shift"],
+                        uid=m.from_user.id)
 
     bot.send_message(
         m.chat.id,
@@ -565,12 +578,12 @@ def on_callback(call: types.CallbackQuery) -> None:
 
         if action == "d":                       # день конкретной недели
             week, day, group = int(parts[1]), int(parts[2]), parts[3]
-            edit_day(call, group, week, day, shift, scope)
+            edit_day(call, group, week, day, shift, scope, uid)
             return bot.answer_callback_query(call.id)
 
         if action == "today":                   # вернуться на сегодня
             group = parts[1]
-            edit_day(call, group, None, None, shift, scope)
+            edit_day(call, group, None, None, shift, scope, uid)
             return bot.answer_callback_query(call.id, "Сегодня")
 
         if action == "w":                       # свод на неделю
@@ -612,15 +625,22 @@ def on_callback(call: types.CallbackQuery) -> None:
         if action == "set":                     # выбор из найденных
             group = parts[1]
             storage.set_group(uid, group, call.from_user.username)
-            edit_day(call, group, None, None, shift, scope)
+            edit_day(call, group, None, None, shift, scope, uid)
             return bot.answer_callback_query(call.id, f"Группа {group} сохранена")
 
         if action == "shift":                   # поправка недели
-            storage.set_shift(uid, int(parts[1]))
+            semestr = ""
+            g = user_ctx(uid)["group"]
+            if g:
+                try:
+                    semestr = api.fetch_schedule(g)["semestr"]
+                except Exception:
+                    pass
+            storage.set_shift(uid, int(parts[1]), semestr)
             bot.answer_callback_query(call.id, "Сохранено")
             ctx = user_ctx(uid)
             if ctx["group"] and call.message:
-                return edit_day(call, ctx["group"], None, None, ctx["shift"], scope)
+                return edit_day(call, ctx["group"], None, None, ctx["shift"], scope, uid)
             return
 
         bot.answer_callback_query(call.id)
