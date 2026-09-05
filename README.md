@@ -23,7 +23,7 @@
 ## Бот
 
 ```bash
-pip install -r bot/requirements.txt
+pip install -r requirements.txt
 cp .env.example .env      # и вписать туда токен
 python -m bot.main
 ```

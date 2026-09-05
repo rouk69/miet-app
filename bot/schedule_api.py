@@ -16,6 +16,8 @@ from typing import Any
 
 import requests
 
+from . import paths
+
 API = "https://miet.ru/schedule/data"
 GROUPS_API = "https://miet.ru/schedule/groups"
 UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -28,7 +30,7 @@ GROUPS_TTL = 24 * 60 * 60
 # а не отдают наружу записи без нужных ключей.
 CACHE_VERSION = 2
 
-CACHE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".cache")
+CACHE_DIR = paths.path(".cache") + os.sep
 os.makedirs(CACHE_DIR, exist_ok=True)
 
 DAY_NAMES = ["", "Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота"]

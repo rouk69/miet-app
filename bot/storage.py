@@ -8,9 +8,11 @@ from __future__ import annotations
 
 import os
 import sqlite3
+
+from . import paths
 import threading
 
-DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "users.db")
+DB_PATH = paths.path("users.db")
 _local = threading.local()
 
 
