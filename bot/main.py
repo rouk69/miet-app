@@ -346,16 +346,38 @@ def cmd_start(m: types.Message) -> None:
                     m.chat.id,
                     f"✅ Группа <b>{render.esc(matches[0])}</b> сохранена")
 
-    bot.send_message(
-        m.chat.id,
-        render.start_text(m.from_user.first_name),
-        reply_markup=kbs.start_keyboard(WEBAPP_URL or None, BOT_USERNAME,
-                                        ctx["group"]),
-        disable_web_page_preview=True)
+    try:
+        groups = api.fetch_groups()
+    except Exception:
+        groups = []
+
+    sent_rich = False
+    if groups and _rich["direct"]:
+        # Приветствие и выбор направления — одним сообщением: без группы
+        # читать инструкцию и ждать второго сообщения незачем.
+        try:
+            with_emoji_fallback(lambda c: bot.send_rich_message(
+                m.chat.id, types.InputRichMessage(
+                    html=rich.start_html(m.from_user.first_name, groups,
+                                         ctx["group"], BOT_USERNAME,
+                                         WEBAPP_URL or None, custom=c))))
+            sent_rich = True
+        except ApiTelegramException as e:
+            _rich["direct"] = False
+            log.warning("rich-приветствие недоступно (%s)", e)
+
+    if not sent_rich:
+        bot.send_message(
+            m.chat.id,
+            render.start_text(m.from_user.first_name),
+            reply_markup=kbs.start_keyboard(WEBAPP_URL or None, BOT_USERNAME,
+                                            ctx["group"]),
+            disable_web_page_preview=True)
+        if not ctx["group"]:
+            ask_group(m.chat.id)
+
     if ctx["group"]:
         send_day(m.chat.id, ctx["group"], shift=ctx["shift"])
-    else:
-        ask_group(m.chat.id)
 
 
 @bot.message_handler(commands=["help"])
@@ -556,19 +578,11 @@ def on_callback(call: types.CallbackQuery) -> None:
             return bot.answer_callback_query(call.id)
 
         if action == "grp":                     # список направлений
+            # Работает и во вставленной в общий чат карточке: она общая, и
+            # переключить её на другую группу — обычное дело, ровно как
+            # переключить день. Гонять человека в личку ради этого незачем.
             groups = api.fetch_groups()
-            cur = user_ctx(uid)["group"]
-            if call.inline_message_id:
-                # Карточка вставлена в общий чат: выбор одного человека
-                # переписал бы сообщение для всех, поэтому уводим в личку.
-                try:
-                    ask_group(uid, cur)
-                except ApiTelegramException:
-                    return bot.answer_callback_query(
-                        call.id, "Напиши боту в личку, чтобы выбрать группу",
-                        show_alert=True)
-                return bot.answer_callback_query(call.id, "Написал в личку")
-            show_prefixes(call, groups, cur, scope)
+            show_prefixes(call, groups, user_ctx(uid)["group"], scope)
             return bot.answer_callback_query(call.id)
 
         if action == "gp":                      # группы одного направления

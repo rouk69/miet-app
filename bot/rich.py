@@ -217,7 +217,11 @@ def prefixes_html(groups: list[str], current: str | None = None,
     btns = [button(p, data=kbs.cb("gp", p),
                    style=STYLE_ACTIVE if p == cur_pref else "")
             for p in prefixes]
-    return head + _grid(btns, 4)
+    # Выбиралка заменяет собой карточку расписания — без этой кнопки из неё
+    # некуда вернуться, особенно во вставленном в общий чат сообщении.
+    back = row(button(f"← Назад к {current}", data=kbs.cb("today", current),
+                      style=STYLE_ACTION)) if current else ""
+    return head + _grid(btns, 4) + back
 
 
 def group_list_html(groups: list[str], prefix: str, current: str | None = None,
@@ -251,3 +255,46 @@ def support_html(custom: bool = True, webapp_url: str | None = None) -> str:
     if link:
         btns.append(button("Приложение", type="web_app", url=link))
     return head + body + row(*btns)
+
+
+def start_html(name: str | None, groups: list[str], current: str | None,
+               bot_username: str = "", webapp_url: str | None = None,
+               custom: bool = True) -> str:
+    """
+    Приветствие. Если группы ещё нет — сразу под текстом идут направления,
+    чтобы человек выбирал в этом же сообщении, а не читал инструкцию и ждал
+    второго.
+    """
+    hi = f"Привет, {esc(name)}" if name else "Привет"
+    head = f'<h3>{em.ico("wave", custom)} {hi}</h3>'
+    intro = ('<p>Расписание НИУ МИЭТ — прямо с miet.ru, всегда свежее.</p>'
+             '<ul>'
+             f'<li>{em.ico("calendar", custom)} Пары на любой день и любую '
+             'неделю цикла</li>'
+             f'<li>{em.ico("people", custom)} Все 346 групп</li>'
+             f'<li>{em.ico("app", custom)} Мини-приложение: новости, '
+             '28 кружков, кампус</li>'
+             f'<li>{em.ico("chat", custom)} Работает в любом чате — напиши '
+             f'<code>@{esc(bot_username) or "бота"}</code></li>'
+             '</ul>')
+
+    if not current:
+        ask = ('<p><i>Выбери направление — дальше номер группы. '
+               'Или просто пришли название, например <code>ПИН-31</code>.</i></p>')
+        return head + intro + ask + _grid(
+            [button(p, data=kbs.cb("gp", p)) for p in api.group_prefixes(groups)],
+            4)
+
+    parts = [row(
+        button("Расписание на сегодня", data=kbs.cb("today", current),
+               style=STYLE_ACTIVE),
+        button("Сменить группу", data=kbs.cb("grp"), style=STYLE_ACTION),
+    )]
+    share = button("Вставить в чат", type="switch_inline_query",
+                   query=current, style=STYLE_SHARE)
+    link = kbs.webapp_link(webapp_url, current)
+    if link:
+        parts.append(row(share, button("Приложение", type="web_app", url=link)))
+    else:
+        parts.append(row(share))
+    return head + intro + f'<p>Твоя группа: <b>{esc(current)}</b></p>' + "".join(parts)
