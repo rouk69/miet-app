@@ -21,7 +21,7 @@ import re
 import sys
 
 import telebot
-from telebot import types
+from telebot import apihelper, types
 from telebot.apihelper import ApiTelegramException
 
 from . import keyboards as kbs
@@ -107,6 +107,14 @@ if not BOT_TOKEN:
 if WEBAPP_URL and not WEBAPP_URL.startswith("https://"):
     log.warning("WEBAPP_URL не https — кнопка мини-приложения показана не будет")
     WEBAPP_URL = ""
+
+# Через VPN связь с api.telegram.org рвётся раз в несколько минут. Опрос от
+# этого восстанавливается сам, а вот ответ пользователю — нет: запрос падал
+# с ConnectionError, обработчик умирал, и человек не получал ничего. Здесь
+# повторы включены на все вызовы Bot API, включая отправку сообщений.
+apihelper.RETRY_ON_ERROR = True
+apihelper.MAX_RETRIES = 5        # цикл делает MAX_RETRIES-1 попыток
+apihelper.RETRY_TIMEOUT = 1
 
 bot = telebot.TeleBot(BOT_TOKEN, parse_mode="HTML", threaded=True)
 BOT_USERNAME = ""
@@ -365,16 +373,25 @@ def cmd_start(m: types.Message) -> None:
         except ApiTelegramException as e:
             _rich["direct"] = False
             log.warning("rich-приветствие недоступно (%s)", e)
+        except Exception as e:
+            # Сеть отвалилась посреди отправки. Простое сообщение короче и
+            # уходит вернее — лучше отдать его, чем оставить человека без
+            # ответа на самую первую команду.
+            log.warning("приветствие не отправилось (%s), пробую обычным", e)
 
     if not sent_rich:
-        bot.send_message(
-            m.chat.id,
-            render.start_text(m.from_user.first_name),
-            reply_markup=kbs.start_keyboard(WEBAPP_URL or None, BOT_USERNAME,
-                                            ctx["group"]),
-            disable_web_page_preview=True)
-        if not ctx["group"]:
-            ask_group(m.chat.id)
+        try:
+            bot.send_message(
+                m.chat.id,
+                render.start_text(m.from_user.first_name),
+                reply_markup=kbs.start_keyboard(WEBAPP_URL or None,
+                                                BOT_USERNAME, ctx["group"]),
+                disable_web_page_preview=True)
+            if not ctx["group"]:
+                ask_group(m.chat.id)
+        except Exception as e:
+            log.error("не удалось ответить на /start: %s", e)
+            return
 
     if ctx["group"]:
         send_day(m.chat.id, ctx["group"], shift=ctx["shift"])

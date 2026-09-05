@@ -450,6 +450,31 @@ check("второй раз сразу обычной", len(tg.sent) == 1
 B.bot.send_rich_message = tg.send_rich_message
 B._rich["direct"] = True
 
+print("\n15. Обрыв связи при отправке ответа")
+from telebot import apihelper as _api                              # noqa: E402
+check("повторы запросов включены", _api.RETRY_ON_ERROR is True)
+check("попыток больше одной", _api.MAX_RETRIES > 1, str(_api.MAX_RETRIES))
+
+# сеть падает ровно на rich-отправке — человек всё равно должен получить ответ
+B._rich["direct"] = True
+storage.set_group(UID, None)
+
+
+def net_dead(chat_id, rich_message, **kw):
+    raise ConnectionError("Connection aborted: сеть отвалилась")
+
+
+B.bot.send_rich_message = net_dead
+tg.reset()
+msg("/start")
+check("на /start всё равно пришёл ответ", len(tg.sent) >= 1,
+      f"сообщений: {len(tg.sent)}")
+check("ответ обычным сообщением", tg.sent and "<table" not in tg.sent[0]["text"])
+check("следом предложен выбор группы",
+      any("групп" in s["text"].lower() for s in tg.sent))
+B.bot.send_rich_message = tg.send_rich_message
+storage.set_group(UID, "ПИН-31")
+
 print("\n" + "=" * 58)
 print(f"пройдено {ok}, провалено {fail}")
 print("=" * 58)
