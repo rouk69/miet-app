@@ -475,6 +475,25 @@ check("следом предложен выбор группы",
 B.bot.send_rich_message = tg.send_rich_message
 storage.set_group(UID, "ПИН-31")
 
+print("\n16. Расписание живёт весь семестр, поправка — нет")
+AUT, SPR = "Осенний семестр 2026/2027", "Весенний семестр 2026/2027"
+check("цикл повторяется бесконечно, а не кончается через 4 недели",
+      all(api.week_of_cycle(dt.date(2026, 9, 1) + dt.timedelta(weeks=w), AUT)
+          == w % 4 for w in range(60)))
+check("новый семестр начинает счёт заново",
+      api.week_of_cycle(dt.date(2027, 2, 9), SPR) == 0)
+check("весенний семестр стартует с февраля",
+      api.semester_start(SPR) == dt.date(2027, 2, 9))
+
+storage.set_shift(UID, 2, AUT)
+check("поправка держится внутри своего семестра",
+      storage.shift_for(UID, AUT) == 2)
+check("в новом семестре поправка обнуляется",
+      storage.shift_for(UID, SPR) == 0)
+check("обнуление записано, а не только возвращено",
+      storage.get_user(UID)["shift"] == 0)
+storage.set_shift(UID, 0, AUT)
+
 print("\n" + "=" * 58)
 print(f"пройдено {ok}, провалено {fail}")
 print("=" * 58)
