@@ -185,6 +185,19 @@ def start_text(name: str | None = None) -> str:
             "Выбери группу — и поехали.")
 
 
+OWNER = "xxxddsm"
+
+
+def support_text() -> str:
+    return ("<b>Поддержка</b>\n\n"
+            "<blockquote>Приложение и бот сделаны студентом для студентов "
+            "МИЭТ. Если что-то сломалось, показывает не то расписание или "
+            "хочется новой функции — пиши, разберёмся.</blockquote>\n"
+            f"Автор и поддержка: @{OWNER}\n\n"
+            "<i>Бот неофициальный. Расписание и справочная информация "
+            "берутся с miet.ru.</i>")
+
+
 def help_text(bot_username: str = "") -> str:
     mention = f"@{bot_username}" if bot_username else "@имя_бота"
     return ("<b>Как пользоваться</b>\n\n"
@@ -194,7 +207,8 @@ def help_text(bot_username: str = "") -> str:
             "/tomorrow — на завтра\n"
             "/week — вся неделя\n"
             "/group — сменить группу\n"
-            "/shift — поправка недели цикла</blockquote>\n"
+            "/shift — поправка недели цикла\n"
+            "/support — связаться с автором</blockquote>\n"
             "<blockquote><b>В любом чате</b>\n"
             f"Напиши <code>{mention}</code> и пробел — бот предложит вставить "
             "карточку расписания. Кнопки под ней работают у всех.\n\n"

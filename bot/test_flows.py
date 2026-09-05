@@ -195,8 +195,11 @@ tg.reset(); msg("/start")
 check("бот ответил дважды (приветствие + вопрос о группе)", len(tg.sent) == 2,
       f"сообщений: {len(tg.sent)}")
 check("приветствие содержит название вуза", "МИЭТ" in tg.sent[0]["text"])
-check("во втором сообщении спрашивают группу",
-      "группа" in tg.sent[1]["text"].lower())
+check("вторым идёт выбор группы", "групп" in tg.sent[1]["text"].lower())
+check("направления показаны кнопками",
+      'data="gp|' in tg.sent[1]["text"]
+      or (tg.sent[1]["markup"] is not None
+          and any(c.startswith("gp|") for c in callbacks(tg.sent[1]["markup"]))))
 check("есть кнопка мини-приложения",
       any(b.web_app for row in tg.sent[0]["markup"].keyboard for b in row))
 
@@ -264,7 +267,7 @@ check("вопрос ушёл пользователю в личку", tg.sent[0]
 print("\n8. Команды")
 for cmd, expect in [("/today", "Базы данных"), ("/tomorrow", "Базы данных"),
                     ("/week", "неделя"), ("/help", "любом чате"),
-                    ("/group", "группа")]:
+                    ("/group", "групп")]:
     tg.reset(); msg(cmd)
     joined = " ".join(s["text"] for s in tg.sent).lower()
     check(f"{cmd} отвечает по делу", expect.lower() in joined,
@@ -360,7 +363,29 @@ except ApiTelegramException:
     check("ошибка разметки не маскируется откатом", True)
 check("чужая ошибка флаг не сбрасывает", B._custom_emoji["direct"] is True)
 
-print("\n13. Откат с rich-сообщений на обычные")
+print("\n13. Выбор группы кнопками")
+tg.reset(); press("grp")
+picker = edited_body()
+check("шаг 1 — направления", "Выбор группы" in picker)
+check("все направления кнопками",
+      picker.count('data="gp|') == len(api.group_prefixes(GROUPS)),
+      f"кнопок: {picker.count(chr(34) + 'gp|')}")
+check("текущее направление подсвечено", 'style="primary"' in picker)
+
+tg.reset(); press("gp|ПИН")
+lst = edited_body()
+check("шаг 2 — группы направления", lst.count('data="set|ПИН-') == 3,
+      f"кнопок: {lst.count('set|')}")
+check("есть возврат к направлениям", 'data="grp"' in lst)
+
+tg.reset(); press("set|ПИН-32")
+check("выбор сразу показывает расписание", "<table bordered" in edited_body(),
+      edited_body()[:80])
+check("группа сохранилась", storage.get_user(UID)["group"] == "ПИН-32")
+check("подтверждение всплывашкой", "ПИН-32" in (tg.answers[0]["text"] or ""))
+storage.set_group(UID, "ПИН-31")
+
+print("\n14. Откат с rich-сообщений на обычные")
 rich_html = rich_mod.day_html("ПИН-31", FIXTURE, 0, 1, 0,
                               webapp_url="https://example.org/app")
 check("таблица с рамками", "<table bordered compact>" in rich_html)

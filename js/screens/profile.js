@@ -36,9 +36,9 @@ export default async function profileScreen() {
 
       <div class="section-head" style="margin-top:0"><div class="section-title">Учёба</div></div>
       ${listCard([
-      listRow({ emoji: '👥', title: 'Группа', value: settings.group || 'не выбрана', chevron: true, id: 'group', cls: 'tap' }),
-      listRow({ emoji: '📅', title: 'Текущая неделя', value: weekLabel, chevron: true, id: 'week', cls: 'tap' }),
-      listRow({ emoji: '♥️', title: 'Избранные кружки', value: String(favCount), chevron: true, id: 'fav', cls: 'tap' }),
+      listRow({ ico: 'users', title: 'Группа', value: settings.group || 'не выбрана', chevron: true, id: 'group', cls: 'tap' }),
+      listRow({ ico: 'calendar', title: 'Текущая неделя', value: weekLabel, chevron: true, id: 'week', cls: 'tap' }),
+      listRow({ ico: 'heart', title: 'Избранные кружки', value: String(favCount), chevron: true, id: 'fav', cls: 'tap' }),
     ])}
 
       <div class="section-head"><div class="section-title">Оформление</div></div>
@@ -52,17 +52,18 @@ export default async function profileScreen() {
 
       <div class="section-head"><div class="section-title">Университет</div></div>
       ${listCard([
-      listRow({ emoji: '🏛', title: 'О МИЭТ', sub: 'История, факты, контакты', chevron: true, id: 'about', cls: 'tap' }),
-      listRow({ emoji: '🧭', title: 'Разделы кампуса', chevron: true, id: 'campus', cls: 'tap' }),
-      listRow({ emoji: '🎓', title: 'Институты', chevron: true, id: 'institutes', cls: 'tap' }),
-      listRow({ emoji: '🔗', title: 'Полезные ссылки', sub: 'ОРИОКС, кабинет, сервисы', chevron: true, id: 'links', cls: 'tap' }),
-      listRow({ emoji: '🌐', title: 'Сайт miet.ru', chevron: true, id: 'site', cls: 'tap' }),
+      listRow({ ico: 'landmark', title: 'О МИЭТ', sub: 'История, факты, контакты', chevron: true, id: 'about', cls: 'tap' }),
+      listRow({ ico: 'compass', title: 'Разделы кампуса', chevron: true, id: 'campus', cls: 'tap' }),
+      listRow({ ico: 'graduate', title: 'Институты', chevron: true, id: 'institutes', cls: 'tap' }),
+      listRow({ ico: 'link', title: 'Полезные ссылки', sub: 'ОРИОКС, кабинет, сервисы', chevron: true, id: 'links', cls: 'tap' }),
+      listRow({ ico: 'globe', title: 'Сайт miet.ru', chevron: true, id: 'site', cls: 'tap' }),
+      listRow({ ico: 'lifebuoy', title: 'Поддержка', sub: 'Написать автору приложения', chevron: true, id: 'support', cls: 'tap' }),
     ])}
 
       <div class="section-head"><div class="section-title">Данные</div></div>
       ${listCard([
-      listRow({ emoji: '🔄', title: 'Обновить расписание', sub: 'Сбросить сохранённую копию', chevron: true, id: 'reload', cls: 'tap' }),
-      listRow({ emoji: '🧹', title: 'Сбросить настройки', sub: 'Группа, тема, избранное', chevron: true, id: 'reset', cls: 'tap' }),
+      listRow({ ico: 'refresh', title: 'Обновить расписание', sub: 'Сбросить сохранённую копию', chevron: true, id: 'reload', cls: 'tap' }),
+      listRow({ ico: 'trash', title: 'Сбросить настройки', sub: 'Группа, тема, избранное', chevron: true, id: 'reset', cls: 'tap' }),
     ])}
 
       <div class="fab-note">
@@ -94,6 +95,7 @@ export default async function profileScreen() {
       case 'campus': return go('campus');
       case 'institutes': return go('institutes');
       case 'links': return go('links');
+      case 'support': return go('support');
       case 'site': return openLink('https://www.miet.ru');
       case 'reload': {
         if (!settings.group) return toast('Сначала выбери группу');

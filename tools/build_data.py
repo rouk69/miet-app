@@ -3,7 +3,10 @@
 import json, os, re, sys, shutil, datetime
 from PIL import Image
 
+import icons_map
+
 sys.stdout.reconfigure(encoding="utf-8")
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 SRC = os.path.join(os.path.dirname(os.path.abspath(__file__)), "_raw")
 PROJ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT_IMG = os.path.join(PROJ, "img")
@@ -253,6 +256,8 @@ else:
 for c in clubs:
     c["about"] = re.sub(r"\s*\n\s*\n\s*", "\n\n", c.get("about", "")).strip()
     c.setdefault("social", [])
+    c["icon"] = icons_map.CLUBS.get(
+        c["title"], icons_map.CLUB_CATEGORY.get(c["cat"], "sparkles"))
 
 CAT_ORDER = ["Спорт", "Творчество", "Медиа", "Наука", "Добро", "Досуг", "Объединения"]
 clubs.sort(key=lambda c: (CAT_ORDER.index(c["cat"]) if c["cat"] in CAT_ORDER else 99,
@@ -281,6 +286,7 @@ for key, (title, emoji, sub) in CAMPUS_META.items():
     info = s.get("info", {})
     campus.append({
         "id": key, "title": title, "emoji": emoji, "sub": sub,
+        "icon": icons_map.CAMPUS.get(key, "building"),
         "lead": info.get("директор") or info.get("руководитель") or info.get("начальник"),
         "phone": phone(info.get("телефон")),
         "inner": inner(info.get("телефон")),
@@ -375,7 +381,10 @@ LINKS = [
 links = [{
     "title": group,
     "emoji": emoji,
-    "items": [{"title": t, "sub": s, "url": u, "emoji": e} for t, s, u, e in items],
+    "icon": icons_map.LINK_GROUPS.get(group, "link"),
+    "items": [{"title": t, "sub": s, "url": u, "emoji": e,
+               "icon": icons_map.BY_EMOJI.get(e, "link")}
+              for t, s, u, e in items],
 } for group, emoji, items in LINKS]
 print("ссылок:", sum(len(g["items"]) for g in links), "в", len(links), "группах")
 

@@ -17,28 +17,28 @@ function collect(q) {
 
   for (const g of data.groups || []) {
     if (norm(g).replace(/\s+/g, '').includes(n.replace(/\s+/g, ''))) {
-      out.push({ kind: 'group', emoji: '👥', title: g, sub: 'Учебная группа', id: g });
+      out.push({ kind: 'group', ico: 'users', title: g, sub: 'Учебная группа', id: g });
     }
     if (out.length > 6) break;
   }
   for (const c of data.clubs || []) {
     if (hit(c.title) || hit(c.tagline) || hit(c.cat)) {
-      out.push({ kind: 'club', emoji: c.emoji || '✨', title: c.title, sub: c.cat, id: c.id });
+      out.push({ kind: 'club', ico: c.icon || 'sparkles', title: c.title, sub: c.cat, id: c.id });
     }
   }
   for (const c of data.campus || []) {
     if (hit(c.title) || hit(c.sub)) {
-      out.push({ kind: 'campusItem', emoji: c.emoji, title: c.title, sub: c.sub, id: c.id });
+      out.push({ kind: 'campusItem', ico: c.icon, title: c.title, sub: c.sub, id: c.id });
     }
   }
   for (const i of data.institutes || []) {
     if (hit(i.name) || hit(i.short) || hit(i.director) || (i.departments || []).some(hit)) {
-      out.push({ kind: 'institute', emoji: '🎓', title: i.name, sub: i.short, id: i.id });
+      out.push({ kind: 'institute', ico: 'graduate', title: i.name, sub: i.short, id: i.id });
     }
   }
   for (const a of data.news || []) {
     if (hit(a.title) || hit(a.text)) {
-      out.push({ kind: 'article', emoji: '📰', title: a.title, sub: a.date, id: a.id });
+      out.push({ kind: 'article', ico: 'news', title: a.title, sub: a.date, id: a.id });
     }
     if (out.length > 60) break;
   }
@@ -74,10 +74,10 @@ export default async function searchScreen() {
     const items = collect(q);
     res.innerHTML = items.length
       ? listCard(items.map((r, i) => listRow({
-        emoji: r.emoji, title: r.title, sub: r.sub,
+        ico: r.ico, title: r.title, sub: r.sub,
         chevron: true, id: String(i), cls: 'tap',
       })))
-      : emptyState(`Ничего не нашлось по «${q}»`, '🔍');
+      : emptyState(`Ничего не нашлось по «${q}»`, 'search');
     res.dataset.payload = JSON.stringify(items);
   };
 

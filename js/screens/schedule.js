@@ -65,7 +65,7 @@ export default async function scheduleScreen(params = {}) {
     const node = screen({
       title: 'Расписание',
       subtitle: settings.group,
-      body: emptyState(`Не удалось загрузить: ${err.message}`, '📡'),
+      body: emptyState(`Не удалось загрузить: ${err.message}`, 'refresh'),
     });
     return node;
   }
@@ -123,7 +123,7 @@ export default async function scheduleScreen(params = {}) {
       </div>
       ${items.length
         ? items.map(l => lessonRow(l, isToday ? now : null)).join('')
-        : emptyState('В этот день пар нет', '☕')}
+        : emptyState('В этот день пар нет', 'clock')}
       ${items.length ? `<div class="fab-note">
           ${items.length} ${plural(items.length, 'пара', 'пары', 'пар')} ·
           источник: miet.ru${sched.cached ? ' · из кеша' : ''}

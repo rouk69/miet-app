@@ -14,14 +14,15 @@ export default async function campusScreen() {
     subtitle: 'Всё, что есть в университете',
     body: `<div class="stack">
         ${listCard(items.map(c => listRow({
-      emoji: c.emoji, title: c.title, sub: c.sub,
+      ico: c.icon, title: c.title, sub: c.sub,
       chevron: true, id: c.id, cls: 'tap',
     })))}
         <div class="section-head"><div class="section-title">Учёба</div></div>
         ${listCard([
-      listRow({ emoji: '🎓', title: 'Институты', sub: `${(data.institutes || []).length} институтов и кафедр`, chevron: true, id: '@institutes', cls: 'tap' }),
-      listRow({ emoji: '🏛', title: 'О МИЭТ', sub: 'История, контакты, реквизиты', chevron: true, id: '@about', cls: 'tap' }),
-      listRow({ emoji: '🔗', title: 'Полезные ссылки', sub: 'Сервисы и разделы сайта', chevron: true, id: '@links', cls: 'tap' }),
+      listRow({ ico: 'graduate', title: 'Институты', sub: `${(data.institutes || []).length} институтов и кафедр`, chevron: true, id: '@institutes', cls: 'tap' }),
+      listRow({ ico: 'landmark', title: 'О МИЭТ', sub: 'История, контакты, реквизиты', chevron: true, id: '@about', cls: 'tap' }),
+      listRow({ ico: 'link', title: 'Полезные ссылки', sub: 'Сервисы и разделы сайта', chevron: true, id: '@links', cls: 'tap' }),
+      listRow({ ico: 'lifebuoy', title: 'Поддержка', sub: 'Автор приложения', chevron: true, id: '@support', cls: 'tap' }),
     ])}
       </div>`,
   });
@@ -33,6 +34,7 @@ export default async function campusScreen() {
     if (id === '@institutes') return go('institutes');
     if (id === '@about') return go('about');
     if (id === '@links') return go('links');
+    if (id === '@support') return go('support');
     go('campusItem', { id });
   });
   return node;
@@ -41,7 +43,7 @@ export default async function campusScreen() {
 /** Экран одного раздела кампуса. */
 export async function campusItemScreen({ id }) {
   const c = (data.campus || []).find(x => x.id === id);
-  if (!c) return screen({ title: 'Раздел', body: emptyState('Раздел не найден', '🤷') });
+  if (!c) return screen({ title: 'Раздел', body: emptyState('Раздел не найден', 'helpCircle') });
 
   const paragraphs = (c.text || '').split(/\n{2,}/).map(p => p.trim()).filter(Boolean);
 
@@ -53,7 +55,7 @@ export async function campusItemScreen({ id }) {
       </div>` : ''}
       <div class="screen-top">
         <div>
-          <h1 class="h1-page small">${c.emoji} ${esc(c.title)}</h1>
+          <h1 class="h1-page small">${esc(c.title)}</h1>
           <p class="subtitle-page">${esc(c.sub)}</p>
         </div>
       </div>

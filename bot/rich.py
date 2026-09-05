@@ -196,3 +196,58 @@ def week_html(group: str, sched: dict, week: int, cur_week: int,
             button("Группа", data=kbs.cb("grp"), style=STYLE_ACTION),
         )
     return head + body + tail
+
+
+# ─────────────────────── выбор группы кнопками ───────────────────────
+
+def _grid(buttons: list[str], per_row: int) -> str:
+    return "".join(row(*buttons[i:i + per_row])
+                   for i in range(0, len(buttons), per_row))
+
+
+def prefixes_html(groups: list[str], current: str | None = None,
+                  custom: bool = True) -> str:
+    """Первый шаг: направления. Тридцать с небольшим кнопок влезают разом,
+    поэтому листать ничего не нужно."""
+    prefixes = api.group_prefixes(groups)
+    head = (f'<h3>{em.ico("graduate", custom)} Выбор группы</h3>'
+            f'<p><i>Направление, потом номер. Или просто пришли название — '
+            f'например <code>ПИН-31</code>.</i></p>')
+    cur_pref = api.group_prefix(current) if current else None
+    btns = [button(p, data=kbs.cb("gp", p),
+                   style=STYLE_ACTIVE if p == cur_pref else "")
+            for p in prefixes]
+    return head + _grid(btns, 4)
+
+
+def group_list_html(groups: list[str], prefix: str, current: str | None = None,
+                    custom: bool = True) -> str:
+    """Второй шаг: конкретные группы направления."""
+    items = api.groups_with_prefix(groups, prefix)
+    head = (f'<h3>{em.ico("graduate", custom)} {esc(prefix)}</h3>'
+            f'<p><i>{len(items)} '
+            f'{render.plural(len(items), "группа", "группы", "групп")} — '
+            f'нажми свою, расписание откроется сразу</i></p>')
+    btns = [button(g, data=kbs.cb("set", g),
+                   style=STYLE_ACTIVE if g == current else "")
+            for g in items]
+    back = row(button("← Все направления", data=kbs.cb("grp"),
+                      style=STYLE_ACTION))
+    return head + _grid(btns, 3) + back
+
+
+def support_html(custom: bool = True, webapp_url: str | None = None) -> str:
+    """Раздел поддержки: кто сделал и куда писать."""
+    head = f'<h3>{em.ico("info", custom)} Поддержка</h3>'
+    body = ('<p>Приложение и бот сделаны студентом для студентов МИЭТ. '
+            'Если что-то сломалось, показывает не то расписание или хочется '
+            'новой функции — напиши, разберёмся.</p>'
+            f'<p>Автор и поддержка: <b>@{render.OWNER}</b></p>'
+            '<p><i>Бот неофициальный. Расписание и справочная информация '
+            'берутся с miet.ru.</i></p>')
+    btns = [button("Написать автору", type="url",
+                   url=f"https://t.me/{render.OWNER}", style=STYLE_ACTIVE)]
+    link = webapp_link(webapp_url)
+    if link:
+        btns.append(button("Приложение", type="web_app", url=link))
+    return head + body + row(*btns)

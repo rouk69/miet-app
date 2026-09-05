@@ -12,14 +12,14 @@ import { lessonRow } from './schedule.js';
 // ОРИОКС и личный кабинет — внешние сервисы, но студенту они нужнее
 // всего, поэтому стоят прямо на главной.
 const QUICK = [
-  { id: 'url:https://orioks.miet.ru/main/login', emoji: '📊', label: 'ОРИОКС' },
-  { id: 'url:https://account.miet.ru/', emoji: '🔑', label: 'Кабинет' },
-  { id: 'campus:canteen', emoji: '🍽', label: 'Столовая' },
-  { id: 'campus:library', emoji: '📚', label: 'Библиотека' },
-  { id: 'campus:dorm', emoji: '🏠', label: 'Общежития' },
-  { id: 'campus:scholarship', emoji: '💰', label: 'Стипендии' },
-  { id: 'links', emoji: '🔗', label: 'Ссылки' },
-  { id: 'campus', emoji: '🧭', label: 'Все разделы' },
+  { id: 'url:https://orioks.miet.ru/main/login', ico: 'chart', label: 'ОРИОКС' },
+  { id: 'url:https://account.miet.ru/', ico: 'key', label: 'Кабинет' },
+  { id: 'campus:canteen', ico: 'utensils', label: 'Столовая' },
+  { id: 'campus:library', ico: 'book', label: 'Библиотека' },
+  { id: 'campus:dorm', ico: 'homes', label: 'Общежития' },
+  { id: 'campus:scholarship', ico: 'wallet', label: 'Стипендии' },
+  { id: 'links', ico: 'link', label: 'Ссылки' },
+  { id: 'campus', ico: 'compass', label: 'Все разделы' },
 ];
 
 export default async function home() {
@@ -37,7 +37,7 @@ export default async function home() {
       <div class="section-head"><div class="section-title">Разделы</div></div>
       <div class="quick-grid">
         ${QUICK.map(q => `<button class="quick-item" data-quick="${q.id}">
-            <span class="quick-emoji">${q.emoji}</span>
+            <span class="quick-icon">${icon(q.ico, 21)}</span>
             <span class="quick-label">${esc(q.label)}</span>
           </button>`).join('')}
       </div>
@@ -58,8 +58,9 @@ export default async function home() {
       </div>
       <div style="margin-top:10px">
         ${listCard([
-      listRow({ emoji: 'ℹ️', title: 'О МИЭТ', sub: 'История, факты, контакты', chevron: true, id: 'about', cls: 'tap' }),
-      listRow({ emoji: '🎓', title: 'Институты', sub: `${(data.institutes || []).length} подразделений`, chevron: true, id: 'institutes', cls: 'tap' }),
+      listRow({ ico: 'landmark', title: 'О МИЭТ', sub: 'История, факты, контакты', chevron: true, id: 'about', cls: 'tap' }),
+      listRow({ ico: 'graduate', title: 'Институты', sub: `${(data.institutes || []).length} подразделений`, chevron: true, id: 'institutes', cls: 'tap' }),
+      listRow({ ico: 'lifebuoy', title: 'Поддержка', sub: 'Автор приложения', chevron: true, id: 'support', cls: 'tap' }),
     ])}
       </div>
 
@@ -147,7 +148,7 @@ async function renderNow(slot, now) {
          </div>`
       : `<div class="now-card rest">
            <div class="now-kicker">${day > 6 ? 'Воскресенье' : 'На сегодня всё'}</div>
-           <div class="now-title">Пар больше нет 🎉</div>
+           <div class="now-title">Пар больше нет</div>
            <div class="now-meta muted">
              <span>${esc(settings.group)}</span><span>${week + 1}-я неделя цикла</span>
            </div>
@@ -161,5 +162,5 @@ async function renderNow(slot, now) {
     </div>
     ${today.length
       ? `<div class="stack">${today.map(l => lessonRow(l, now)).join('')}</div>`
-      : emptyState(day > 6 ? 'Воскресенье — выходной' : 'В этот день пар нет', '☕')}`;
+      : emptyState(day > 6 ? 'Воскресенье — выходной' : 'В этот день пар нет', 'clock')}`;
 }

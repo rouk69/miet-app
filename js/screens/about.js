@@ -38,11 +38,11 @@ export default async function aboutScreen() {
 
       <div class="section-head"><div class="section-title">Ссылки</div></div>
       ${listCard([
-      listRow({ emoji: '🌐', title: 'miet.ru', sub: 'Официальный сайт', chevron: true, id: 'https://www.miet.ru', cls: 'tap' }),
-      listRow({ emoji: '📅', title: 'Расписание занятий', sub: 'miet.ru/schedule', chevron: true, id: 'https://miet.ru/schedule', cls: 'tap' }),
-      listRow({ emoji: '📰', title: 'Новости', sub: 'miet.ru/news', chevron: true, id: 'https://www.miet.ru/news/', cls: 'tap' }),
-      listRow({ emoji: '📋', title: 'Сведения об образовательной организации', chevron: true, id: 'https://miet.ru/sveden/', cls: 'tap' }),
-      listRow({ emoji: '👤', title: 'Личный кабинет', sub: 'account.miet.ru', chevron: true, id: 'https://account.miet.ru/', cls: 'tap' }),
+      listRow({ ico: 'globe', title: 'miet.ru', sub: 'Официальный сайт', chevron: true, id: 'https://www.miet.ru', cls: 'tap' }),
+      listRow({ ico: 'calendar', title: 'Расписание занятий', sub: 'miet.ru/schedule', chevron: true, id: 'https://miet.ru/schedule', cls: 'tap' }),
+      listRow({ ico: 'news', title: 'Новости', sub: 'miet.ru/news', chevron: true, id: 'https://www.miet.ru/news/', cls: 'tap' }),
+      listRow({ ico: 'clipboard', title: 'Сведения об образовательной организации', chevron: true, id: 'https://miet.ru/sveden/', cls: 'tap' }),
+      listRow({ ico: 'key', title: 'Личный кабинет', sub: 'account.miet.ru', chevron: true, id: 'https://account.miet.ru/', cls: 'tap' }),
     ])}
 
       <div class="fab-note">

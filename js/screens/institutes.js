@@ -41,7 +41,7 @@ export default async function institutesScreen() {
 
 export async function instituteScreen({ id }) {
   const i = (data.institutes || []).find(x => x.id === id);
-  if (!i) return screen({ title: 'Институт', body: emptyState('Институт не найден', '🤷') });
+  if (!i) return screen({ title: 'Институт', body: emptyState('Институт не найден', 'helpCircle') });
 
   const node = screen({
     body: `
@@ -60,7 +60,7 @@ export async function instituteScreen({ id }) {
         <p>${esc(i.about)}</p></div>` : ''}
 
       <div class="section-head"><div class="section-title">Контакты</div></div>
-      ${contactRows(i) || emptyState('Контакты — на сайте института', '📞')}
+      ${contactRows(i) || emptyState('Контакты — на сайте института', 'phone')}
 
       ${i.departments?.length ? `
         <div class="section-head"><div class="section-title">Кафедры и подразделения</div></div>

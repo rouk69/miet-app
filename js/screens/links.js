@@ -29,7 +29,7 @@ export default async function linksScreen() {
   const input = node.querySelector('#lq');
 
   const row = it => listRow({
-    emoji: it.emoji, title: it.title, sub: it.sub,
+    ico: it.icon, title: it.title, sub: it.sub,
     chevron: true, id: it.url, cls: 'tap',
   });
 
@@ -40,11 +40,11 @@ export default async function linksScreen() {
         .filter(it => norm(it.title).includes(needle) || norm(it.sub).includes(needle));
       box.innerHTML = found.length
         ? listCard(found.map(row))
-        : emptyState(`Ничего не нашлось по «${q}»`, '🔍');
+        : emptyState(`Ничего не нашлось по «${q}»`, 'search');
       return;
     }
     box.innerHTML = groups.map(g => `
-      <div class="section-head"><div class="section-title">${g.emoji} ${esc(g.title)}</div></div>
+      <div class="section-head"><div class="section-title">${esc(g.title)}</div></div>
       ${listCard(g.items.map(row))}`).join('');
   };
 
