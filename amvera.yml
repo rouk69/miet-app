@@ -1,0 +1,28 @@
+# Конфигурация Amvera Cloud.
+#
+# Токен здесь не хранится — он задаётся переменными окружения в панели
+# проекта (Переменные → BOT_TOKEN). Файл .env лежит в .gitignore и в
+# облако не уезжает.
+#
+# Выкладка:
+#   git remote add amvera https://git.amvera.ru/<логин>/<проект>
+#   git push amvera main
+
+meta:
+  environment: python
+  toolchain:
+    name: pip
+    version: 3.12
+
+build:
+  requirementsPath: requirements.txt
+
+run:
+  # Корневой main.py подтягивает пакет bot целиком; -u отключает буферизацию
+  # вывода, иначе логи копятся в буфере и в панели появляются рывками.
+  command: python -u main.py
+
+  # Постоянное хранилище. Всё, что не здесь, стирается при каждой выкладке,
+  # а тут переживают обновления база выбранных групп и кеш расписания.
+  # Путь совпадает с DATA_DIR из переменных окружения.
+  persistenceMount: /data

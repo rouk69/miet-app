@@ -2,7 +2,7 @@
 """
 Бот расписания НИУ МИЭТ.
 
-    pip install -r bot/requirements.txt
+    pip install -r requirements.txt
     set BOT_TOKEN=123456:AA...
     set WEBAPP_URL=https://ваш-домен      (необязательно)
     python -m bot.main
