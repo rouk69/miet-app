@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import datetime as dt
 import os
+import re
 import sys
 import tempfile
 
@@ -192,16 +193,27 @@ def callbacks(markup) -> list[str]:
 
 print("\n1. /start без группы")
 tg.reset(); msg("/start")
-check("бот ответил дважды (приветствие + вопрос о группе)", len(tg.sent) == 2,
+check("приветствие одним сообщением", len(tg.sent) == 1,
       f"сообщений: {len(tg.sent)}")
-check("приветствие содержит название вуза", "МИЭТ" in tg.sent[0]["text"])
-check("вторым идёт выбор группы", "групп" in tg.sent[1]["text"].lower())
-check("направления показаны кнопками",
-      'data="gp|' in tg.sent[1]["text"]
-      or (tg.sent[1]["markup"] is not None
-          and any(c.startswith("gp|") for c in callbacks(tg.sent[1]["markup"]))))
-check("есть кнопка мини-приложения",
-      any(b.web_app for row in tg.sent[0]["markup"].keyboard for b in row))
+hello = tg.sent[0]["text"]
+check("приветствие содержит название вуза", "МИЭТ" in hello)
+check("обращается по имени", "Дима" in hello)
+check("список возможностей размечен", "<ul>" in hello and "<li>" in hello)
+check("направления сразу в этом же сообщении",
+      hello.count('data="gp|') == len(api.group_prefixes(GROUPS)),
+      f"кнопок: {hello.count(chr(34) + 'gp|')}")
+check("обычных эмодзи в приветствии нет",
+      not re.search(r"[\U0001F300-\U0001FAFF]",
+                    re.sub(r"<tg-emoji[^>]*>.*?</tg-emoji>", "", hello)),
+      "нашлись эмодзи вне tg-emoji")
+
+tg.reset(); storage.set_group(UID, "ПИН-31"); msg("/start")
+check("с группой: приветствие + карточка", len(tg.sent) == 2,
+      f"сообщений: {len(tg.sent)}")
+check("в приветствии показана группа", "ПИН-31" in tg.sent[0]["text"])
+check("есть кнопка мини-приложения", 'type="web_app"' in tg.sent[0]["text"])
+check("второй — таблица расписания", "<table bordered" in tg.sent[1]["text"])
+storage.set_group(UID, None)
 
 print("\n2. Пользователь отправляет название группы")
 tg.reset(); msg("пин-31")
@@ -259,10 +271,11 @@ storage.set_shift(UID, 0)
 tg.reset(); press("noop")
 check("noop ничего не ломает", len(tg.edited) == 0 and len(tg.answers) == 1)
 
-print("\n7. «Группа» пишет в личку, а не в общий чат")
+print("\n7. «Группа» меняется в том же чате, где нажали")
 tg.reset(); press("grp", inline=True)
-check("вопрос ушёл пользователю в личку", tg.sent[0]["chat_id"] == UID,
-      str(tg.sent[0]["chat_id"]))
+check("сообщение переписано на месте", len(tg.edited) == 1,
+      f"правок {len(tg.edited)}, отправок {len(tg.sent)}")
+check("в личку ничего не ушло", len(tg.sent) == 0)
 
 print("\n8. Команды")
 for cmd, expect in [("/today", "Базы данных"), ("/tomorrow", "Базы данных"),
@@ -377,6 +390,19 @@ lst = edited_body()
 check("шаг 2 — группы направления", lst.count('data="set|ПИН-') == 3,
       f"кнопок: {lst.count('set|')}")
 check("есть возврат к направлениям", 'data="grp"' in lst)
+
+# из общего чата выбор должен работать на месте, а не уводить в личку
+storage.set_group(UID, "ПИН-31")
+tg.reset(); press("grp", inline=True)
+check("во вставленной карточке выбор работает на месте", len(tg.edited) == 1,
+      f"правок: {len(tg.edited)}, сообщений в личку: {len(tg.sent)}")
+check("в личку ничего не ушло", len(tg.sent) == 0)
+check("правка по inline_message_id",
+      tg.edited[0]["inline_message_id"] == "INLINE123")
+check("есть возврат к расписанию", 'data="today|ПИН-31"' in edited_body())
+tg.reset(); press("set|ПИН-33", inline=True)
+check("выбор в общем чате сразу рисует расписание",
+      "<table bordered" in edited_body())
 
 tg.reset(); press("set|ПИН-32")
 check("выбор сразу показывает расписание", "<table bordered" in edited_body(),

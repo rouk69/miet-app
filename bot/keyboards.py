@@ -171,6 +171,9 @@ def prefixes_keyboard(groups: list[str],
             for p in api.group_prefixes(groups)]
     for i in range(0, len(btns), 4):
         kb.row(*btns[i:i + 4])
+    if current:
+        kb.row(types.InlineKeyboardButton(f"← Назад к {current}",
+                                          callback_data=cb("today", current)))
     return kb
 
 
