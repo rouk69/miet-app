@@ -261,3 +261,19 @@ def date_for(week: int, day: int, cur_week: int, today: dt.date | None = None) -
     today = today or dt.date.today()
     mon = monday_of(today) + dt.timedelta(weeks=week - cur_week)
     return mon + dt.timedelta(days=day - 1)
+
+
+def group_prefix(g: str) -> str:
+    """Буквенная часть названия: «ПИН-31» → «ПИН», «Аспирантура 11» → «Аспирантура»."""
+    m = re.match(r"^([А-Яа-яЁёA-Za-z]+)", (g or "").strip())
+    return m.group(1) if m else (g or "")[:3]
+
+
+def group_prefixes(groups: list[str]) -> list[str]:
+    """Направления по алфавиту: в сетке из трёх десятков кнопок предсказуемый
+    порядок ищется глазами быстрее, чем порядок по популярности."""
+    return sorted({group_prefix(g) for g in groups}, key=lambda s: s.lower())
+
+
+def groups_with_prefix(groups: list[str], prefix: str) -> list[str]:
+    return [g for g in groups if group_prefix(g) == prefix]

@@ -50,7 +50,7 @@ export function pickGroup(onPick) {
           ? groups.filter(g => g.toLowerCase().replace(/\s+/g, '').includes(needle))
           : groups;
         if (!found.length) {
-          list.innerHTML = emptyState('Такой группы нет', '🔍');
+          list.innerHTML = emptyState('Такой группы нет', 'search');
           return;
         }
         list.innerHTML = listCard(found.slice(0, 120).map(g => listRow({
@@ -89,7 +89,7 @@ export const newsCard = n => `
 /** Компактная строка новости для главной. */
 export const newsRow = n => `
   <div class="news-row" data-news="${esc(n.id)}">
-    ${n.cover ? `<img src="img/${esc(n.cover)}" alt="" loading="lazy">` : '<div class="emoji-tile" style="width:62px;height:62px;border-radius:14px">📰</div>'}
+    ${n.cover ? `<img src="img/${esc(n.cover)}" alt="" loading="lazy">` : `<div class="icon-tile" style="width:62px;height:62px;border-radius:14px">${icon('news', 24)}</div>`}
     <div style="flex:1;min-width:0">
       <div class="news-row-title">${esc(n.title)}</div>
       <div class="news-date" style="margin-top:5px">${esc(n.date)}</div>

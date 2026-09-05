@@ -253,12 +253,70 @@ def edit_day(call: types.CallbackQuery, group: str, week: int | None,
         scope)
 
 
-def ask_group(chat_id: int) -> None:
+def show_prefixes(call: types.CallbackQuery, groups: list[str],
+                  current: str | None, scope: str) -> None:
+    """Перерисовывает сообщение в список направлений."""
+    if _rich[scope]:
+        try:
+            return with_emoji_fallback(lambda c: safe_edit(
+                call, None, None,
+                rich_html=rich.prefixes_html(groups, current, custom=c)), scope)
+        except ApiTelegramException as e:
+            _rich[scope] = False
+            log.warning("rich-выбор в правке недоступен (%s)", e)
+    safe_edit(call, "🎓 <b>Выбор группы</b>\n\nСначала направление, потом номер.",
+              kbs.prefixes_keyboard(groups, current))
+
+
+def show_group_list(call: types.CallbackQuery, groups: list[str], prefix: str,
+                    current: str | None, scope: str) -> None:
+    """Перерисовывает сообщение в список групп выбранного направления."""
+    if _rich[scope]:
+        try:
+            return with_emoji_fallback(lambda c: safe_edit(
+                call, None, None,
+                rich_html=rich.group_list_html(groups, prefix, current,
+                                               custom=c)), scope)
+        except ApiTelegramException as e:
+            _rich[scope] = False
+            log.warning("rich-список групп недоступен (%s)", e)
+    safe_edit(call,
+              f"🎓 <b>{render.esc(prefix)}</b>\n\nНажми свою группу — "
+              f"расписание откроется сразу.",
+              kbs.group_list_keyboard(groups, prefix, current))
+
+
+def ask_group(chat_id: int, current: str | None = None) -> None:
+    """
+    Показывает выбор группы кнопками: сначала направление, потом номер.
+    Ввод названием тоже работает — но искать в списке проще, чем помнить,
+    как именно записана твоя группа.
+    """
+    try:
+        groups = api.fetch_groups()
+    except Exception:
+        groups = []
+
+    if groups and _rich["direct"]:
+        try:
+            return with_emoji_fallback(lambda c: bot.send_rich_message(
+                chat_id, types.InputRichMessage(
+                    html=rich.prefixes_html(groups, current, custom=c))))
+        except ApiTelegramException as e:
+            _rich["direct"] = False
+            log.warning("rich-выбор группы недоступен (%s)", e)
+
+    if groups:
+        return bot.send_message(
+            chat_id,
+            "🎓 <b>Выбор группы</b>\n\nСначала направление, потом номер. "
+            "Или просто пришли название — например <code>ПИН-31</code>.",
+            reply_markup=kbs.prefixes_keyboard(groups, current))
+
     bot.send_message(
         chat_id,
         "👥 <b>Какая у тебя группа?</b>\n\n"
-        "Отправь название — например <code>ПИН-31</code>, <code>ЭН-24</code>, "
-        "<code>МП-11</code>.\nРегистр и пробелы не важны.",
+        "Отправь название — например <code>ПИН-31</code>.",
         disable_web_page_preview=True)
 
 
@@ -350,9 +408,27 @@ def cmd_week(m: types.Message) -> None:
         disable_web_page_preview=True))
 
 
+@bot.message_handler(commands=["support", "about"])
+def cmd_support(m: types.Message) -> None:
+    if _rich["direct"]:
+        try:
+            return with_emoji_fallback(lambda c: bot.send_rich_message(
+                m.chat.id, types.InputRichMessage(
+                    html=rich.support_html(custom=c,
+                                           webapp_url=WEBAPP_URL or None))))
+        except ApiTelegramException as e:
+            _rich["direct"] = False
+            log.warning("rich-поддержка недоступна (%s)", e)
+    kb = types.InlineKeyboardMarkup()
+    kb.row(types.InlineKeyboardButton(
+        "Написать автору", url=f"https://t.me/{render.OWNER}"))
+    bot.send_message(m.chat.id, render.support_text(), reply_markup=kb,
+                     disable_web_page_preview=True)
+
+
 @bot.message_handler(commands=["group"])
 def cmd_group(m: types.Message) -> None:
-    ask_group(m.chat.id)
+    ask_group(m.chat.id, user_ctx(m.from_user.id)["group"])
 
 
 @bot.message_handler(commands=["shift"])
@@ -479,23 +555,34 @@ def on_callback(call: types.CallbackQuery) -> None:
                 kbs.week_keyboard(group, week, webapp)), scope)
             return bot.answer_callback_query(call.id)
 
-        if action == "grp":                     # сменить группу
-            # Всегда в личку: карточка могла быть вставлена в общий чат, и
-            # вопрос «какая у тебя группа» там увидели бы все остальные.
-            try:
-                ask_group(uid)
-            except ApiTelegramException:
-                # Бота в личке не запускали — писать туда нельзя.
-                return bot.answer_callback_query(
-                    call.id, "Напиши боту в личку, чтобы выбрать группу",
-                    show_alert=True)
-            return bot.answer_callback_query(call.id, "Написал в личку")
+        if action == "grp":                     # список направлений
+            groups = api.fetch_groups()
+            cur = user_ctx(uid)["group"]
+            if call.inline_message_id:
+                # Карточка вставлена в общий чат: выбор одного человека
+                # переписал бы сообщение для всех, поэтому уводим в личку.
+                try:
+                    ask_group(uid, cur)
+                except ApiTelegramException:
+                    return bot.answer_callback_query(
+                        call.id, "Напиши боту в личку, чтобы выбрать группу",
+                        show_alert=True)
+                return bot.answer_callback_query(call.id, "Написал в личку")
+            show_prefixes(call, groups, cur, scope)
+            return bot.answer_callback_query(call.id)
+
+        if action == "gp":                      # группы одного направления
+            prefix = parts[1]
+            groups = api.fetch_groups()
+            cur = user_ctx(uid)["group"]
+            show_group_list(call, groups, prefix, cur, scope)
+            return bot.answer_callback_query(call.id)
 
         if action == "set":                     # выбор из найденных
             group = parts[1]
             storage.set_group(uid, group, call.from_user.username)
             edit_day(call, group, None, None, shift, scope)
-            return bot.answer_callback_query(call.id, f"Группа {group}")
+            return bot.answer_callback_query(call.id, f"Группа {group} сохранена")
 
         if action == "shift":                   # поправка недели
             storage.set_shift(uid, int(parts[1]))
@@ -617,6 +704,7 @@ def main() -> None:
             types.BotCommand("group", "Сменить группу"),
             types.BotCommand("shift", "Поправка недели цикла"),
             types.BotCommand("help", "Как пользоваться"),
+            types.BotCommand("support", "Связаться с автором"),
         ])
     except ApiTelegramException as e:
         log.warning("не удалось задать команды: %s", e)

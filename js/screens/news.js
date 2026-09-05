@@ -56,7 +56,7 @@ export default async function newsScreen() {
       : all.filter(n => (n.tags || []).some(t => key(t) === key(active)));
     feed.innerHTML = items.length
       ? items.map(newsCard).join('')
-      : emptyState('По этому тегу пока пусто', '📭');
+      : emptyState('По этому тегу пока пусто', 'inbox');
   };
   draw();
 
@@ -83,7 +83,7 @@ export default async function newsScreen() {
 /** Экран одной новости. */
 export async function articleScreen({ id }) {
   const n = (data.news || []).find(x => x.id === String(id));
-  if (!n) return screen({ title: 'Новость', body: emptyState('Новость не найдена', '🤷') });
+  if (!n) return screen({ title: 'Новость', body: emptyState('Новость не найдена', 'helpCircle') });
   markRead(n.id);
 
   const paragraphs = (n.text || '')

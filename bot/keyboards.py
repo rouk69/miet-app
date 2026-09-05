@@ -159,3 +159,28 @@ def start_keyboard(webapp_url: str | None, bot_username: str = "",
     return kb
 
 
+
+
+def prefixes_keyboard(groups: list[str],
+                      current: str | None = None) -> types.InlineKeyboardMarkup:
+    """Запасной вариант выбора направления, когда rich-разметка недоступна."""
+    kb = types.InlineKeyboardMarkup(row_width=4)
+    cur = api.group_prefix(current) if current else None
+    btns = [types.InlineKeyboardButton(("• " if p == cur else "") + p,
+                                       callback_data=cb("gp", p))
+            for p in api.group_prefixes(groups)]
+    for i in range(0, len(btns), 4):
+        kb.row(*btns[i:i + 4])
+    return kb
+
+
+def group_list_keyboard(groups: list[str], prefix: str,
+                        current: str | None = None) -> types.InlineKeyboardMarkup:
+    kb = types.InlineKeyboardMarkup(row_width=3)
+    btns = [types.InlineKeyboardButton(("• " if g == current else "") + g,
+                                       callback_data=cb("set", g))
+            for g in api.groups_with_prefix(groups, prefix)]
+    for i in range(0, len(btns), 3):
+        kb.row(*btns[i:i + 3])
+    kb.row(types.InlineKeyboardButton("← Все направления", callback_data=cb("grp")))
+    return kb

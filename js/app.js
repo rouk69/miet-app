@@ -14,6 +14,7 @@ import profile from './screens/profile.js';
 import about from './screens/about.js';
 import search from './screens/search.js';
 import links from './screens/links.js';
+import support from './screens/support.js';
 
 applyTheme(settings.theme);
 initTelegram(settings.theme);
@@ -33,6 +34,7 @@ register('profile', profile);
 register('about', about);
 register('search', search);
 register('links', links);
+register('support', support);
 
 const app = document.getElementById('app');
 const nav = document.getElementById('nav');

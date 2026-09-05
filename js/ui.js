@@ -28,12 +28,16 @@ export function on(root, selector, handler, event = 'click') {
 
 // ─────────────── строки списка ───────────────
 
-export function listRow({ emoji, ico, title, sub, value, chevron = false, id = '', cls = '' }) {
-  const left = emoji
-    ? `<div class="emoji-tile">${emoji}</div>`
-    : ico
-      ? `<div class="list-row-icon" style="background:var(--primary-dim);color:var(--primary)">${icon(ico, 18)}</div>`
-      : '';
+/** Круглая плитка с SVG-иконкой — единый левый элемент всех строк списка. */
+export const iconTile = (name, size = 34) =>
+  `<div class="icon-tile" style="width:${size}px;height:${size}px">
+     ${icon(name, Math.round(size * 0.56))}
+   </div>`;
+
+export function listRow({ ico, emoji, title, sub, value, chevron = false, id = '', cls = '' }) {
+  // ico важнее emoji: эмодзи остались только там, где иконки ещё нет.
+  const left = ico ? iconTile(ico)
+    : emoji ? `<div class="icon-tile">${emoji}</div>` : '';
   return `
     <div class="list-row ${cls}" ${id ? `data-id="${esc(id)}"` : ''}>
       ${left}
@@ -83,9 +87,9 @@ export function bindChoice(root, name, onChange, kind = 'pill') {
 
 // ─────────────── прочее ───────────────
 
-export const emptyState = (text, emoji = '🗂') => `
+export const emptyState = (text, ico = 'folder') => `
   <div class="empty-state">
-    <div style="font-size:34px">${emoji}</div>
+    <div class="empty-icon">${icon(ico, 30)}</div>
     <div>${esc(text)}</div>
   </div>`;
 

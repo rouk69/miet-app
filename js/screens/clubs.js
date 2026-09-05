@@ -15,7 +15,7 @@ const clubCard = c => `
     ${c.photos?.[0] ? `<img class="tile-cover" src="img/${esc(c.photos[0])}" alt="" loading="lazy">` : ''}
     <div class="tile-body">
       <div class="tile-head">
-        <span class="tile-emoji">${c.emoji || '✨'}</span>
+        <span class="tile-icon">${icon(c.icon || 'sparkles', 17)}</span>
         <span class="tile-title">${esc(c.title)}</span>
         ${isFavorite(c.id) ? '<span style="color:var(--danger)">♥</span>' : ''}
       </div>
@@ -45,7 +45,7 @@ export default async function clubsScreen() {
       <div class="section-head"><div class="section-title">Где всё происходит</div></div>
       <div class="list-card">
         <div class="list-row tap" data-campus="dk">
-          <div class="emoji-tile">🎭</div>
+          <div class="icon-tile">${icon('drama', 19)}</div>
           <div class="list-row-body">
             <div class="row-title">Дом культуры МИЭТ</div>
             <div class="row-subtitle">Зал на 640 мест, репетиционные</div>
@@ -53,7 +53,7 @@ export default async function clubsScreen() {
           <span class="chevron">${icon('chevronRight', 18)}</span>
         </div>
         <div class="list-row tap" data-campus="sport">
-          <div class="emoji-tile">🏟</div>
+          <div class="icon-tile">${icon('stadium', 19)}</div>
           <div class="list-row-body">
             <div class="row-title">Спорткомплекс</div>
             <div class="row-subtitle">Бассейн, залы, стадион</div>
@@ -72,7 +72,7 @@ export default async function clubsScreen() {
       ? items.map(clubCard).join('')
       : emptyState(cat === 'Избранное'
         ? 'Отметь кружок сердечком — он появится здесь'
-        : 'В этой категории пока пусто', '✨');
+        : 'В этой категории пока пусто', 'sparkles');
   };
   draw();
 
@@ -99,7 +99,7 @@ export default async function clubsScreen() {
 /** Экран одного кружка. */
 export async function clubScreen({ id }) {
   const c = (data.clubs || []).find(x => x.id === id);
-  if (!c) return screen({ title: 'Кружок', body: emptyState('Не найдено', '🤷') });
+  if (!c) return screen({ title: 'Кружок', body: emptyState('Не найдено', 'helpCircle') });
 
   const paragraphs = (c.about || '').split(/\n{2,}/).map(p => p.trim()).filter(Boolean);
   const fav = isFavorite(c.id);
@@ -112,7 +112,7 @@ export async function clubScreen({ id }) {
       </div>` : ''}
       <div class="screen-top">
         <div>
-          <h1 class="h1-page small">${c.emoji || ''} ${esc(c.title)}</h1>
+          <h1 class="h1-page small">${esc(c.title)}</h1>
           ${c.tagline ? `<p class="subtitle-page">${esc(c.tagline)}</p>` : ''}
         </div>
         <div class="header-actions">
@@ -141,7 +141,7 @@ export async function clubScreen({ id }) {
       ${c.social?.length ? `
         <div class="section-head"><div class="section-title">Соцсети</div></div>
         ${listCard(c.social.map((s, i) => listRow({
-      emoji: s.label === 'Telegram' ? '✈️' : s.label === 'YouTube' ? '▶️' : '🌐',
+      ico: s.label === 'Telegram' ? 'messageCircle' : s.label === 'YouTube' ? 'video' : 'globe',
       title: s.label, sub: s.url.replace(/^https?:\/\//, '').slice(0, 46),
       chevron: true, id: `soc${i}`, cls: 'tap',
     })))}` : ''}
