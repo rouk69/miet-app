@@ -57,6 +57,21 @@ const paragraphs = text => (text || '')
   .split(/\n{2,}/).map(p => p.trim()).filter(Boolean)
   .map(p => `<p>${esc(p)}</p>`).join('');
 
+// Длина, после которой текст в ленте сворачивается. Новости с сайта — это
+// несколько тысяч знаков; развёрнутыми они превращают ленту в простыню, и
+// до второй записи никто не долистывает.
+const LONG = 240;
+
+/** Первая фраза — она же превью в свёрнутом виде и строка на главной. */
+export function excerpt(text, limit = 130) {
+  const flat = String(text || '').replace(/\s+/g, ' ').trim();
+  if (flat.length <= limit) return flat;
+  const cut = flat.slice(0, limit);
+  // Режем по границе слова: обрывок посреди слова выглядит поломкой.
+  const space = cut.lastIndexOf(' ');
+  return (space > limit * 0.6 ? cut.slice(0, space) : cut).trimEnd() + '…';
+}
+
 // ─────────────── карточка ───────────────
 
 function pollBlock(p) {
@@ -98,8 +113,10 @@ function reactionsBlock(p, all) {
     </div>`;
 }
 
-export function postCard(p, reactions) {
+export function postCard(p, reactions, expanded = false) {
   const closed = p.audience === 'groups';
+  const long = (p.text || '').length > LONG;
+  const folded = long && !expanded;
   return `
     <article class="card post" data-post="${p.id}">
       ${p.pinned ? `<div class="post-flag">${icon('flag', 14)} Закреплено</div>` : ''}
@@ -107,7 +124,10 @@ export function postCard(p, reactions) {
                         data-full="${mediaUrl(p.media)}" loading="lazy">` : ''}
       <div class="post-body">
         ${p.title ? `<div class="post-title">${esc(p.title)}</div>` : ''}
-        <div class="post-text">${paragraphs(p.text)}</div>
+        <div class="post-text ${folded ? 'folded' : ''}">${paragraphs(p.text)}</div>
+        ${long ? `<button class="post-more" data-more="${p.id}">
+          ${folded ? 'Подробнее' : 'Свернуть'}
+        </button>` : ''}
         ${closed ? `<div class="post-audience">${icon('users', 14)}
           Только для: ${p.groups.map(esc).join(', ')}</div>` : ''}
         ${pollBlock(p)}
@@ -125,6 +145,26 @@ export function postCard(p, reactions) {
       </div>
     </article>`;
 }
+
+/**
+ * Компактная строка для главной: обложка, заголовок или начало текста,
+ * когда это было. Целиком запись читается в ленте — здесь только повод
+ * туда заглянуть.
+ */
+export const feedRow = p => `
+  <div class="feed-row" data-feed="${p.id}">
+    ${p.media
+    ? `<img src="${mediaUrl(p.media)}" alt="" loading="lazy">`
+    : `<div class="icon-tile" style="width:56px;height:56px;border-radius:14px">
+         ${icon(p.kind === 'news' ? 'news' : 'megaphone', 22)}</div>`}
+    <div style="flex:1;min-width:0">
+      <div class="feed-row-title">${esc(p.title || excerpt(p.text, 90))}</div>
+      <div class="feed-row-meta">
+        ${esc(p.author_label || 'МИЭТ')} · ${esc(ago(p.published_at))}
+        ${p.reads ? ` · ${p.reads} ${plural(p.reads, 'просмотр', 'просмотра', 'просмотров')}` : ''}
+      </div>
+    </div>
+  </div>`;
 
 // ─────────────── экран ───────────────
 
@@ -197,9 +237,21 @@ export default async function feedScreen() {
   node.querySelector('#archive')?.addEventListener('click', () => go('newsArchive'));
   node.querySelector('#retry')?.addEventListener('click', () => refresh());
 
+  // Какие посты человек развернул. Держим отдельно от данных: перерисовка
+  // карточки после реакции или голоса не должна её схлопывать.
+  const opened = new Set();
+
   node.addEventListener('click', async e => {
     const card = e.target.closest('[data-post]');
     const id = card && +card.dataset.post;
+
+    const more = e.target.closest('[data-more]');
+    if (more) {
+      opened.has(id) ? opened.delete(id) : opened.add(id);
+      haptic('light');
+      card.outerHTML = postCard(known.get(id), feed.reactions, opened.has(id));
+      return;
+    }
 
     const img = e.target.closest('[data-full]');
     if (img) return lightbox(img.dataset.full);
@@ -213,7 +265,7 @@ export default async function feedScreen() {
       try {
         const r = await post(`/api/posts/${id}/vote`, { option: +vote.dataset.vote });
         known.set(id, r.post);
-        card.outerHTML = postCard(r.post, feed.reactions);
+        card.outerHTML = postCard(r.post, feed.reactions, opened.has(id));
       } catch (err) { toast(err.message); }
       return;
     }
@@ -224,7 +276,7 @@ export default async function feedScreen() {
       try {
         const r = await post(`/api/posts/${id}/react`, { emoji: react.dataset.react });
         known.set(id, r.post);
-        card.outerHTML = postCard(r.post, feed.reactions);
+        card.outerHTML = postCard(r.post, feed.reactions, opened.has(id));
       } catch (err) { toast(err.message); }
       return;
     }
