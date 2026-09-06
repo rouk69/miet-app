@@ -145,21 +145,30 @@ SCHEMA = [
     "CREATE INDEX IF NOT EXISTS comments_user ON comments(user_id, id)",
 ]
 
-# Столбцы, доросшие к users позже. У баз, созданных до админки, их нет —
-# ALTER TABLE ADD COLUMN дешёвый и на живой базе безопасен.
-ADDED_COLUMNS = [
-    ("shift_semestr", "TEXT"),
-    ("first_name", "TEXT"),
-    ("last_name", "TEXT"),
-    ("photo_url", "TEXT"),
-    ("language", "TEXT"),
-    ("is_premium", "INTEGER DEFAULT 0"),
-    ("first_seen", "TEXT"),
-    ("last_seen", "TEXT"),
-    ("opens", "INTEGER DEFAULT 0"),
-    ("seen_bot", "INTEGER DEFAULT 0"),
-    ("seen_app", "INTEGER DEFAULT 0"),
-]
+# Столбцы, доросшие к таблицам позже. У баз, созданных раньше, их нет —
+# ALTER TABLE ADD COLUMN дешёвый и на живой базе безопасен. Держим по
+# таблицам, чтобы дописать столбец к любой из них можно было одинаково.
+ADDED_COLUMNS = {
+    "users": [
+        ("shift_semestr", "TEXT"),
+        ("first_name", "TEXT"),
+        ("last_name", "TEXT"),
+        ("photo_url", "TEXT"),
+        ("language", "TEXT"),
+        ("is_premium", "INTEGER DEFAULT 0"),
+        ("first_seen", "TEXT"),
+        ("last_seen", "TEXT"),
+        ("opens", "INTEGER DEFAULT 0"),
+        ("seen_bot", "INTEGER DEFAULT 0"),
+        ("seen_app", "INTEGER DEFAULT 0"),
+    ],
+    # Ответ на комментарий. Ветка ровно одна: ответ на ответ прикрепляется
+    # к тому же корню — дерево произвольной глубины в ленте объявлений
+    # читать невозможно, а рисовать больно.
+    "comments": [
+        ("reply_to", "INTEGER"),
+    ],
+}
 
 
 class Rows(list):
@@ -219,10 +228,13 @@ class Shared:
             self._raw.execute("PRAGMA busy_timeout=5000")
             for stmt in SCHEMA:
                 self._raw.execute(stmt)
-            have = {r[1] for r in self._raw.execute("PRAGMA table_info(users)")}
-            for name, decl in ADDED_COLUMNS:
-                if name not in have:
-                    self._raw.execute(f"ALTER TABLE users ADD COLUMN {name} {decl}")
+            for table, columns in ADDED_COLUMNS.items():
+                have = {r[1] for r in
+                        self._raw.execute(f"PRAGMA table_info({table})")}
+                for name, decl in columns:
+                    if name not in have:
+                        self._raw.execute(
+                            f"ALTER TABLE {table} ADD COLUMN {name} {decl}")
 
     def execute(self, sql: str, args=()) -> Rows:
         with self._lock:

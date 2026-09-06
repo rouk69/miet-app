@@ -1145,3 +1145,68 @@ textarea.field-input {
   padding: 14px 18px;
   font-size: 15px;
 }
+
+/* ---------- Ветка ответов ---------- */
+
+/* Ветка одна и неглубокая: ответ на ответ прикрепляется к тому же корню,
+   поэтому смещение нужно ровно одно. */
+.comment.reply {
+  margin-left: 20px;
+  border-left: 2px solid var(--border);
+  border-top-left-radius: 6px;
+  border-bottom-left-radius: 6px;
+}
+
+.comment-reply {
+  margin-top: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--primary);
+}
+
+.comment-contact {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 7px;
+  border-radius: var(--radius-pill);
+  background: var(--primary-dim);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--primary);
+}
+
+.comment-contact.muted {
+  background: var(--surface);
+  color: var(--text-tertiary);
+}
+
+.reply-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  margin-bottom: 8px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.reply-note span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reply-cancel {
+  color: var(--text-tertiary);
+  display: flex;
+}
+
+.comment-input-row {
+  display: flex;
+  gap: 8px;
+}

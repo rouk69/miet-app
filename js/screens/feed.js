@@ -372,18 +372,33 @@ async function cardMenu(p) {
 function comments(postId, onChange) {
   let list = [];
   let canClean = false;
+  let replyTo = null;     // на чей комментарий отвечаем
+
+  /** Ссылка на аккаунт в Telegram. Без ника открыть профиль нельзя. */
+  const contactLink = c => {
+    if (!c.contact) return '';
+    return c.contact.username
+      ? `<button class="comment-contact" data-tg="${esc(c.contact.username)}">
+           ${icon('external', 13)} @${esc(c.contact.username)}
+         </button>`
+      : `<span class="comment-contact muted" title="Ник в Telegram не задан">
+           id ${c.contact.id}
+         </span>`;
+  };
 
   const line = c => `
-    <div class="comment" data-comment="${c.id}">
+    <div class="comment ${c.reply_to ? 'reply' : ''}" data-comment="${c.id}">
       <div class="comment-head">
         <span class="comment-author">${esc(c.author_name)}</span>
         <span class="comment-role">${esc(c.author_label)}</span>
+        ${contactLink(c)}
         <span class="comment-time">${esc(ago(c.created_at))}</span>
         ${(c.author_id === account.id || canClean)
       ? `<button class="comment-drop" data-drop="${c.id}">${icon('trash', 15)}</button>`
       : ''}
       </div>
       <div class="comment-text">${esc(c.text)}</div>
+      <button class="comment-reply" data-reply="${c.id}">Ответить</button>
     </div>`;
 
   sheet({
@@ -392,9 +407,15 @@ function comments(postId, onChange) {
     body: `
       <div id="clist"><div class="skeleton" style="height:80px"></div></div>
       <div class="comment-form">
-        <input class="field-input" id="ctext" placeholder="Написать комментарий"
-               maxlength="1000" autocomplete="off">
-        <button class="btn-primary" id="csend">Отправить</button>
+        <div class="reply-note" id="rnote" hidden>
+          <span id="rwho"></span>
+          <button class="reply-cancel" id="rcancel">${icon('x', 14)}</button>
+        </div>
+        <div class="comment-input-row">
+          <input class="field-input" id="ctext" placeholder="Написать комментарий"
+                 maxlength="1000" autocomplete="off">
+          <button class="btn-primary" id="csend">Отправить</button>
+        </div>
       </div>`,
     onMount(root) {
       const box = root.querySelector('#clist');
@@ -408,19 +429,37 @@ function comments(postId, onChange) {
         onChange?.(list.length);
       };
 
-      get(`/api/posts/${postId}/comments`)
-        .then(r => { list = r.comments; canClean = r.can_moderate; draw(); })
-        .catch(err => { box.innerHTML = errorCard(err); });
+      const load = () => get(`/api/posts/${postId}/comments`)
+        .then(r => { list = r.comments; canClean = r.can_moderate; draw(); });
+
+      load().catch(err => { box.innerHTML = errorCard(err); });
+
+      const note = root.querySelector('#rnote');
+      const who = root.querySelector('#rwho');
+
+      const setReply = c => {
+        replyTo = c ? c.id : null;
+        note.hidden = !c;
+        if (c) {
+          who.textContent = `Ответ ${c.author_name}: ${excerpt(c.text, 40)}`;
+          input.focus();
+        }
+      };
+      root.querySelector('#rcancel').addEventListener('click', () => setReply(null));
 
       send.addEventListener('click', async () => {
         const text = input.value.trim();
         if (!text) return;
         send.disabled = true;
         try {
-          const r = await post(`/api/posts/${postId}/comments`, { text });
-          list.push(r.comment);
+          await post(`/api/posts/${postId}/comments`,
+            { text, reply_to: replyTo });
+          setReply(null);
           input.value = '';
-          draw();
+          // Перечитываем список целиком: порядок веток собирает сервер, и
+          // дописывать ответ в конец на клиенте значило бы решать это
+          // второй раз — с шансом решить иначе.
+          await load();
           hapticNotify('success');
           // Прокручиваем к своему: длинное обсуждение иначе оставляет
           // человека наверху, и кажется, что ничего не отправилось.
@@ -438,12 +477,23 @@ function comments(postId, onChange) {
       });
 
       box.addEventListener('click', async e => {
+        const tg = e.target.closest('[data-tg]');
+        if (tg) return openLink(`https://t.me/${tg.dataset.tg}`);
+
+        const reply = e.target.closest('[data-reply]');
+        if (reply) {
+          haptic('light');
+          return setReply(list.find(c => String(c.id) === reply.dataset.reply));
+        }
+
         const drop = e.target.closest('[data-drop]');
         if (!drop) return;
         if (!await confirmDialog('Удалить комментарий?')) return;
         try {
           await post(`/api/comments/${drop.dataset.drop}/delete`, {});
-          list = list.filter(c => String(c.id) !== drop.dataset.drop);
+          // Ответы уходят вместе с родителем — так же, как на сервере.
+          const gone = Number(drop.dataset.drop);
+          list = list.filter(c => c.id !== gone && c.reply_to !== gone);
           draw();
         } catch (err) { toast(err.message); }
       });

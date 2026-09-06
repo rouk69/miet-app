@@ -410,6 +410,93 @@ check("вместе с постом уходят и комментарии",
       posts_mod.comments_of(gone_id) == [], posts_mod.comments_of(gone_id))
 
 
+print("\n20. Ответы на комментарии")
+posts_mod.COMMENT_PAUSE = 0
+s, r = api.handle("POST", "/api/posts", {}, {"text": "Пост с веткой"}, WRITER)
+tree_id = r["post"]["id"]
+
+s, root = api.handle("POST", f"/api/posts/{tree_id}/comments", {},
+                     {"text": "Когда сдавать?"}, PIN)
+root_id = root["comment"]["id"]
+check("корневой без родителя", root["comment"]["reply_to"] is None, root["comment"])
+
+s, ans = api.handle("POST", f"/api/posts/{tree_id}/comments", {},
+                    {"text": "До пятницы", "reply_to": root_id}, EN)
+check("ответ привязан", ans["comment"]["reply_to"] == root_id, ans["comment"])
+
+s, deep = api.handle("POST", f"/api/posts/{tree_id}/comments", {},
+                     {"text": "Спасибо!", "reply_to": ans["comment"]["id"]}, PIN)
+check("ответ на ответ прикреплён к тому же корню",
+      deep["comment"]["reply_to"] == root_id, deep["comment"])
+
+api.handle("POST", f"/api/posts/{tree_id}/comments", {}, {"text": "Ещё вопрос"}, EN)
+s, lst = api.handle("GET", f"/api/posts/{tree_id}/comments", {}, {}, PIN)
+check("порядок: корень, его ответы, следующий корень",
+      [c["text"] for c in lst["comments"]]
+      == ["Когда сдавать?", "До пятницы", "Спасибо!", "Ещё вопрос"],
+      [c["text"] for c in lst["comments"]])
+
+s, _ = api.handle("POST", f"/api/posts/{tree_id}/comments", {},
+                  {"text": "Чужому посту", "reply_to": 999999}, PIN)
+check("ответ несуществующему отвергнут", s == 400, s)
+s, other_post = api.handle("POST", "/api/posts", {}, {"text": "Другой пост"}, WRITER)
+s, _ = api.handle("POST", f"/api/posts/{other_post['post']['id']}/comments", {},
+                  {"text": "Не отсюда", "reply_to": root_id}, PIN)
+check("ответ на комментарий чужого поста отвергнут", s == 400, s)
+
+api.handle("POST", f"/api/comments/{root_id}/delete", {}, {}, PIN)
+s, lst = api.handle("GET", f"/api/posts/{tree_id}/comments", {}, {}, PIN)
+check("вместе с корнем ушли и ответы",
+      [c["text"] for c in lst["comments"]] == ["Ещё вопрос"],
+      [c["text"] for c in lst["comments"]])
+
+print("\n21. Кто написал — видно владельцу")
+s, c = api.handle("POST", f"/api/posts/{tree_id}/comments", {},
+                  {"text": "Найди меня"}, EN)
+s, lst = api.handle("GET", f"/api/posts/{tree_id}/comments", {}, {}, ADMIN)
+last = lst["comments"][-1]
+check("владельцу приходит контакт", last.get("contact") == {"username": "en24", "id": 30},
+      last.get("contact"))
+check("и признак, что контакты доступны", lst["contacts"] is True, lst)
+
+s, lst = api.handle("GET", f"/api/posts/{tree_id}/comments", {}, {}, PIN)
+check("обычному человеку контактов не отдают",
+      all("contact" not in c for c in lst["comments"]), lst["comments"][:1])
+check("и признак выключен", lst["contacts"] is False, lst)
+
+api.handle("POST", "/api/admin/users/20/role", {},
+           {"role": "moderator", "perms": ["comments_delete"], "sections": []}, ADMIN)
+s, lst = api.handle("GET", f"/api/posts/{tree_id}/comments", {}, {}, PIN)
+check("тому, кто убирает комментарии, контакт нужен и приходит",
+      lst["comments"][-1].get("contact", {}).get("username") == "en24",
+      lst["comments"][-1].get("contact"))
+api.handle("POST", "/api/admin/users/20/role", {},
+           {"role": "none", "perms": [], "sections": []}, ADMIN)
+
+print("\n22. Письмо тому, кому ответили")
+letters2 = []
+notify.bind(lambda uid, text: letters2.append((uid, text)))
+s, base = api.handle("POST", f"/api/posts/{tree_id}/comments", {},
+                     {"text": "Вопрос от ПИН"}, PIN)
+letters2.clear()
+api.handle("POST", f"/api/posts/{tree_id}/comments", {},
+           {"text": "Отвечаю", "reply_to": base["comment"]["id"]}, EN)
+who = {uid for uid, _ in letters2}
+check("автор комментария получил письмо", 20 in who, who)
+check("автор поста тоже", 10 in who, who)
+check("писем ровно два", len(letters2) == 2, letters2)
+
+letters2.clear()
+# Автор поста отвечает сам себе на свой же комментарий — писем быть не должно.
+s, own = api.handle("POST", f"/api/posts/{tree_id}/comments", {},
+                    {"text": "Своё"}, WRITER)
+letters2.clear()
+api.handle("POST", f"/api/posts/{tree_id}/comments", {},
+           {"text": "И ответ себе", "reply_to": own["comment"]["id"]}, WRITER)
+check("сам себе писем не шлём", not letters2, letters2)
+notify.bind(None)
+
+
 print("\n" + "=" * 58)
 print(f"пройдено {ok}, провалено {fail}")
 print("=" * 58)

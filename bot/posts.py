@@ -205,11 +205,23 @@ COMMENT_PAUSE = 5
 
 
 def add_comment(post_id: int, user_id: int, text: str,
-                author_label: str = "") -> dict:
+                author_label: str = "", reply_to=None) -> dict:
     text = _clean(text, MAX_COMMENT)
     if not text:
         raise Refused("Пустой комментарий")
     c = conn()
+
+    parent = None
+    if reply_to:
+        row = c.execute(
+            "SELECT id, post_id, reply_to FROM comments WHERE id=?",
+            (int(reply_to),)).fetchone()
+        if not row or row[1] != post_id:
+            raise Refused("Комментарий, на который отвечают, не найден")
+        # Ответ на ответ прикрепляем к тому же корню: ветка одна, глубже
+        # обсуждение под объявлением не нужно, а рисовать лесенку из
+        # десяти уровней на телефоне невозможно.
+        parent = row[2] or row[0]
     # Ноль означает «не придерживать вовсе»: время в базе с точностью до
     # секунды, и запрос за последние ноль секунд поймал бы соседа по той же
     # секунде — пауза срабатывала бы там, где её отключили.
@@ -221,19 +233,22 @@ def add_comment(post_id: int, user_id: int, text: str,
         if recent:
             raise Refused("Слишком часто — подожди пару секунд")
     cur = c.execute(
-        """INSERT INTO comments (post_id, user_id, author_label, text)
-           VALUES (?, ?, ?, ?)""",
-        (post_id, user_id, _clean(author_label, 60), text))
+        """INSERT INTO comments (post_id, user_id, author_label, text, reply_to)
+           VALUES (?, ?, ?, ?, ?)""",
+        (post_id, user_id, _clean(author_label, 60), text, parent))
     return comment_one(cur.lastrowid)
 
 
-def comment_one(comment_id: int) -> dict | None:
+COMMENT_FIELDS = ("c.id, c.post_id, c.user_id, c.author_label, c.text, "
+                  "c.created_at, u.first_name, u.username, c.reply_to")
+
+
+def comment_one(comment_id: int, with_contact: bool = False) -> dict | None:
     row = conn().execute(
-        """SELECT c.id, c.post_id, c.user_id, c.author_label, c.text,
-                  c.created_at, u.first_name, u.username
-           FROM comments c LEFT JOIN users u ON u.user_id = c.user_id
-           WHERE c.id=?""", (comment_id,)).fetchone()
-    return _comment_row(row) if row else None
+        f"""SELECT {COMMENT_FIELDS}
+            FROM comments c LEFT JOIN users u ON u.user_id = c.user_id
+            WHERE c.id=?""", (comment_id,)).fetchone()
+    return _comment_row(row, with_contact) if row else None
 
 
 # Невидимые символы, из которых имя может состоять целиком: вариационные
@@ -256,26 +271,58 @@ def _display_name(first: str, username: str) -> str:
     return f"@{username}" if username else "Студент"
 
 
-def _comment_row(r) -> dict:
-    return {
+def _comment_row(r, with_contact: bool = False) -> dict:
+    out = {
         "id": r[0], "post_id": r[1], "author_id": r[2],
         "author_label": r[3] or "Студент", "text": r[4], "created_at": r[5],
         "author_name": _display_name(r[6], r[7]),
+        "reply_to": r[8],
     }
+    if with_contact:
+        # Ник для связи отдаём только тем, кто разбирает жалобы: остальным
+        # он не нужен, а лишнее поле в ответе — это лишний способ собрать
+        # список аккаунтов всех, кто что-то написал.
+        out["contact"] = {"username": r[7] or "", "id": r[2]}
+    return out
 
 
-def comments_of(post_id: int, limit: int = 100) -> list:
-    return [_comment_row(r) for r in conn().execute(
-        """SELECT c.id, c.post_id, c.user_id, c.author_label, c.text,
-                  c.created_at, u.first_name, u.username
-           FROM comments c LEFT JOIN users u ON u.user_id = c.user_id
-           WHERE c.post_id=? ORDER BY c.id LIMIT ?""",
+def comments_of(post_id: int, limit: int = 100,
+                with_contacts: bool = False) -> list:
+    """
+    Комментарии поста по порядку: корневой, следом ответы на него.
+
+    Порядок собирается здесь, а не в клиенте: иначе каждый экран решал бы
+    заново, как раскладывать ветки, и они разъехались бы между лентой и
+    любым другим местом, где обсуждение однажды понадобится.
+    """
+    rows = [_comment_row(r, with_contacts) for r in conn().execute(
+        f"""SELECT {COMMENT_FIELDS}
+            FROM comments c LEFT JOIN users u ON u.user_id = c.user_id
+            WHERE c.post_id=? ORDER BY c.id LIMIT ?""",
         (post_id, max(1, min(limit, 300))))]
+
+    by_parent = {}
+    for c in rows:
+        if c["reply_to"]:
+            by_parent.setdefault(c["reply_to"], []).append(c)
+    ordered = []
+    for c in rows:
+        if c["reply_to"]:
+            continue
+        ordered.append(c)
+        ordered.extend(by_parent.get(c["id"], []))
+    # Ответ, потерявший корень (родителя удалили), иначе исчез бы из
+    # выдачи, оставшись в базе. Показываем как обычный комментарий.
+    seen = {c["id"] for c in ordered}
+    ordered.extend(c for c in rows if c["id"] not in seen)
+    return ordered
 
 
 def delete_comment(comment_id: int) -> None:
+    """Убирает комментарий вместе с ответами на него — сирот не оставляем."""
     c = conn()
-    c.execute("DELETE FROM comments WHERE id=?", (comment_id,))
+    c.execute("DELETE FROM comments WHERE id=? OR reply_to=?",
+              (comment_id, comment_id))
 
 
 def mark_read(post_id: int, user_id: int) -> None:
