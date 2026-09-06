@@ -388,6 +388,17 @@ check("в письме видно, кто и что написал",
 letters.clear()
 api.handle("POST", f"/api/posts/{talk_id}/comments", {}, {"text": "Сам себе"}, WRITER)
 check("сам себе бот не пишет", not letters, letters)
+
+# Имя из невидимых символов в Telegram не редкость: на боевом сервере
+# подпись владельца показалась пустым местом. Пусто быть не должно.
+analytics.touch({"id": 30, "first_name": chr(65039), "username": "en24"})
+posts_mod.add_comment(talk_id, 30, "Кто я?")
+check("невидимое имя заменяется ником",
+      posts_mod.comments_of(talk_id)[-1]["author_name"] == "@en24",
+      posts_mod.comments_of(talk_id)[-1]["author_name"])
+check("без ника остаётся общее слово",
+      posts_mod._display_name(chr(8203), "") == "Студент",
+      posts_mod._display_name(chr(8203), ""))
 letters.clear()
 notify.bind(None)
 
