@@ -237,12 +237,53 @@ def lessons_of(sched: dict, week: int, day: int) -> list[dict]:
             if l["week"] == week and l["day"] == day]
 
 
+def slots_of(sched: dict, week: int, day: int) -> list[dict]:
+    """
+    Пары дня — по одной записи на слот звонков.
+
+    В одном слоте у группы может стоять несколько занятий сразу: язык или
+    физкультура делятся на подгруппы, и МИЭТ отдаёт их отдельными записями
+    с одним и тем же временем. Если считать записи парами, у П-13 в
+    понедельник выходит «7 пар» вместо шести, а две подгруппы английского
+    выглядят как пятая и шестая пара с одинаковым временем.
+
+    Поэтому записи одного слота собираются вместе: время и номер пары
+    общие, а преподаватели с аудиториями идут списком внутри.
+    """
+    out: list[dict] = []
+    by_pair: dict[int, dict] = {}
+    for l in lessons_of(sched, week, day):
+        slot = by_pair.get(l["pair"])
+        if slot is None:
+            slot = {"pair": l["pair"], "from": l["from"], "to": l["to"],
+                    "entries": []}
+            by_pair[l["pair"]] = slot
+            out.append(slot)
+        slot["entries"].append(l)
+
+    for slot in out:
+        first = slot["entries"][0]
+        names = {e["subject"] for e in slot["entries"]}
+        # Обычно подгруппы — это один предмет у разных преподавателей.
+        # Если предметы всё же разные, показывать общий заголовок нельзя.
+        slot["same_subject"] = len(names) == 1
+        slot["subject"] = first["subject"] if slot["same_subject"] else ""
+        slot["kind"] = first["kind"] if slot["same_subject"] else ""
+        slot["kindCls"] = first["kindCls"] if slot["same_subject"] else "oth"
+        slot["emoji"] = first["emoji"] if slot["same_subject"] else "📗"
+        slot["flags"] = first["flags"] if slot["same_subject"] else []
+        slot["split"] = len(slot["entries"]) > 1
+    out.sort(key=lambda s: s["pair"] or 0)
+    return out
+
+
 def day_counts(sched: dict, week: int) -> list[int]:
-    c = [0] * 7
+    """Сколько пар в каждый день недели — считаем слоты, а не записи."""
+    seen: list[set] = [set() for _ in range(7)]
     for l in sched.get("lessons", []):
         if l["week"] == week and 1 <= (l["day"] or 0) <= 6:
-            c[l["day"]] += 1
-    return c
+            seen[l["day"]].add(l["pair"])
+    return [len(s) for s in seen]
 
 
 def resolve_group(query: str, groups: list[str]) -> list[str]:

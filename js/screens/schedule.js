@@ -4,15 +4,28 @@ import { icon } from '../icons.js';
 import { esc, emptyState, toast } from '../ui.js';
 import { settings, save } from '../store.js';
 import {
-  fetchSchedule, weekOfCycle, lessonsOf, dayCounts, mondayOf, shortSemestr,
+  fetchSchedule, weekOfCycle, slotsOf, dayCounts, mondayOf, shortSemestr,
   DAY_SHORT, DAY_NAMES,
 } from '../schedule.js';
 import { refresh } from '../router.js';
 import { haptic, hapticSelect } from '../tg.js';
 import { screen, pickGroup, iconBtn, shortDate } from './common.js';
 
-/** Карточка одной пары. now — чтобы подсветить идущую и приглушить прошедшие. */
+/** Преподаватель и аудитория — одна строка на подгруппу. */
+const whereLine = e => `
+  <div class="lesson-meta">
+    ${e.room ? `<span>${icon('door', 14)} ${esc(e.room)}</span>` : ''}
+    ${e.teacherShort ? `<span>${icon('teacher', 14)} ${esc(e.teacherShort)}</span>` : ''}
+  </div>`;
+
+/**
+ * Карточка пары. Принимает слот из slotsOf, но переживает и одиночную
+ * запись — на главной и в поиске приходит именно она.
+ */
 export function lessonRow(l, now = null, showState = true) {
+  const entries = l.entries || [l];
+  const sameSubject = l.sameSubject ?? true;
+
   let state = '';
   if (now && showState) {
     const mins = now.getHours() * 60 + now.getMinutes();
@@ -20,6 +33,18 @@ export function lessonRow(l, now = null, showState = true) {
     if (mins >= to(l.from) && mins < to(l.to)) state = 'live';
     else if (mins >= to(l.to)) state = 'past';
   }
+
+  const body = sameSubject
+    ? `<div class="lesson-name">${esc(l.subject || entries[0].subject)}</div>
+       ${entries.map(whereLine).join('')}`
+    : entries.map(e => `
+        <div class="lesson-name">${esc(e.subject)}</div>
+        ${whereLine(e)}`).join('');
+
+  const kind = sameSubject ? l.kind || entries[0].kind : '';
+  const kindCls = sameSubject ? l.kindCls || entries[0].kindCls : 'oth';
+  const flags = (sameSubject ? l.flags : null) || [];
+
   return `
     <div class="lesson ${state}">
       <div class="lesson-time">
@@ -27,14 +52,11 @@ export function lessonRow(l, now = null, showState = true) {
         <div class="lesson-to">${esc(l.to)}</div>
       </div>
       <div class="lesson-body">
-        <div class="lesson-name">${esc(l.subject)}</div>
-        <div class="lesson-meta">
-          ${l.room ? `<span>${icon('door', 14)} ${esc(l.room)}</span>` : ''}
-          ${l.teacherShort ? `<span>${icon('teacher', 14)} ${esc(l.teacherShort)}</span>` : ''}
-        </div>
+        ${body}
         <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
-          ${l.kind ? `<span class="kind ${l.kindCls}">${esc(l.kind)}</span>` : ''}
-          ${l.flags.map(f => `<span class="kind oth">${esc(f)}</span>`).join('')}
+          ${kind ? `<span class="kind ${kindCls}">${esc(kind)}</span>` : ''}
+          ${flags.map(f => `<span class="kind oth">${esc(f)}</span>`).join('')}
+          ${entries.length > 1 ? '<span class="kind oth">подгруппы</span>' : ''}
           ${state === 'live' ? '<span class="live-badge"><i></i>идёт сейчас</span>' : ''}
         </div>
       </div>
@@ -112,7 +134,7 @@ export default async function scheduleScreen(params = {}) {
   }
 
   function drawList() {
-    const items = lessonsOf(sched, week, day);
+    const items = slotsOf(sched, week, day);
     const mon = mondayOf(now);
     mon.setDate(mon.getDate() + (week - curWeek) * 7 + day - 1);
     const isToday = mon.toDateString() === now.toDateString();

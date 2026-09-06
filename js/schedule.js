@@ -122,15 +122,52 @@ export async function fetchSchedule(group, { force = false } = {}) {
   return { ...data, cached: false };
 }
 
-/** Отдаёт пары на конкретный день недели конкретной недели цикла. */
+/** Все записи расписания на конкретный день конкретной недели цикла. */
 export const lessonsOf = (sched, week, day) =>
   (sched?.lessons || []).filter(l => l.week === week && l.day === day);
 
+/**
+ * Пары дня — по одной на слот звонков.
+ *
+ * В одном слоте у группы может стоять несколько занятий: язык и
+ * физкультура делятся на подгруппы, и МИЭТ отдаёт их отдельными записями
+ * с одинаковым временем. Без сборки они выглядели бы как две пары подряд
+ * с одним и тем же временем, а счётчик показывал бы на одну больше.
+ */
+export function slotsOf(sched, week, day) {
+  const byPair = new Map();
+  for (const l of lessonsOf(sched, week, day)) {
+    if (!byPair.has(l.pair)) {
+      byPair.set(l.pair, { pair: l.pair, from: l.from, to: l.to, entries: [] });
+    }
+    byPair.get(l.pair).entries.push(l);
+  }
+  return [...byPair.values()]
+    .sort((a, b) => (a.pair || 0) - (b.pair || 0))
+    .map(s => {
+      const first = s.entries[0];
+      // Обычно подгруппы — один предмет у разных преподавателей. Если
+      // предметы разные, общего названия у слота быть не может.
+      const sameSubject = new Set(s.entries.map(e => e.subject)).size === 1;
+      return {
+        ...s,
+        sameSubject,
+        split: s.entries.length > 1,
+        subject: sameSubject ? first.subject : '',
+        kind: sameSubject ? first.kind : '',
+        kindCls: sameSubject ? first.kindCls : 'oth',
+        flags: sameSubject ? first.flags : [],
+      };
+    });
+}
+
 /** Сколько пар в каждый день выбранной недели — для точек под датами. */
 export function dayCounts(sched, week) {
-  const c = [0, 0, 0, 0, 0, 0, 0];
-  for (const l of sched?.lessons || []) if (l.week === week) c[l.day]++;
-  return c;
+  const seen = [0, 1, 2, 3, 4, 5, 6].map(() => new Set());
+  for (const l of sched?.lessons || []) {
+    if (l.week === week && l.day >= 1 && l.day <= 6) seen[l.day].add(l.pair);
+  }
+  return seen.map(s => s.size);
 }
 
 const minutes = t => {
