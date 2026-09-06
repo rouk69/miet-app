@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import base64
 import binascii
+import gzip
 import json
 import logging
 import os
@@ -157,12 +158,11 @@ def _track(user: dict, me: dict, body: dict):
     if isinstance(events, list):
         # Пачку ограничиваем: подписанная initData живёт сутки, и без
         # потолка ею можно было бы залить базу событиями за один запрос.
-        for ev in events[:50]:
-            if not isinstance(ev, dict):
-                continue
-            kind = str(ev.get("kind") or "")
-            if kind in ("open", "tab", "screen"):
-                analytics.note(uid, kind, ev.get("name") or "")
+        batch = [(ev.get("kind"), ev.get("name") or "")
+                 for ev in events[:50]
+                 if isinstance(ev, dict)
+                 and ev.get("kind") in ("open", "tab", "screen")]
+        analytics.note_many(uid, batch)
     return 200, {"ok": True}
 
 
@@ -378,8 +378,20 @@ class Handler(BaseHTTPRequestHandler):
 
     def _send(self, status: int, payload: dict) -> None:
         raw = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        encoding = None
+        # Лента с тремя десятками постов — это полсотни килобайт текста,
+        # который жмётся впятеро. На мобильной сети разница заметнее, чем
+        # доли миллисекунды на сжатие. Мелочь трогать незачем.
+        if len(raw) > 1400 and "gzip" in self.headers.get("Accept-Encoding", ""):
+            raw = gzip.compress(raw, 6)
+            encoding = "gzip"
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
+        if encoding:
+            self.send_header("Content-Encoding", encoding)
+            # Иначе промежуточный кеш может отдать сжатый ответ клиенту,
+            # который про gzip не просил.
+            self.send_header("Vary", "Accept-Encoding")
         self.send_header("Content-Length", str(len(raw)))
         self._cors()
         self.end_headers()

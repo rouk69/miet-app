@@ -8,8 +8,9 @@
 модулям, рано или поздно расходится — поэтому все CREATE TABLE и миграции
 собраны здесь, а модули пишут только запросы.
 
-Соединение своё на поток: sqlite не разрешает делить одно между потоками, а
-их тут много — telebot работает threaded, плюс отдельный поток HTTP-сервера.
+Соединение одно на процесс, доступ к нему по очереди (см. Shared). Своё
+на поток не годится: HTTP-сервер заводит поток на каждый запрос, и
+соединения копились бы десятками, каждое — со своим прогоном схемы.
 
 Время в базе всегда UTC (CURRENT_TIMESTAMP, datetime('now')), потому что в
 облаке часовой пояс контейнера UTC, а на ноутбуке — московский, и хранить
@@ -29,8 +30,6 @@ DB_PATH = paths.path("users.db")
 # Сдвиг московского времени для SQL-функций дат. Города МИЭТа — Зеленоград,
 # отчёты смотрят по местному времени, а не по UTC.
 MSK = "+3 hours"
-
-_local = threading.local()
 
 SCHEMA = [
     # Настройки и профиль человека. Строка появляется, как только он написал
@@ -150,24 +149,99 @@ ADDED_COLUMNS = [
 ]
 
 
-def conn() -> sqlite3.Connection:
-    """Соединение текущего потока; схема доводится до актуальной при первом."""
-    c = getattr(_local, "conn", None)
-    if c is not None:
-        return c
-    c = sqlite3.connect(DB_PATH, timeout=10)
-    # WAL: читатели (HTTP-сервер) не ждут писателей (бот) и наоборот.
-    c.execute("PRAGMA journal_mode=WAL")
-    c.execute("PRAGMA busy_timeout=10000")
-    for stmt in SCHEMA:
-        c.execute(stmt)
-    have = {r[1] for r in c.execute("PRAGMA table_info(users)")}
-    for name, decl in ADDED_COLUMNS:
-        if name not in have:
-            c.execute(f"ALTER TABLE users ADD COLUMN {name} {decl}")
-    c.commit()
-    _local.conn = c
-    return c
+class Rows(list):
+    """
+    Результат запроса, вычитанный целиком.
+
+    Курсор наружу отдавать нельзя: его итерация — это обращение к базе, и
+    происходило бы оно уже вне замка, то есть параллельно с чужой записью.
+    Поэтому строки материализуются сразу, а привычные `fetchone` и
+    `fetchall` остаются, чтобы вызывающий код не переписывать.
+    """
+
+    def __init__(self, rows, lastrowid=None, rowcount=-1):
+        super().__init__(rows)
+        self.lastrowid = lastrowid
+        self.rowcount = rowcount
+
+    def fetchone(self):
+        return self[0] if self else None
+
+    def fetchall(self):
+        return list(self)
+
+
+class Shared:
+    """
+    Одно соединение на процесс, доступ по очереди.
+
+    Раньше соединение заводилось на поток (`threading.local`), и это было
+    незаметной бомбой: `ThreadingHTTPServer` создаёт **новый поток на
+    каждый запрос**, а значит каждый запрос открывал новое соединение и
+    прогонял всю схему — два десятка `CREATE TABLE IF NOT EXISTS`, то
+    есть DDL, которому нужна эксклюзивная блокировка записи. Пока лента
+    считалась, соседний запрос стоял в очереди, упирался в
+    `busy_timeout` и отваливался ровно через десять секунд. Снаружи это
+    выглядело как «лента иногда не грузится».
+
+    Общее соединение снимает и вторую половину беды: старые соединения
+    больше не копятся, потому что новых не заводится.
+
+    Режим автофиксации (`isolation_level=None`) здесь обязателен: с
+    общим соединением незакрытая транзакция одного потока подхватывала
+    бы записи другого, и `commit()` фиксировал бы чужое недоделанное.
+    Вызовы `commit()` в коде остаются — в этом режиме они безвредны.
+    """
+
+    def __init__(self, path: str):
+        self._raw = sqlite3.connect(path, timeout=10, check_same_thread=False,
+                                    isolation_level=None)
+        self._lock = threading.RLock()
+        with self._lock:
+            # WAL: чтение не ждёт запись. NORMAL вместо FULL — на каждой
+            # записи не дёргаем fsync, а на сетевом диске Amvera это
+            # разница между «мгновенно» и «десятки миллисекунд».
+            self._raw.execute("PRAGMA journal_mode=WAL")
+            self._raw.execute("PRAGMA synchronous=NORMAL")
+            self._raw.execute("PRAGMA busy_timeout=5000")
+            for stmt in SCHEMA:
+                self._raw.execute(stmt)
+            have = {r[1] for r in self._raw.execute("PRAGMA table_info(users)")}
+            for name, decl in ADDED_COLUMNS:
+                if name not in have:
+                    self._raw.execute(f"ALTER TABLE users ADD COLUMN {name} {decl}")
+
+    def execute(self, sql: str, args=()) -> Rows:
+        with self._lock:
+            cur = self._raw.execute(sql, args)
+            rows = cur.fetchall() if cur.description else []
+            return Rows(rows, cur.lastrowid, cur.rowcount)
+
+    def executemany(self, sql: str, seq) -> Rows:
+        with self._lock:
+            cur = self._raw.executemany(sql, seq)
+            return Rows([], cur.lastrowid, cur.rowcount)
+
+    def commit(self) -> None:
+        """В режиме автофиксации фиксировать нечего — оставлено для кода."""
+
+    def close(self) -> None:
+        with self._lock:
+            self._raw.close()
+
+
+_shared: Shared | None = None
+_make_lock = threading.Lock()
+
+
+def conn() -> Shared:
+    """Общее соединение. Схема применяется один раз за жизнь процесса."""
+    global _shared
+    if _shared is None:
+        with _make_lock:
+            if _shared is None:
+                _shared = Shared(DB_PATH)
+    return _shared
 
 
 def reset_for_tests(path: str) -> None:
@@ -175,8 +249,8 @@ def reset_for_tests(path: str) -> None:
     Переключает модуль на другую базу. Нужен только тестам: они не должны
     писать в живую users.db, иначе прогон испортит настоящую статистику.
     """
-    global DB_PATH
+    global DB_PATH, _shared
     DB_PATH = path
-    if hasattr(_local, "conn"):
-        _local.conn.close()
-        del _local.conn
+    if _shared is not None:
+        _shared.close()
+        _shared = None

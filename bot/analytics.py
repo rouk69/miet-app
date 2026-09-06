@@ -169,16 +169,27 @@ def touch(user: dict, source: str = "app") -> None:
 
 def note(user_id: int, kind: str, name: str = "") -> None:
     """Одно событие. kind: open | tab | screen | bot."""
+    note_many(user_id, [(kind, name)])
+
+
+def note_many(user_id: int, events) -> None:
+    """
+    Пачка событий одной вставкой.
+
+    Приложение присылает переключения вкладок пачками, и раньше каждое
+    событие писалось отдельным запросом со своей фиксацией. На сетевом
+    диске это десяток отдельных записей там, где хватает одной.
+    """
     uid = int(user_id or 0)
-    if not uid:
+    rows = [(uid, str(k)[:16], str(n or "")[:64]) for k, n in events if k]
+    if not uid or not rows:
         return
     c = conn()
-    c.execute("INSERT INTO events (user_id, kind, name) VALUES (?, ?, ?)",
-              (uid, str(kind)[:16], str(name or "")[:64]))
-    if kind == "open":
-        c.execute("UPDATE users SET opens = COALESCE(opens, 0) + 1 WHERE user_id=?",
-                  (uid,))
-    c.commit()
+    c.executemany("INSERT INTO events (user_id, kind, name) VALUES (?, ?, ?)", rows)
+    opens = sum(1 for _, k, _ in rows if k == "open")
+    if opens:
+        c.execute("UPDATE users SET opens = COALESCE(opens, 0) + ? WHERE user_id=?",
+                  (opens, uid))
 
 
 def note_bot(user: dict, command: str, throttle: int = 0) -> None:
