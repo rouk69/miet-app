@@ -236,14 +236,31 @@ def comment_one(comment_id: int) -> dict | None:
     return _comment_row(row) if row else None
 
 
+# Невидимые символы, из которых имя может состоять целиком: вариационные
+# селекторы и нулевой ширины. Имя из них выглядит пустым местом, а в
+# Telegram такие ники не редкость.
+INVISIBLE = "​‌‍⁠︎️﻿"
+
+
+def _display_name(first: str, username: str) -> str:
+    """
+    Имя под комментарием: то, что человек и так показывает в Telegram.
+
+    Подпись без имени выглядела бы анонимкой, а анонимных комментариев
+    здесь нет намеренно, поэтому запасных вариантов два: ник и общее
+    «Студент».
+    """
+    name = "".join(ch for ch in (first or "") if ch not in INVISIBLE).strip()
+    if name:
+        return name
+    return f"@{username}" if username else "Студент"
+
+
 def _comment_row(r) -> dict:
     return {
         "id": r[0], "post_id": r[1], "author_id": r[2],
         "author_label": r[3] or "Студент", "text": r[4], "created_at": r[5],
-        # Имя показываем то, что человек и так показывает в Telegram: под
-        # комментарием подпись без имени выглядит анонимкой, а анонимных
-        # комментариев здесь нет намеренно.
-        "author_name": (r[6] or "").strip() or (f"@{r[7]}" if r[7] else "Студент"),
+        "author_name": _display_name(r[6], r[7]),
     }
 
 
