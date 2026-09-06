@@ -3,43 +3,18 @@
 Настройки пользователей: группа и поправка недели.
 SQLite, а не JSON-файл: бот отвечает в нескольких потоках, и одновременная
 перезапись файла рано или поздно съела бы чужие записи.
+
+Схема и соединение переехали в db.py: та же таблица users хранит теперь и
+профиль человека для админки, а два места, где она создаётся, однажды
+разошлись бы в разные схемы.
 """
 from __future__ import annotations
 
-import os
-import sqlite3
-
-from . import paths
-import threading
-
-DB_PATH = paths.path("users.db")
-_local = threading.local()
-
-
-def _conn() -> sqlite3.Connection:
-    # У sqlite соединение нельзя делить между потоками, поэтому своё на поток.
-    if not hasattr(_local, "conn"):
-        c = sqlite3.connect(DB_PATH, timeout=10)
-        c.execute("PRAGMA journal_mode=WAL")
-        c.execute("""CREATE TABLE IF NOT EXISTS users (
-            user_id    INTEGER PRIMARY KEY,
-            group_name TEXT,
-            week_shift INTEGER DEFAULT 0,
-            username   TEXT,
-            updated_at TEXT DEFAULT CURRENT_TIMESTAMP
-        )""")
-        # Семестр, для которого настроена поправка недели. У баз, созданных
-        # до появления столбца, его нет — добавляем на месте.
-        cols = {r[1] for r in c.execute("PRAGMA table_info(users)")}
-        if "shift_semestr" not in cols:
-            c.execute("ALTER TABLE users ADD COLUMN shift_semestr TEXT")
-        c.commit()
-        _local.conn = c
-    return _local.conn
+from .db import conn
 
 
 def get_user(user_id: int) -> dict:
-    row = _conn().execute(
+    row = conn().execute(
         "SELECT group_name, week_shift, shift_semestr FROM users WHERE user_id=?",
         (user_id,)).fetchone()
     if not row:
@@ -66,19 +41,21 @@ def shift_for(user_id: int, semestr: str) -> int:
 
 
 def set_group(user_id: int, group: str, username: str | None = None) -> None:
-    c = _conn()
+    c = conn()
+    # NULLIF: мини-приложение знает ник не всегда, и пустая строка оттуда не
+    # должна стирать ник, добытый ботом.
     c.execute("""INSERT INTO users (user_id, group_name, username, updated_at)
                  VALUES (?, ?, ?, CURRENT_TIMESTAMP)
                  ON CONFLICT(user_id) DO UPDATE SET
                    group_name=excluded.group_name,
-                   username=excluded.username,
+                   username=COALESCE(NULLIF(excluded.username, ''), users.username),
                    updated_at=CURRENT_TIMESTAMP""",
               (user_id, group, username))
     c.commit()
 
 
 def set_shift(user_id: int, shift: int, semestr: str | None = None) -> None:
-    c = _conn()
+    c = conn()
     c.execute("""INSERT INTO users (user_id, week_shift, shift_semestr, updated_at)
                  VALUES (?, ?, ?, CURRENT_TIMESTAMP)
                  ON CONFLICT(user_id) DO UPDATE SET
@@ -90,7 +67,7 @@ def set_shift(user_id: int, shift: int, semestr: str | None = None) -> None:
 
 
 def stats() -> dict:
-    c = _conn()
+    c = conn()
     total = c.execute("SELECT COUNT(*) FROM users").fetchone()[0]
     with_group = c.execute(
         "SELECT COUNT(*) FROM users WHERE group_name IS NOT NULL").fetchone()[0]

@@ -18,10 +18,14 @@ sys.stdout.reconfigure(encoding="utf-8")
 os.environ.setdefault("BOT_TOKEN", "0:TEST")
 os.environ.setdefault("WEBAPP_URL", "https://example.github.io/miet-app")
 
-# Своя база на каждый прогон — чтобы тест не трогал живые настройки людей.
-from . import storage                                              # noqa: E402
-storage.DB_PATH = os.path.join(tempfile.mkdtemp(), "test-users.db")
+# Своя база на каждый прогон — чтобы тест не трогал ни живые настройки
+# людей, ни статистику. Путь переключаем ДО первого запроса: db.conn()
+# запоминает соединение на поток и потом уже не переоткроет его.
+from . import db                                                   # noqa: E402
+db.reset_for_tests(os.path.join(tempfile.mkdtemp(), "test-users.db"))
 
+from . import analytics                                            # noqa: E402
+from . import storage                                              # noqa: E402
 from . import keyboards as kbs                                     # noqa: E402
 from . import main as B                                            # noqa: E402
 from . import rich as rich_mod                                     # noqa: E402

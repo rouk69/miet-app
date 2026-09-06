@@ -6,6 +6,7 @@ import { data, settings, save, applyTheme } from '../store.js';
 import { fetchSchedule, weekOfCycle } from '../schedule.js';
 import { go, refresh } from '../router.js';
 import { tgUser, openLink, syncChrome, haptic, confirmDialog } from '../tg.js';
+import { account } from '../api.js';
 import { screen, pickGroup } from './common.js';
 
 export default async function profileScreen() {
@@ -34,7 +35,20 @@ export default async function profileScreen() {
         </div>
       </div>
 
-      <div class="section-head" style="margin-top:0"><div class="section-title">Учёба</div></div>
+      ${account.can_stats ? `
+        <div class="section-head" style="margin-top:0">
+          <div class="section-title">Управление</div>
+        </div>
+        ${listCard([listRow({
+    ico: 'shield',
+    title: 'Админка',
+    sub: account.is_admin ? 'Статистика, юзеры, роли' : 'Статистика и юзеры',
+    chevron: true, id: 'admin', cls: 'tap',
+  })])}` : ''}
+
+      <div class="section-head" ${account.can_stats ? '' : 'style="margin-top:0"'}>
+        <div class="section-title">Учёба</div>
+      </div>
       ${listCard([
       listRow({ ico: 'users', title: 'Группа', value: settings.group || 'не выбрана', chevron: true, id: 'group', cls: 'tap' }),
       listRow({ ico: 'calendar', title: 'Текущая неделя', value: weekLabel, chevron: true, id: 'week', cls: 'tap' }),
@@ -88,6 +102,7 @@ export default async function profileScreen() {
     const row = e.target.closest('.list-row[data-id]');
     if (!row) return;
     switch (row.dataset.id) {
+      case 'admin': return go('admin');
       case 'group': return pickGroup(() => refresh());
       case 'week': return weekShiftSheet();
       case 'fav': return go('clubs');

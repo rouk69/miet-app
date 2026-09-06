@@ -38,7 +38,15 @@ def validate_init_data(init_data: str, bot_token: str, max_age: int = 86400):
     secret_key = hmac.new(b"WebAppData", bot_token.encode(), hashlib.sha256).digest()
     expected = hmac.new(secret_key, data_check_string.encode(), hashlib.sha256).hexdigest()
 
-    if not hmac.compare_digest(expected, received_hash):
+    # Сравниваем байтами: compare_digest на строке с не-ASCII символами
+    # бросает TypeError, и подпись вида hash=деадбиф роняла бы обработчик
+    # вместо честного отказа. Настоящий hash шестнадцатеричный, так что всё,
+    # что не кодируется в ASCII, заведомо не подходит.
+    try:
+        given = received_hash.encode("ascii")
+    except UnicodeEncodeError:
+        return None
+    if not hmac.compare_digest(expected.encode("ascii"), given):
         return None
 
     # Просроченный initData принимать нельзя: перехваченную строку иначе

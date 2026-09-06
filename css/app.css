@@ -689,3 +689,110 @@
   font-weight: 800;
   letter-spacing: -0.02em;
 }
+
+/* ---------- Админка ---------- */
+
+/* Пояснение под заголовком раздела: в админке почти у каждой таблицы есть
+   оговорка, без которой цифру можно прочитать неправильно. */
+.section-note {
+  margin: -6px 0 12px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text-secondary);
+}
+
+.admin-tabs {
+  margin-bottom: 16px;
+}
+
+.muted-name {
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.danger-btn {
+  color: var(--danger);
+}
+
+/* ---------- График по дням ---------- */
+
+.chart-card {
+  padding: 16px;
+}
+
+.chart-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.chart-last {
+  margin-top: 2px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  height: 96px;
+  margin-top: 14px;
+}
+
+.bar-col {
+  flex: 1;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 6px;
+  min-width: 0;
+}
+
+/* Столбец растёт от подписи вверх, поэтому высота задаётся в процентах от
+   колонки, а не от карточки: подпись остаётся на месте при любых числах. */
+.bar {
+  border-radius: 4px;
+  background: var(--primary);
+  min-height: 2px;
+}
+
+.bar-success { background: var(--success); }
+.bar-warning { background: var(--warning); }
+
+.bar-day {
+  font-size: 9px;
+  line-height: 1;
+  text-align: center;
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+/* ---------- Полоса активности за 30 дней ---------- */
+
+.heat-card {
+  padding: 14px;
+  display: grid;
+  grid-template-columns: repeat(15, 1fr);
+  gap: 4px;
+}
+
+.heat-cell {
+  aspect-ratio: 1;
+  border-radius: 3px;
+  background: var(--surface-2);
+}
+
+/* Четыре ступени, а не плавная шкала: на двух десятках событий разница
+   между соседними оттенками иначе неразличима.
+
+   Насыщенность даём прозрачностью, а не color-mix: он появился в WebKit
+   только в iOS 16.2, и на клиентах постарше вся полоса стала бы серой. */
+.heat-1 { background: var(--primary); opacity: 0.28; }
+.heat-2 { background: var(--primary); opacity: 0.5; }
+.heat-3 { background: var(--primary); opacity: 0.75; }
+.heat-4 { background: var(--primary); }
