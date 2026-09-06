@@ -251,6 +251,45 @@ for path in ("/api/нет-такого", "/api/admin/", "/api/admin/users/abc"):
 s, _ = api.handle("POST", "/api/admin/stats", {}, {}, ADMIN)
 check("статистика не принимает POST", s == 404, s)
 
+print("\n13. Параллельные запросы не встают в очередь")
+import threading                                                   # noqa: E402
+
+# Тот самый случай, из-за которого лента «иногда не грузилась»: сервер
+# заводит поток на каждый запрос, и раньше каждый поток открывал своё
+# соединение с прогоном всей схемы — DDL под эксклюзивной блокировкой.
+# Соседние запросы упирались в busy_timeout и отваливались через десять
+# секунд. Здесь чтение и запись идут вперемешку из восьми потоков.
+results, errors = [], []
+
+
+def hammer(n):
+    try:
+        for i in range(6):
+            api.handle("POST", "/api/track", {},
+                       {"events": [{"kind": "tab", "name": "schedule"}]}, USER)
+            code, _ = api.handle("GET", "/api/admin/stats", {}, {}, ADMIN)
+            results.append(code)
+            code, _ = api.handle("GET", "/api/admin/users", {}, {}, ADMIN)
+            results.append(code)
+    except Exception as e:                       # noqa: BLE001
+        errors.append(repr(e))
+
+
+started = time.time()
+threads = [threading.Thread(target=hammer, args=(i,)) for i in range(8)]
+for t in threads:
+    t.start()
+for t in threads:
+    t.join(timeout=60)
+spent = time.time() - started
+
+check("ни один поток не упал", not errors, errors[:2])
+check("все потоки завершились", not any(t.is_alive() for t in threads))
+check("все ответы успешны", results and set(results) == {200}, set(results))
+check("96 запросов уложились в 15 секунд", spent < 15, round(spent, 1))
+print(f"    96 запросов из 8 потоков за {spent:.1f} с")
+
+
 print("\n" + "=" * 58)
 print(f"пройдено {ok}, провалено {fail}")
 print("=" * 58)

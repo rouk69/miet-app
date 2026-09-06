@@ -17,6 +17,26 @@ import { screen, pickGroup } from './common.js';
 
 const mediaUrl = name => `${API_BASE}/media/${encodeURIComponent(name)}`;
 
+// Последняя удачно полученная лента. Нужна ровно на случай, когда сервер
+// не ответил: пустой экран выглядит как поломка приложения, а вчерашние
+// записи — как то, чем они и являются.
+const CACHE_KEY = 'miet-feed-cache';
+
+function remember(feed) {
+  try {
+    localStorage.setItem(CACHE_KEY, JSON.stringify({ at: Date.now(), feed }));
+  } catch { /* приватный режим — обойдёмся без запаса */ }
+}
+
+function cached() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(CACHE_KEY) || 'null');
+    // Неделя — предел, после которого показывать старое уже вредно.
+    if (saved && Date.now() - saved.at < 7 * 24 * 3600 * 1000) return saved.feed;
+  } catch { /* испорченный кеш — как будто его нет */ }
+  return null;
+}
+
 /** Время с сервера приходит в UTC — без Z браузер прочтёт его как местное. */
 const parseTs = ts => new Date(String(ts || '').replace(' ', 'T') + 'Z');
 
@@ -116,17 +136,29 @@ export default async function feedScreen() {
     });
   }
 
-  let feed;
+  let feed = null;
+  let failure = null;
   try {
-    feed = await get('/api/feed?limit=30');
+    feed = await get('/api/feed?limit=30', { timeout: 15000 });
+    remember(feed);
   } catch (err) {
-    return screen({
+    failure = err;
+    // Показать вчерашнюю ленту честнее, чем пустой экран: человек хотя бы
+    // видит, что было, и понимает, что не загрузилось именно свежее.
+    feed = cached();
+  }
+
+  if (!feed) {
+    const node = screen({
       title: 'Лента',
       body: `<div class="card" style="padding:18px">
         <div class="row-title" style="margin-bottom:6px">Лента не загрузилась</div>
-        <div class="row-subtitle">${esc(err.message)}</div>
+        <div class="row-subtitle" style="margin-bottom:14px">${esc(failure.message)}</div>
+        <button class="btn-primary" id="retry">Повторить</button>
       </div>`,
     });
+    node.querySelector('#retry').addEventListener('click', () => refresh());
+    return node;
   }
 
   const archive = (data.news || []).length;
@@ -142,6 +174,11 @@ export default async function feedScreen() {
         <button class="btn-secondary" id="moderation" style="margin-top:10px">
           Модерация постов
         </button>` : ''}
+      ${failure ? `
+        <div class="stale-note">
+          Свежее не загрузилось (${esc(failure.message)}) — показываю последнее.
+          <button class="stale-retry" id="retry">Обновить</button>
+        </div>` : ''}
       <div class="stack" id="list" style="margin-top:14px">
         ${feed.posts.length
     ? feed.posts.map(p => postCard(p, feed.reactions)).join('')
@@ -158,6 +195,7 @@ export default async function feedScreen() {
   node.querySelector('#write')?.addEventListener('click', () => composer());
   node.querySelector('#moderation')?.addEventListener('click', () => go('moderation'));
   node.querySelector('#archive')?.addEventListener('click', () => go('newsArchive'));
+  node.querySelector('#retry')?.addEventListener('click', () => refresh());
 
   node.addEventListener('click', async e => {
     const card = e.target.closest('[data-post]');
