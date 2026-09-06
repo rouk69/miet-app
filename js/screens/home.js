@@ -6,8 +6,10 @@ import { data, settings } from '../store.js';
 import { fetchSchedule, weekOfCycle, nowState, slotsOf, DAY_NAMES } from '../schedule.js';
 import { go, switchTab } from '../router.js';
 import { tgUser, openLink } from '../tg.js';
+import { get, canTalk } from '../api.js';
 import { screen, pickGroup, newsRow, humanDate, iconBtn } from './common.js';
 import { lessonRow } from './schedule.js';
+import { feedRow } from './feed.js';
 
 // ОРИОКС и личный кабинет — внешние сервисы, но студенту они нужнее
 // всего, поэтому стоят прямо на главной.
@@ -46,8 +48,8 @@ export default async function home() {
         <div class="section-title">Новости</div>
         <button class="section-link" data-go="news">Все</button>
       </div>
-      <div class="list-card">
-        ${(data.news || []).slice(0, 5).map(newsRow).join('')}
+      <div class="list-card" id="fresh">
+        ${(data.news || []).slice(0, 4).map(newsRow).join('')}
       </div>
 
       <div class="section-head"><div class="section-title">Университет</div></div>
@@ -71,6 +73,11 @@ export default async function home() {
   const slot = node.querySelector('#now-slot');
   renderNow(slot, now);
 
+  // ── свежее из ленты ──
+  // Пока сервер не ответил, на месте блока лежит архив из data/app.json:
+  // он всегда под рукой и не оставляет главную пустой.
+  renderFresh(node.querySelector('#fresh'));
+
   // ── обработчики ──
   node.querySelector('[data-action="search"]')?.addEventListener('click', () => go('search'));
   node.addEventListener('click', e => {
@@ -81,6 +88,9 @@ export default async function home() {
       const [route, id] = raw.split(':');
       return go(route === 'campus' && id ? 'campusItem' : route, { id });
     }
+    // Запись из ленты целиком читается там же — на главной только повод
+    // туда заглянуть, поэтому ведём на вкладку, а не на отдельный экран.
+    if (e.target.closest('[data-feed]')) return switchTab('news');
     const n = e.target.closest('[data-news]');
     if (n) return go('article', { id: n.dataset.news });
     const g = e.target.closest('[data-go]');
@@ -90,6 +100,18 @@ export default async function home() {
   });
 
   return node;
+}
+
+/**
+ * Свежее из ленты — четыре записи. Тоже асинхронно и молча: сервер здесь
+ * необязателен, а падать главной из-за новостей незачем.
+ */
+async function renderFresh(slot) {
+  if (!slot || !canTalk) return;
+  try {
+    const feed = await get('/api/feed?limit=4', { timeout: 6000, retries: 0 });
+    if (feed.posts.length) slot.innerHTML = feed.posts.map(feedRow).join('');
+  } catch { /* остаётся архив, который уже нарисован */ }
 }
 
 /** Рисует блок «что сейчас» — асинхронно, чтобы не задерживать экран. */

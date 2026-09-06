@@ -997,3 +997,64 @@ textarea.field-input {
   font-weight: 700;
   color: var(--primary);
 }
+
+/* ---------- Свёрнутый текст поста ---------- */
+
+/* Обрезаем по строкам, а не по символам: текст остаётся в разметке целиком,
+   поэтому «Подробнее» разворачивает мгновенно, без похода на сервер. */
+.post-text.folded {
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  line-clamp: 4;
+  overflow: hidden;
+}
+
+/* Абзацы внутри свёрнутого текста не должны раздвигать его отступами:
+   иначе четыре строки занимают место шести. */
+.post-text.folded p { margin-bottom: 0; }
+
+.post-more {
+  margin-top: 8px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--primary);
+}
+
+/* ---------- Строка ленты на главной ---------- */
+
+.feed-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.feed-row:last-child { border-bottom: none; }
+
+.feed-row img {
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.feed-row-title {
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.35;
+  color: var(--text);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  line-clamp: 2;
+  overflow: hidden;
+}
+
+.feed-row-meta {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
