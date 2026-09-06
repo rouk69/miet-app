@@ -26,16 +26,28 @@ export const account = {
   group: null,
 };
 
-async function request(path, { method = 'GET', body } = {}) {
+async function request(path, { method = 'GET', body, timeout = 12000 } = {}) {
   if (!canTalk) throw new Error('Сервер недоступен');
-  const res = await fetch(API_BASE + path, {
-    method,
-    headers: {
-      'X-Init-Data': initData,
-      ...(body ? { 'Content-Type': 'application/json' } : {}),
-    },
-    body: body ? JSON.stringify(body) : undefined,
-  });
+  // Свой таймаут обязателен: браузер ждёт молчащий сервер десятками секунд,
+  // а на старте приложения это означало бы экран загрузки всё это время.
+  const stop = new AbortController();
+  const bell = setTimeout(() => stop.abort(), timeout);
+  let res;
+  try {
+    res = await fetch(API_BASE + path, {
+      method,
+      headers: {
+        'X-Init-Data': initData,
+        ...(body ? { 'Content-Type': 'application/json' } : {}),
+      },
+      body: body ? JSON.stringify(body) : undefined,
+      signal: stop.signal,
+    });
+  } catch (err) {
+    throw new Error(err.name === 'AbortError' ? 'Сервер не ответил' : err.message);
+  } finally {
+    clearTimeout(bell);
+  }
   let data = null;
   try {
     data = await res.json();
@@ -54,7 +66,10 @@ export const post = (path, body) => request(path, { method: 'POST', body });
 export async function loadMe() {
   if (!canTalk) return account;
   try {
-    Object.assign(account, await get('/api/me'), { loaded: true });
+    // На старте ждём сервер недолго: расписание и данные лежат в приложении,
+    // и молчащий сервер не повод держать человека на экране загрузки.
+    Object.assign(account, await request('/api/me', { timeout: 4000 }),
+      { loaded: true });
   } catch (err) {
     console.warn('сервер не ответил:', err.message);
   }
