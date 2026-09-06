@@ -24,6 +24,8 @@ import telebot
 from telebot import apihelper, types
 from telebot.apihelper import ApiTelegramException
 
+from . import analytics
+from . import api as web          # HTTP-API мини-приложения; schedule_api ниже
 from . import keyboards as kbs
 from . import render
 from . import rich
@@ -166,6 +168,29 @@ def with_emoji_fallback(send, scope: str = "direct"):
 
 def user_ctx(user_id: int) -> dict:
     return storage.get_user(user_id)
+
+
+def seen(user: types.User, what: str, throttle: int = 0) -> bool:
+    """
+    Отмечает обращение к боту и отвечает на вопрос «работать ли дальше».
+
+    Заблокированному из админки бот молчит совсем: любой ответ, даже отказ,
+    даёт повод написать ещё раз. Учёт обёрнут в try целиком — упавшая база
+    статистики не повод не показать человеку расписание.
+    """
+    try:
+        analytics.note_bot({
+            "id": user.id,
+            "username": user.username,
+            "first_name": user.first_name,
+            "last_name": user.last_name,
+            "language_code": getattr(user, "language_code", None),
+            "is_premium": getattr(user, "is_premium", False),
+        }, what, throttle=throttle)
+        return not analytics.is_blocked(user.id)
+    except Exception as e:
+        log.warning("учёт обращения не записался: %s", e)
+        return True
 
 
 def today_day() -> int:
@@ -340,6 +365,8 @@ def ask_group(chat_id: int, current: str | None = None) -> None:
 
 @bot.message_handler(commands=["start"])
 def cmd_start(m: types.Message) -> None:
+    if not seen(m.from_user, "/start"):
+        return
     ctx = user_ctx(m.from_user.id)
 
     # Диплинк t.me/бот?start=ПИН-31 — чтобы одногруппники настраивались
@@ -407,12 +434,16 @@ def cmd_start(m: types.Message) -> None:
 
 @bot.message_handler(commands=["help"])
 def cmd_help(m: types.Message) -> None:
+    if not seen(m.from_user, "/help"):
+        return
     bot.send_message(m.chat.id, render.help_text(BOT_USERNAME),
                      disable_web_page_preview=True)
 
 
 @bot.message_handler(commands=["today", "segodnya"])
 def cmd_today(m: types.Message) -> None:
+    if not seen(m.from_user, "/today"):
+        return
     ctx = user_ctx(m.from_user.id)
     if not ctx["group"]:
         return ask_group(m.chat.id)
@@ -421,6 +452,8 @@ def cmd_today(m: types.Message) -> None:
 
 @bot.message_handler(commands=["tomorrow"])
 def cmd_tomorrow(m: types.Message) -> None:
+    if not seen(m.from_user, "/tomorrow"):
+        return
     ctx = user_ctx(m.from_user.id)
     if not ctx["group"]:
         return ask_group(m.chat.id)
@@ -436,6 +469,8 @@ def cmd_tomorrow(m: types.Message) -> None:
 
 @bot.message_handler(commands=["week"])
 def cmd_week(m: types.Message) -> None:
+    if not seen(m.from_user, "/week"):
+        return
     ctx = user_ctx(m.from_user.id)
     if not ctx["group"]:
         return ask_group(m.chat.id)
@@ -458,6 +493,8 @@ def cmd_week(m: types.Message) -> None:
 
 @bot.message_handler(commands=["support", "about"])
 def cmd_support(m: types.Message) -> None:
+    if not seen(m.from_user, "/support"):
+        return
     if _rich["direct"]:
         try:
             return with_emoji_fallback(lambda c: bot.send_rich_message(
@@ -476,11 +513,15 @@ def cmd_support(m: types.Message) -> None:
 
 @bot.message_handler(commands=["group"])
 def cmd_group(m: types.Message) -> None:
+    if not seen(m.from_user, "/group"):
+        return
     ask_group(m.chat.id, user_ctx(m.from_user.id)["group"])
 
 
 @bot.message_handler(commands=["shift"])
 def cmd_shift(m: types.Message) -> None:
+    if not seen(m.from_user, "/shift"):
+        return
     ctx = user_ctx(m.from_user.id)
     kb = types.InlineKeyboardMarkup(row_width=4)
     kb.row(*[types.InlineKeyboardButton(
@@ -535,6 +576,9 @@ def on_text(m: types.Message) -> None:
     query = (m.text or "").strip()
     if query.startswith("/"):
         return
+    # Сам текст запроса в учёт не идёт — только факт обращения.
+    if not seen(m.from_user, "поиск группы"):
+        return
     try:
         groups = api.fetch_groups()
     except Exception as e:
@@ -568,6 +612,8 @@ def on_callback(call: types.CallbackQuery) -> None:
     parts = kbs.parse_cb(call.data)
     action = parts[0] if parts else ""
     uid = call.from_user.id
+    if not seen(call.from_user, "кнопка " + (action or "?")):
+        return bot.answer_callback_query(call.id)
     shift = user_ctx(uid)["shift"]
 
     try:
@@ -658,6 +704,11 @@ def on_callback(call: types.CallbackQuery) -> None:
 @bot.inline_handler(func=lambda q: True)
 def on_inline(q: types.InlineQuery) -> None:
     query = (q.query or "").strip()
+    # Inline срабатывает на каждое нажатие клавиши, поэтому в учёт идёт факт
+    # обращения, а не набранный текст, и отдельным видом — чтобы вставки не
+    # захлестнули статистику команд.
+    if not seen(q.from_user, "inline", throttle=60):
+        return bot.answer_inline_query(q.id, [], cache_time=300, is_personal=True)
     ctx = user_ctx(q.from_user.id)
 
     try:
@@ -759,6 +810,13 @@ def main() -> None:
         ])
     except ApiTelegramException as e:
         log.warning("не удалось задать команды: %s", e)
+
+    # HTTP-API для мини-приложения: приём событий и админка. Отдельным
+    # потоком в том же процессе — база у них общая, и разносить их по
+    # процессам значило бы делить одну SQLite между контейнерами.
+    web.serve_in_background()
+    if not web.admin_ids():
+        log.warning("ADMIN_IDS не задан — админка не откроется никому")
 
     log.info("Бот @%s запущен", BOT_USERNAME)
     if WEBAPP_URL:

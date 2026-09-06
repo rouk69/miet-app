@@ -3,6 +3,7 @@
 
 import { icon } from './icons.js';
 import { BackButton, haptic, hapticSelect, inTelegram } from './tg.js';
+import { track } from './api.js';
 
 const routes = new Map();
 const stack = [];
@@ -99,6 +100,9 @@ export function go(name, params = {}) {
   const cur = stack[stack.length - 1];
   if (cur) cur.scrollTop = window.scrollY;
   stack.push({ name, params, scrollTop: 0 });
+  // В учёт идёт только имя экрана. Параметры (какая новость, какой кружок)
+  // не пишем: это уже слежка за человеком, а не за тем, чем пользуются.
+  track('screen', name);
   // Своя запись в истории — чтобы аппаратная «Назад» на Android и кнопка
   // браузера вели по стеку экранов, а не закрывали приложение.
   try { history.pushState({ depth: stack.length }, ''); } catch { /* не критично */ }
@@ -126,6 +130,7 @@ export function switchTab(name) {
     window.scrollTo({ top: 0, behavior: 'smooth' });
     return;
   }
+  track('tab', name);
   stack.length = 0;
   stack.push({ name, params: {}, scrollTop: 0 });
   paint();

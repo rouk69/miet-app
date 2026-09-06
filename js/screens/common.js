@@ -4,6 +4,7 @@ import { icon } from '../icons.js';
 import { esc, el, sheet, listRow, listCard, emptyState } from '../ui.js';
 import { data, settings, save } from '../store.js';
 import { haptic } from '../tg.js';
+import { syncGroup } from '../api.js';
 
 /** Экран-контейнер с заголовком и подзаголовком. */
 export function screen({ title, subtitle, actions = '', body, small = false }) {
@@ -68,6 +69,9 @@ export function pickGroup(onPick) {
         if (!row) return;
         haptic('medium');
         save({ group: row.dataset.id });
+        // Единственное место, где группу выбирают руками, — отсюда и
+        // сообщаем её боту, чтобы в личке было то же расписание.
+        syncGroup(row.dataset.id);
         close();
         onPick?.(row.dataset.id);
       });
