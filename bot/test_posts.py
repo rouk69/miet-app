@@ -267,6 +267,42 @@ check("сводка по ленте есть", "feed" in st and st["feed"]["post
 check("отклонённые не считаются опубликованными",
       st["feed"]["pending"] == 0, st["feed"])
 
+print("\n15. У владельца нет слепых зон")
+# Владелец сидит без группы вовсе — и всё равно должен видеть адресные
+# объявления: это его приложение, и лента в нём не должна ничего прятать.
+s, r = api.handle("POST", "/api/posts", {},
+                  {"text": "Только для ЭН-24", "groups": ["ЭН-24"]}, WRITER)
+only_en = r["post"]["id"]
+
+s, f = api.handle("GET", "/api/feed", {}, {}, ADMIN)
+check("владелец видит чужое адресное объявление",
+      any(p["id"] == only_en for p in f["posts"]), f["total"])
+s, p_one = api.handle("GET", f"/api/posts/{only_en}", {}, {}, ADMIN)
+check("и открывает его по ссылке", s == 200, s)
+check("видно, кому оно адресовано", p_one["groups"] == ["ЭН-24"], p_one["groups"])
+s, _ = api.handle("POST", f"/api/posts/{only_en}/react", {}, {"emoji": "👍"}, ADMIN)
+check("и может поставить реакцию", s == 200, s)
+
+s, f = api.handle("GET", "/api/feed", {}, {}, PIN)
+check("посторонней группе оно по-прежнему не видно",
+      all(p["id"] != only_en for p in f["posts"]), f["total"])
+
+# Права на анонимность это не расширяет: одно дело видеть все объявления,
+# другое — знать, кто написал скрытно. Автора выдаёт только модерация.
+api.handle("POST", "/api/admin/users/10/role", {},
+           {"role": "moderator", "perms": ["posts_write"], "sections": []}, ADMIN)
+s, r = api.handle("POST", "/api/posts", {},
+                  {"text": "Скрытно и адресно", "anon": True,
+                   "groups": ["ЭН-24"]}, WRITER)
+hidden = r["post"]["id"]
+api.handle("POST", f"/api/admin/posts/{hidden}/approve", {}, {}, ADMIN)
+s, f = api.handle("GET", "/api/feed", {}, {}, ADMIN)
+shown = [p for p in f["posts"] if p["id"] == hidden]
+check("владелец видит и скрытный адресный пост", len(shown) == 1, f["total"])
+check("но подпись остаётся «Анонимно»",
+      shown[0]["author_label"] == "Анонимно", shown[0]["author_label"])
+
+
 print("\n" + "=" * 58)
 print(f"пройдено {ok}, провалено {fail}")
 print("=" * 58)

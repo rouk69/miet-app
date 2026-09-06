@@ -176,13 +176,17 @@ def _feed(path: str, method: str, query: dict, body: dict, uid: int, me: dict):
     group = storage.get_user(uid).get("group") or ""
     # Автор анонимного поста виден только тем, кто разбирает жалобы.
     deep = analytics.can(me, "posts_moderate")
+    # Полный админ видит ленту целиком, включая адресные объявления чужим
+    # группам: это его приложение, и слепых зон в нём быть не должно.
+    # Права на чужую анонимность это по-прежнему не даёт — она отдельно.
+    everything = me["is_admin"]
 
     if path == "/api/feed" and method == "GET":
         return 200, posts.feed(
             uid, group,
             limit=int(query.get("limit", ["20"])[0] or 20),
             offset=int(query.get("offset", ["0"])[0] or 0),
-            can_see_authors=deep)
+            can_see_authors=deep, see_all=everything)
 
     if path == "/api/posts" and method == "POST":
         if not analytics.can(me, "posts_write"):
@@ -216,7 +220,7 @@ def _feed(path: str, method: str, query: dict, body: dict, uid: int, me: dict):
 
     # Видимость проверяется до всего остального: закрытый пост нельзя ни
     # прочитать, ни отметить реакцией, ни проголосовать в нём.
-    post = posts.one(post_id, uid, group, can_see_authors=deep)
+    post = posts.one(post_id, uid, group, can_see_authors=deep, see_all=everything)
     if not post:
         return 404, {"error": "Пост не найден"}
 
@@ -233,7 +237,7 @@ def _feed(path: str, method: str, query: dict, body: dict, uid: int, me: dict):
         except posts.Refused as e:
             return 400, {"error": str(e)}
         return 200, {"ok": True, "my_reaction": now,
-                     "post": posts.one(post_id, uid, group, can_see_authors=deep)}
+                     "post": posts.one(post_id, uid, group, can_see_authors=deep, see_all=everything)}
 
     if tail == "/vote" and method == "POST":
         try:
@@ -241,7 +245,7 @@ def _feed(path: str, method: str, query: dict, body: dict, uid: int, me: dict):
         except (posts.Refused, ValueError, TypeError) as e:
             return 400, {"error": str(e) or "Неверный вариант"}
         return 200, {"ok": True,
-                     "post": posts.one(post_id, uid, group, can_see_authors=deep)}
+                     "post": posts.one(post_id, uid, group, can_see_authors=deep, see_all=everything)}
 
     if tail == "/pin" and method == "POST":
         if not analytics.can(me, "posts_pin"):
