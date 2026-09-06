@@ -17,6 +17,7 @@ os.environ.setdefault("BOT_TOKEN", "0:TEST")   # main.py без токена н�
 
 from . import keyboards as kbs      # noqa: E402
 from . import render                # noqa: E402
+from . import rich                  # noqa: E402
 from . import schedule_api as api   # noqa: E402
 
 ok = fail = 0
@@ -61,14 +62,28 @@ check("сдвиг работает",
       api.week_of_cycle(dt.date(2026, 9, 4), "Осенний семестр 2026/2027", 2) == 2)
 
 print("\n3. Живой API miet.ru")
-groups = api.fetch_groups()
-check(f"список групп получен ({len(groups)})", len(groups) > 300)
-check("ПИН-31 есть в списке", "ПИН-31" in groups)
-
-sched = api.fetch_schedule("ПИН-31")
-check(f"расписание ПИН-31 ({len(sched['lessons'])} занятий)", len(sched["lessons"]) > 0)
-check(f"семестр: {sched['semestr']}", bool(sched["semestr"]))
-check("8 пар в сетке времени", len(sched["times"]) == 8)
+# Сайт МИЭТ временами лежит. Раньше это роняло весь прогон, хотя проверять
+# разбор, рендер и клавиатуры можно и без сети — берём последнее из кеша
+# и идём дальше, честно отметив, что живого запроса не было.
+offline = False
+try:
+    groups = api.fetch_groups()
+    check(f"список групп получен ({len(groups)})", len(groups) > 300)
+    check("ПИН-31 есть в списке", "ПИН-31" in groups)
+    sched = api.fetch_schedule("ПИН-31")
+    check(f"расписание ПИН-31 ({len(sched['lessons'])} занятий)",
+          len(sched["lessons"]) > 0)
+    check(f"семестр: {sched['semestr']}", bool(sched["semestr"]))
+    check("8 пар в сетке времени", len(sched["times"]) == 8)
+except Exception as e:
+    offline = True
+    print(f"  ⚠ miet.ru недоступен ({type(e).__name__}) — живые проверки пропущены")
+    groups = api._cache_get("groups", 10 ** 9) or []
+    sched = api._cache_get("sched_ПИН-31", 10 ** 9)
+    if not groups or not sched:
+        sys.exit("  и кеша нет — прогнать offline-часть не на чем")
+    print(f"  … работаем на кеше: групп {len(groups)}, "
+          f"занятий {len(sched['lessons'])}")
 
 print("\n4. Поиск группы")
 check("точное совпадение", api.resolve_group("ПИН-31", groups) == ["ПИН-31"])
@@ -90,6 +105,46 @@ check(f"только разрешённые теги: {sorted(tags)}", tags <= a
 
 week_card = render.week_card("ПИН-31", sched, cur, cur)
 check("свод на неделю уложился в лимит", len(week_card) < 4096, f"длина {len(week_card)}")
+
+print("\n5a. Подгруппы в одном слоте")
+# Язык и физкультура делятся на подгруппы: две записи с одним временем.
+# Раньше они считались двумя парами и рисовались двумя строками подряд
+# с одинаковым временем — этого быть не должно.
+SPLIT = {
+    "semestr": "Осенний семестр 2026/2027",
+    "times": [{"code": i, "label": f"{i} пара", "from": "09:00", "to": "10:20"}
+              for i in range(1, 9)],
+    "lessons": [
+        {"day": 1, "week": 0, "pair": 1, "from": "09:00", "to": "10:20",
+         "subject": "Матанализ", "kind": "Лекция", "kindCls": "lek",
+         "emoji": "📘", "flags": [], "teacher": "Иванов И.И.", "room": "1201"},
+        {"day": 1, "week": 0, "pair": 2, "from": "10:30", "to": "11:50",
+         "subject": "Иностранный язык", "kind": "Практика", "kindCls": "pr",
+         "emoji": "✏️", "flags": [], "teacher": "Рачеева Е.В.", "room": "4305"},
+        {"day": 1, "week": 0, "pair": 2, "from": "10:30", "to": "11:50",
+         "subject": "Иностранный язык", "kind": "Практика", "kindCls": "pr",
+         "emoji": "✏️", "flags": [], "teacher": "Раух О.Б.", "room": "4306"},
+    ],
+}
+slots = api.slots_of(SPLIT, 0, 1)
+check("три записи свелись в две пары", len(slots) == 2, f"слотов {len(slots)}")
+check("подгруппы собраны в один слот", slots[1]["split"] is True)
+check("у слота общее название", slots[1]["subject"] == "Иностранный язык")
+check("день считается по слотам", api.day_counts(SPLIT, 0)[1] == 2,
+      f"насчитали {api.day_counts(SPLIT, 0)[1]}")
+
+split_card = render.schedule_card("П-13", SPLIT, 0, 1, 0, custom=False)
+check("в подписи «2 пары», а не три", "2 пары" in split_card,
+      re.search(r"\d+ пар\w*", split_card).group(0) if re.search(r"\d+ пар\w*", split_card) else "—")
+check("обе аудитории подгрупп на месте",
+      "4305" in split_card and "4306" in split_card)
+check("название не задвоено", split_card.count("Иностранный язык") == 1,
+      f"встретилось {split_card.count('Иностранный язык')} раз")
+
+split_rich = rich.day_html("П-13", SPLIT, 0, 1, 0, custom=False, buttons=False)
+check("в таблице две строки", split_rich.count("<tr>") == 2,
+      f"строк {split_rich.count('<tr>')}")
+check("в таблице есть время окончания", "11:50" in split_rich)
 
 print("\n6. Клавиатуры и callback_data")
 kb = kbs.day_keyboard("ПИН-31", sched, cur, 3, cur, "https://example.com")

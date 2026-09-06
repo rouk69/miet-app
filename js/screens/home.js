@@ -3,7 +3,7 @@
 import { icon } from '../icons.js';
 import { esc, listCard, listRow, emptyState } from '../ui.js';
 import { data, settings } from '../store.js';
-import { fetchSchedule, weekOfCycle, nowState, lessonsOf, DAY_NAMES } from '../schedule.js';
+import { fetchSchedule, weekOfCycle, nowState, slotsOf, DAY_NAMES } from '../schedule.js';
 import { go, switchTab } from '../router.js';
 import { tgUser, openLink } from '../tg.js';
 import { screen, pickGroup, newsRow, humanDate, iconBtn } from './common.js';
@@ -123,7 +123,7 @@ async function renderNow(slot, now) {
 
   const week = weekOfCycle(now, sched.semestr, settings.weekShift);
   const { current, next, progress, day } = nowState(sched, week, now);
-  const today = day <= 6 ? lessonsOf(sched, week, day) : [];
+  const today = day <= 6 ? slotsOf(sched, week, day) : [];
 
   const card = current
     ? `<div class="now-card">

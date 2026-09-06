@@ -69,19 +69,34 @@ def lesson_block(l: dict, live: bool = False, custom: bool = True) -> str:
     if live:
         head += f"  {em.ico('bell', custom)} <i>идёт сейчас</i>"
 
-    subject = f"{em.kind_ico(l.get('kindCls', 'oth'), custom)} <b>{esc(l['subject'])}</b>"
-    if l.get("kind"):
-        subject += f" · {esc(l['kind']).lower()}"
-    for f in l.get("flags", []):
-        subject += f" <code>{esc(f)}</code>"
+    entries = l.get("entries") or [l]
 
-    tail = []
-    if l.get("teacher"):
-        tail.append(f"{em.ico('teacher', custom)} <i>{esc(l['teacher'])}</i>")
-    if l.get("room"):
-        tail.append(f"{em.ico('room', custom)} <i>{room_label(l['room'])}</i>")
+    def where(e: dict) -> str:
+        tail = []
+        if e.get("teacher"):
+            tail.append(f"{em.ico('teacher', custom)} <i>{esc(e['teacher'])}</i>")
+        if e.get("room"):
+            tail.append(f"{em.ico('room', custom)} <i>{room_label(e['room'])}</i>")
+        return " · ".join(tail)
 
-    lines = [head, subject] + ([" · ".join(tail)] if tail else [])
+    if l.get("same_subject", True):
+        subject = (f"{em.kind_ico(l.get('kindCls', 'oth'), custom)} "
+                   f"<b>{esc(l['subject'])}</b>")
+        if l.get("kind"):
+            subject += f" · {esc(l['kind']).lower()}"
+        for f in l.get("flags", []):
+            subject += f" <code>{esc(f)}</code>"
+        # Подгруппы одного занятия идут строками под общим названием.
+        lines = [head, subject] + [w for w in map(where, entries) if w]
+    else:
+        lines = [head]
+        for e in entries:
+            lines.append(f"{em.kind_ico(e.get('kindCls', 'oth'), custom)} "
+                         f"<b>{esc(e['subject'])}</b>")
+            w = where(e)
+            if w:
+                lines.append(w)
+
     return "<blockquote>" + "\n".join(lines) + "</blockquote>"
 
 
@@ -103,8 +118,8 @@ def schedule_card(group: str, sched: dict, week: int, day: int, cur_week: int,
     date = api.date_for(week, day, cur_week, now.date())
     is_today = date == now.date()
 
-    lessons = api.lessons_of(sched, week, day)
-    live = _now_pair(lessons, now) if is_today else None
+    slots = api.slots_of(sched, week, day)
+    live = _now_pair(api.lessons_of(sched, week, day), now) if is_today else None
 
     head = f"{em.ico('calendar', custom)} <b>{api.DAY_NAMES[day]} · {api.human_date(date)}</b>"
     if is_today:
@@ -116,19 +131,22 @@ def schedule_card(group: str, sched: dict, week: int, day: int, cur_week: int,
         sub_bits.append(sem)
     sub = "<i>" + " · ".join(sub_bits) + "</i>"
 
-    if not lessons:
+    if not slots:
         body = "\n<blockquote>☕ <b>Пар нет</b>\nМожно выдохнуть</blockquote>"
     else:
         body = "\n" + "\n".join(
-            lesson_block(l, live is not None and l is live, custom)
-            for l in lessons)
+            lesson_block(sl,
+                         live is not None and any(e is live for e in sl["entries"]),
+                         custom)
+            for sl in slots)
 
     footer = ""
-    if lessons:
-        n = len(lessons)
+    if slots:
+        # Пары считаем по слотам звонков: подгруппы — это одно занятие.
+        n = len(slots)
         footer = (f"\n\n{em.ico('time', custom)} <i>{n} "
                   f"{plural(n, 'пара', 'пары', 'пар')} · "
-                  f"с {lessons[0]['from']} до {lessons[-1]['to']}</i>")
+                  f"с {slots[0]['from']} до {slots[-1]['to']}</i>")
 
     return clamp(f"{head}\n{sub}\n{body}{footer}")
 
@@ -149,17 +167,22 @@ def week_card(group: str, sched: dict, week: int, cur_week: int,
     lines = [f"{em.ico('calendar', custom)} <b>{week + 1}-я неделя</b> · "
              f"<i>{esc(group)}</i>", ""]
     for d in range(1, 7):
-        lessons = api.lessons_of(sched, week, d)
+        slots = api.slots_of(sched, week, d)
         date = api.date_for(week, d, cur_week)
         head = f"<b>{api.DAY_NAMES[d]}</b>, {date.strftime('%d.%m')}"
-        if not lessons:
+        if not slots:
             lines.append(f"<blockquote>{head} — <i>пар нет</i></blockquote>")
             continue
-        rows = "\n".join(
-            f"{em.pair_num(l.get('pair'), custom)} <b>{l['from']}</b> "
-            f"{esc(l['subject'])}"
-            + (f" · <i>{room_label(l['room'])}</i>" if l.get("room") else "")
-            for l in lessons)
+
+        def line(sl, _c=custom):
+            name = (sl["subject"] if sl["same_subject"]
+                    else " / ".join(e["subject"] for e in sl["entries"]))
+            rooms = [room_label(e["room"]) for e in sl["entries"] if e.get("room")]
+            out = (f"{em.pair_num(sl.get('pair'), _c)} "
+                   f"<b>{sl['from']}</b>–{sl['to']} {esc(name)}")
+            return out + (f" · <i>{' / '.join(rooms)}</i>" if rooms else "")
+
+        rows = "\n".join(line(sl) for sl in slots)
         lines.append(
             f"<blockquote expandable>{head} — {counts[d]} "
             f"{plural(counts[d], 'пара', 'пары', 'пар')}\n{rows}</blockquote>")

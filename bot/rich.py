@@ -54,27 +54,55 @@ def row(*buttons: str, align: str = "") -> str:
 
 # ─────────────────────────── таблица дня ───────────────────────────
 
-def lesson_rows(lessons: list[dict], live: dict | None, custom: bool) -> str:
+def _entry_meta(e: dict) -> str:
+    """Преподаватель и аудитория одной записи."""
+    meta = []
+    if e.get("teacher"):
+        meta.append(esc(e["teacher"]))
+    if e.get("room"):
+        meta.append(render.room_label(e["room"]))
+    return " · ".join(meta)
+
+
+def lesson_rows(slots: list[dict], live: dict | None, custom: bool) -> str:
+    """
+    Строки таблицы: одна на слот звонков.
+
+    Занятие подгруппы не заводит новую строку — язык и физкультура идут
+    у нескольких преподавателей в одно время, и отдельными строками они
+    читались бы как лишние пары.
+    """
     out = []
-    for l in lessons:
-        num = em.pair_num(l.get("pair"), custom)
-        left = f'{num} {esc(l["from"])}'
+    for s in slots:
+        num = em.pair_num(s.get("pair"), custom)
+        # Время целиком: по одному началу непонятно, когда пара кончится,
+        # особенно во вставленной в чужой чат карточке.
+        left = f'{num} {esc(s["from"])}<br><i>{esc(s["to"])}</i>'
 
-        subject = (f'{em.kind_ico(l.get("kindCls", "oth"), custom)} '
-                   f'<b>{esc(l["subject"])}</b>')
-        if l.get("kind"):
-            subject += f' · {esc(l["kind"]).lower()}'
-        for f in l.get("flags", []):
-            subject += f" <code>{esc(f)}</code>"
-        if l is live:
-            subject += f" {em.ico('bell', custom)} <mark>идёт</mark>"
+        if s.get("same_subject", True):
+            subject = (f'{em.kind_ico(s.get("kindCls", "oth"), custom)} '
+                       f'<b>{esc(s["subject"])}</b>')
+            if s.get("kind"):
+                subject += f' · {esc(s["kind"]).lower()}'
+            for f in s.get("flags", []):
+                subject += f" <code>{esc(f)}</code>"
+            if live is not None and any(e is live for e in s["entries"]):
+                subject += f" {em.ico('bell', custom)} <mark>идёт</mark>"
 
-        meta = []
-        if l.get("teacher"):
-            meta.append(esc(l["teacher"]))
-        if l.get("room"):
-            meta.append(render.room_label(l["room"]))
-        right = subject + (f'<br><i>{" · ".join(meta)}</i>' if meta else "")
+            lines = [_entry_meta(e) for e in s["entries"]]
+            lines = [x for x in lines if x]
+            right = subject + ("<br><i>" + "<br>".join(lines) + "</i>"
+                               if lines else "")
+        else:
+            # Разные предметы в одном слоте — редкость, но тогда общего
+            # заголовка нет и каждый показывается со своим названием.
+            parts = []
+            for e in s["entries"]:
+                head = (f'{em.kind_ico(e.get("kindCls", "oth"), custom)} '
+                        f'<b>{esc(e["subject"])}</b>')
+                meta = _entry_meta(e)
+                parts.append(head + (f'<br><i>{meta}</i>' if meta else ""))
+            right = "<br>".join(parts)
 
         out.append(
             f'<tr><td align="center" valign="middle">{left}</td>'
@@ -130,8 +158,9 @@ def day_html(group: str, sched: dict, week: int, day: int, cur_week: int,
     now = now or dt.datetime.now()
     date = api.date_for(week, day, cur_week, now.date())
     is_today = date == now.date()
-    lessons = api.lessons_of(sched, week, day)
-    live = render._now_pair(lessons, now) if is_today else None
+    slots = api.slots_of(sched, week, day)
+    live = render._now_pair(api.lessons_of(sched, week, day), now) \
+        if is_today else None
 
     head = (f'<h3>{em.ico("calendar", custom)} {api.DAY_NAMES[day]} · '
             f'{api.human_date(date)}{" · сегодня" if is_today else ""}</h3>')
@@ -142,13 +171,15 @@ def day_html(group: str, sched: dict, week: int, day: int, cur_week: int,
         sub_bits.append(sem)
     sub = f'<p><i>{" · ".join(sub_bits)}</i></p>'
 
-    if lessons:
+    if slots:
         body = (f'<table bordered compact>'
-                f'{lesson_rows(lessons, live, custom)}</table>')
-        n = len(lessons)
+                f'{lesson_rows(slots, live, custom)}</table>')
+        # Считаем слоты, а не записи: подгруппы одного занятия — это одна
+        # пара, иначе у П-13 в понедельник выходит «7 пар» вместо шести.
+        n = len(slots)
         body += (f'<p><i>{em.ico("time", custom)} {n} '
                  f'{render.plural(n, "пара", "пары", "пар")} · '
-                 f'с {lessons[0]["from"]} до {lessons[-1]["to"]}</i></p>')
+                 f'с {slots[0]["from"]} до {slots[-1]["to"]}</i></p>')
     else:
         body = "<blockquote>☕ Пар нет — можно выдохнуть</blockquote>"
 
@@ -167,17 +198,23 @@ def week_html(group: str, sched: dict, week: int, cur_week: int,
 
     rows_html = []
     for d in range(1, 7):
-        lessons = api.lessons_of(sched, week, d)
+        slots = api.slots_of(sched, week, d)
         date = api.date_for(week, d, cur_week)
         left = f'<b>{api.DAY_SHORT[d]}</b><br>{date.strftime("%d.%m")}'
-        if not lessons:
+        if not slots:
             right = "<i>пар нет</i>"
         else:
-            right = "<br>".join(
-                f'{esc(l["from"])} · {esc(l["subject"])}'
-                + (f' · <i>{render.room_label(l["room"])}</i>'
-                   if l.get("room") else "")
-                for l in lessons)
+            lines = []
+            for s in slots:
+                name = (s["subject"] if s["same_subject"]
+                        else " / ".join(e["subject"] for e in s["entries"]))
+                line = f'{esc(s["from"])}–{esc(s["to"])} · {esc(name)}'
+                rooms = [render.room_label(e["room"])
+                         for e in s["entries"] if e.get("room")]
+                if rooms:
+                    line += f' · <i>{" / ".join(rooms)}</i>'
+                lines.append(line)
+            right = "<br>".join(lines)
         rows_html.append(
             f'<tr><td align="center" valign="middle">{left}</td>'
             f'<td valign="middle">{right}</td></tr>')
