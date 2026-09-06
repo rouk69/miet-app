@@ -303,6 +303,102 @@ check("но подпись остаётся «Анонимно»",
       shown[0]["author_label"] == "Анонимно", shown[0]["author_label"])
 
 
+print("\n16. Комментарии")
+from . import notify                                               # noqa: E402
+from . import posts as posts_mod                                   # noqa: E402
+
+# Паузу между комментариями на время проверки снимаем: она про живых
+# людей, которые жмут кнопку дважды, а не про скорость тестов.
+posts_mod.COMMENT_PAUSE = 0
+
+s, r = api.handle("POST", "/api/posts", {}, {"text": "Пост под обсуждение"}, WRITER)
+talk_id = r["post"]["id"]
+
+s, c = api.handle("POST", f"/api/posts/{talk_id}/comments", {},
+                  {"text": "А во сколько начало?"}, PIN)
+check("комментарий добавлен", s == 200 and c["comment"]["text"] == "А во сколько начало?",
+      (s, c))
+check("подписан должностью", c["comment"]["author_label"] == "Студент",
+      c["comment"]["author_label"])
+check("и именем из Telegram", c["comment"]["author_name"] == "Студент ПИН",
+      c["comment"]["author_name"])
+check("счётчик в посте вырос", c["post"]["comments"] == 1, c["post"]["comments"])
+
+api.handle("POST", f"/api/posts/{talk_id}/comments", {}, {"text": "В десять"}, EN)
+s, lst = api.handle("GET", f"/api/posts/{talk_id}/comments", {}, {}, PIN)
+check("список отдался по порядку",
+      [x["text"] for x in lst["comments"]] == ["А во сколько начало?", "В десять"],
+      lst["comments"])
+
+s, _ = api.handle("POST", f"/api/posts/{talk_id}/comments", {}, {"text": "   "}, PIN)
+check("пустой комментарий отвергнут", s == 400, s)
+
+api.handle("POST", f"/api/posts/{talk_id}/comments", {}, {"text": "раз"}, PIN)
+posts_mod.COMMENT_PAUSE = 5
+s, _ = api.handle("POST", f"/api/posts/{talk_id}/comments", {}, {"text": "два"}, PIN)
+check("очередь одинаковых сообщений придержана", s == 400, s)
+posts_mod.COMMENT_PAUSE = 0
+
+s, f = api.handle("GET", "/api/feed", {}, {}, PIN)
+in_feed = [p for p in f["posts"] if p["id"] == talk_id][0]
+check("счётчик виден в ленте", in_feed["comments"] == 3, in_feed["comments"])
+
+print("\n17. Комментарии закрытого поста")
+s, r = api.handle("POST", "/api/posts", {},
+                  {"text": "Только ПИН-31", "groups": ["ПИН-31"]}, WRITER)
+private_id = r["post"]["id"]
+s, _ = api.handle("POST", f"/api/posts/{private_id}/comments", {},
+                  {"text": "Я не из этой группы"}, EN)
+check("чужой не прокомментирует", s == 404, s)
+s, _ = api.handle("GET", f"/api/posts/{private_id}/comments", {}, {}, EN)
+check("и комментариев не увидит", s == 404, s)
+s, _ = api.handle("GET", f"/api/posts/{private_id}/comments", {}, {}, ADMIN)
+check("владельцу видно и здесь", s == 200, s)
+
+print("\n18. Уборка комментариев")
+s, c = api.handle("POST", f"/api/posts/{talk_id}/comments", {},
+                  {"text": "Удалю сам"}, EN)
+mine_id = c["comment"]["id"]
+s, _ = api.handle("POST", f"/api/comments/{mine_id}/delete", {}, {}, PIN)
+check("чужой комментарий не удалить", s == 403, s)
+s, _ = api.handle("POST", f"/api/comments/{mine_id}/delete", {}, {}, EN)
+check("свой удаляется", s == 200, s)
+check("и правда исчез", posts_mod.comment_one(mine_id) is None)
+
+s, c = api.handle("POST", f"/api/posts/{talk_id}/comments", {},
+                  {"text": "Уберёт модерация"}, EN)
+bad_id = c["comment"]["id"]
+api.handle("POST", "/api/admin/users/20/role", {},
+           {"role": "moderator", "perms": ["comments_delete"], "sections": []}, ADMIN)
+s, _ = api.handle("POST", f"/api/comments/{bad_id}/delete", {}, {}, PIN)
+check("с правом удаляются чужие", s == 200, s)
+api.handle("POST", "/api/admin/users/20/role", {},
+           {"role": "none", "perms": [], "sections": []}, ADMIN)
+s, _ = api.handle("POST", "/api/comments/999999/delete", {}, {}, ADMIN)
+check("несуществующий — 404", s == 404, s)
+
+print("\n19. Автору поста приходит письмо")
+letters = []
+notify.bind(lambda uid, text: letters.append((uid, text)))
+api.handle("POST", f"/api/posts/{talk_id}/comments", {}, {"text": "Спасибо!"}, EN)
+check("автор получил уведомление", letters and letters[0][0] == 10, letters[:1])
+check("в письме видно, кто и что написал",
+      letters and "Спасибо!" in letters[0][1] and "Студент ЭН" in letters[0][1],
+      letters[:1])
+letters.clear()
+api.handle("POST", f"/api/posts/{talk_id}/comments", {}, {"text": "Сам себе"}, WRITER)
+check("сам себе бот не пишет", not letters, letters)
+letters.clear()
+notify.bind(None)
+
+s, r = api.handle("POST", "/api/posts", {}, {"text": "Пост на удаление"}, WRITER)
+gone_id = r["post"]["id"]
+api.handle("POST", f"/api/posts/{gone_id}/comments", {}, {"text": "останусь?"}, PIN)
+api.handle("POST", f"/api/posts/{gone_id}/delete", {}, {}, WRITER)
+check("вместе с постом уходят и комментарии",
+      posts_mod.comments_of(gone_id) == [], posts_mod.comments_of(gone_id))
+
+
 print("\n" + "=" * 58)
 print(f"пройдено {ok}, провалено {fail}")
 print("=" * 58)

@@ -147,6 +147,7 @@ async function statsPane() {
   const feedTiles = [
     [f.posts ?? 0, 'Постов в ленте'],
     [f.news ?? 0, 'Новостей с miet.ru'],
+    [f.comments ?? 0, 'Комментариев'],
     [f.reads ?? 0, 'Прочтений'],
     [f.reactions ?? 0, 'Реакций'],
     [f.votes ?? 0, 'Голосов в опросах'],

@@ -7,7 +7,7 @@
 // приложение остаётся рабочим, как и всё остальное здесь.
 
 import { icon } from '../icons.js';
-import { esc, emptyState, toast, sheet, lightbox } from '../ui.js';
+import { esc, el, emptyState, toast, sheet, lightbox } from '../ui.js';
 import { get, post, account, canTalk } from '../api.js';
 import { API_BASE } from '../config.js';
 import { data, settings } from '../store.js';
@@ -139,6 +139,9 @@ export function postCard(p, reactions, expanded = false) {
       : ''}
           <span>·</span>
           <span>${esc(ago(p.published_at))}</span>
+          <button class="post-talk" data-talk="${p.id}">
+            ${icon('messageCircle', 14)} ${p.comments}
+          </button>
           <span class="post-reads">${icon('eye', 14)} ${p.reads}</span>
           ${p.kind === 'news' && p.url
       ? `<button class="post-link" data-open="${esc(p.url)}">на miet.ru</button>` : ''}
@@ -284,6 +287,18 @@ export default async function feedScreen() {
       return;
     }
 
+    const talk = e.target.closest('[data-talk]');
+    if (talk) {
+      return comments(id, updated => {
+        // Счётчик под постом должен сойтись с тем, что человек только что
+        // видел в шторке, — иначе выглядит, будто комментарий пропал.
+        const p = { ...known.get(id), comments: updated };
+        known.set(id, p);
+        node.querySelector(`[data-post="${id}"]`)?.replaceWith(
+          el(postCard(p, feed.reactions, opened.has(id))));
+      });
+    }
+
     const menu = e.target.closest('[data-menu]');
     if (menu) return cardMenu(known.get(id));
   });
@@ -339,6 +354,97 @@ async function cardMenu(p) {
           hapticNotify('success');
           close();
           refresh();
+        } catch (err) { toast(err.message); }
+      });
+    },
+  });
+}
+
+// ─────────────── комментарии ───────────────
+
+/**
+ * Шторка обсуждения. Открывается поверх ленты, а не отдельным экраном:
+ * комментарий обычно читают, не теряя из виду сам пост.
+ *
+ * onChange получает новое число комментариев — карточка под шторкой
+ * должна показывать то же, что человек только что видел.
+ */
+function comments(postId, onChange) {
+  let list = [];
+  let canClean = false;
+
+  const line = c => `
+    <div class="comment" data-comment="${c.id}">
+      <div class="comment-head">
+        <span class="comment-author">${esc(c.author_name)}</span>
+        <span class="comment-role">${esc(c.author_label)}</span>
+        <span class="comment-time">${esc(ago(c.created_at))}</span>
+        ${(c.author_id === account.id || canClean)
+      ? `<button class="comment-drop" data-drop="${c.id}">${icon('trash', 15)}</button>`
+      : ''}
+      </div>
+      <div class="comment-text">${esc(c.text)}</div>
+    </div>`;
+
+  sheet({
+    title: 'Комментарии',
+    height: '76vh',
+    body: `
+      <div id="clist"><div class="skeleton" style="height:80px"></div></div>
+      <div class="comment-form">
+        <input class="field-input" id="ctext" placeholder="Написать комментарий"
+               maxlength="1000" autocomplete="off">
+        <button class="btn-primary" id="csend">Отправить</button>
+      </div>`,
+    onMount(root) {
+      const box = root.querySelector('#clist');
+      const input = root.querySelector('#ctext');
+      const send = root.querySelector('#csend');
+
+      const draw = () => {
+        box.innerHTML = list.length
+          ? `<div class="stack">${list.map(line).join('')}</div>`
+          : emptyState('Пока никто не написал. Будь первым', 'messageCircle');
+        onChange?.(list.length);
+      };
+
+      get(`/api/posts/${postId}/comments`)
+        .then(r => { list = r.comments; canClean = r.can_moderate; draw(); })
+        .catch(err => { box.innerHTML = errorCard(err); });
+
+      send.addEventListener('click', async () => {
+        const text = input.value.trim();
+        if (!text) return;
+        send.disabled = true;
+        try {
+          const r = await post(`/api/posts/${postId}/comments`, { text });
+          list.push(r.comment);
+          input.value = '';
+          draw();
+          hapticNotify('success');
+          // Прокручиваем к своему: длинное обсуждение иначе оставляет
+          // человека наверху, и кажется, что ничего не отправилось.
+          box.lastElementChild?.lastElementChild?.scrollIntoView(
+            { behavior: 'smooth', block: 'nearest' });
+        } catch (err) {
+          toast(err.message);
+        } finally {
+          send.disabled = false;
+        }
+      });
+
+      input.addEventListener('keydown', e => {
+        if (e.key === 'Enter') send.click();
+      });
+
+      box.addEventListener('click', async e => {
+        const drop = e.target.closest('[data-drop]');
+        if (!drop) return;
+        if (!await confirmDialog('Удалить комментарий?')) return;
+        try {
+          await post(`/api/comments/${drop.dataset.drop}/delete`, {});
+          list = list.filter(c => String(c.id) !== drop.dataset.drop);
+          draw();
         } catch (err) { toast(err.message); }
       });
     },

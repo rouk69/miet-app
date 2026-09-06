@@ -28,6 +28,7 @@ from . import analytics
 from . import api as web          # HTTP-API мини-приложения; schedule_api ниже
 from . import keyboards as kbs
 from . import news_feed
+from . import notify
 from . import posts as feed
 from . import publish
 from . import render
@@ -964,6 +965,11 @@ def main() -> None:
     # HTTP-API для мини-приложения: приём событий и админка. Отдельным
     # потоком в том же процессе — база у них общая, и разносить их по
     # процессам значило бы делить одну SQLite между контейнерами.
+    # Серверная часть не умеет писать в Telegram сама и не должна: импорт
+    # main из api замкнул бы круг. Отдаём ей отправку сообщений здесь.
+    notify.bind(lambda uid, text: bot.send_message(
+        uid, text, disable_web_page_preview=True))
+
     web.serve_in_background()
     if not web.admin_ids():
         log.warning("ADMIN_IDS не задан — админка не откроется никому")

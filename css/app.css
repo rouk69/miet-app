@@ -1069,3 +1069,79 @@ textarea.field-input {
   font-weight: 700;
   color: var(--text-secondary);
 }
+
+/* ---------- Комментарии ---------- */
+
+.post-talk,
+.post-reads {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-variant-numeric: tabular-nums;
+}
+
+.post-talk { color: var(--text-secondary); }
+.post-reads { margin-left: auto; }
+
+.comment {
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+}
+
+.comment-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 5px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.comment-author {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+/* Роль автора на момент комментария: подпись фиксируется при отправке и
+   потом не меняется, даже если человека повысили или разжаловали. */
+.comment-role {
+  padding: 2px 7px;
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.comment-time { margin-left: auto; }
+
+.comment-drop {
+  color: var(--text-tertiary);
+  display: flex;
+}
+
+.comment-text {
+  font-size: 15px;
+  line-height: 1.45;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+/* Поле ввода прилипает к низу шторки: в длинном обсуждении иначе надо
+   пролистывать всё вниз, чтобы ответить. */
+.comment-form {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  gap: 8px;
+  padding-top: 12px;
+  margin-top: 12px;
+  background: var(--surface);
+}
+
+.comment-form .btn-primary {
+  width: auto;
+  padding: 14px 18px;
+  font-size: 15px;
+}

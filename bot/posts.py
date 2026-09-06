@@ -150,7 +150,7 @@ def delete(post_id: int) -> None:
     """Удаляет пост со всем, что к нему прицеплено."""
     c = conn()
     for table in ("post_groups", "poll_options", "poll_votes", "post_reads",
-                  "post_reactions"):
+                  "post_reactions", "comments"):
         c.execute(f"DELETE FROM {table} WHERE post_id=?", (post_id,))
     c.execute("DELETE FROM posts WHERE id=?", (post_id,))
     c.commit()
@@ -192,6 +192,73 @@ def react(post_id: int, user_id: int, emoji: str) -> str:
               (post_id, user_id, emoji))
     c.commit()
     return emoji
+
+
+# ─────────────────────────── комментарии ───────────────────────────
+
+MAX_COMMENT = 1000
+
+# Сколько секунд между комментариями одного человека. Не «антиспам» в
+# серьёзном смысле, а защита от случая, когда кнопку жмут дважды подряд
+# или вымещают эмоции очередью коротких сообщений.
+COMMENT_PAUSE = 5
+
+
+def add_comment(post_id: int, user_id: int, text: str,
+                author_label: str = "") -> dict:
+    text = _clean(text, MAX_COMMENT)
+    if not text:
+        raise Refused("Пустой комментарий")
+    c = conn()
+    # Ноль означает «не придерживать вовсе»: время в базе с точностью до
+    # секунды, и запрос за последние ноль секунд поймал бы соседа по той же
+    # секунде — пауза срабатывала бы там, где её отключили.
+    if COMMENT_PAUSE > 0:
+        recent = c.execute(
+            """SELECT 1 FROM comments WHERE user_id=? AND post_id=?
+               AND created_at >= datetime('now', ?) LIMIT 1""",
+            (user_id, post_id, f"-{COMMENT_PAUSE} seconds")).fetchone()
+        if recent:
+            raise Refused("Слишком часто — подожди пару секунд")
+    cur = c.execute(
+        """INSERT INTO comments (post_id, user_id, author_label, text)
+           VALUES (?, ?, ?, ?)""",
+        (post_id, user_id, _clean(author_label, 60), text))
+    return comment_one(cur.lastrowid)
+
+
+def comment_one(comment_id: int) -> dict | None:
+    row = conn().execute(
+        """SELECT c.id, c.post_id, c.user_id, c.author_label, c.text,
+                  c.created_at, u.first_name, u.username
+           FROM comments c LEFT JOIN users u ON u.user_id = c.user_id
+           WHERE c.id=?""", (comment_id,)).fetchone()
+    return _comment_row(row) if row else None
+
+
+def _comment_row(r) -> dict:
+    return {
+        "id": r[0], "post_id": r[1], "author_id": r[2],
+        "author_label": r[3] or "Студент", "text": r[4], "created_at": r[5],
+        # Имя показываем то, что человек и так показывает в Telegram: под
+        # комментарием подпись без имени выглядит анонимкой, а анонимных
+        # комментариев здесь нет намеренно.
+        "author_name": (r[6] or "").strip() or (f"@{r[7]}" if r[7] else "Студент"),
+    }
+
+
+def comments_of(post_id: int, limit: int = 100) -> list:
+    return [_comment_row(r) for r in conn().execute(
+        """SELECT c.id, c.post_id, c.user_id, c.author_label, c.text,
+                  c.created_at, u.first_name, u.username
+           FROM comments c LEFT JOIN users u ON u.user_id = c.user_id
+           WHERE c.post_id=? ORDER BY c.id LIMIT ?""",
+        (post_id, max(1, min(limit, 300))))]
+
+
+def delete_comment(comment_id: int) -> None:
+    c = conn()
+    c.execute("DELETE FROM comments WHERE id=?", (comment_id,))
 
 
 def mark_read(post_id: int, user_id: int) -> None:
@@ -247,7 +314,7 @@ def _decorate(rows: list, user_id: int, can_see_authors: bool = False) -> list:
     by_id = {r["id"]: r for r in rows}
     for r in rows:
         r.update(poll=None, reactions=[], my_reaction="", reads=0, read=False,
-                 groups=[], votes_total=0)
+                 groups=[], votes_total=0, comments=0)
 
     options = {}
     for pid, oid, text, pos in c.execute(
@@ -297,6 +364,11 @@ def _decorate(rows: list, user_id: int, can_see_authors: bool = False) -> list:
             f"SELECT post_id, group_name FROM post_groups "
             f"WHERE post_id IN ({marks}) ORDER BY group_name", ids):
         by_id[pid]["groups"].append(g)
+
+    for pid, n in c.execute(
+            f"SELECT post_id, COUNT(*) FROM comments "
+            f"WHERE post_id IN ({marks}) GROUP BY post_id", ids):
+        by_id[pid]["comments"] = n
 
     for r in rows:
         mine = bool(user_id and r["author_id"] == user_id)
@@ -384,4 +456,5 @@ def stats() -> dict:
         "votes": one_("SELECT COUNT(*) FROM poll_votes"),
         "reactions": one_("SELECT COUNT(*) FROM post_reactions"),
         "reads": one_("SELECT COUNT(*) FROM post_reads"),
+        "comments": one_("SELECT COUNT(*) FROM comments"),
     }

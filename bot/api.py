@@ -29,7 +29,7 @@ import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
-from . import analytics, auth, posts, storage
+from . import analytics, auth, notify, posts, render, storage
 from . import media as mediastore
 
 log = logging.getLogger("miet.api")
@@ -104,7 +104,8 @@ def handle(method: str, path: str, query: dict, body: dict, init_data: str):
     if path.startswith("/api/admin/"):
         return _admin(path, method, query, body, uid, me)
 
-    if path == "/api/feed" or path.startswith("/api/posts"):
+    if (path == "/api/feed" or path.startswith("/api/posts")
+            or path.startswith("/api/comments")):
         return _feed(path, method, query, body, uid, me)
 
     return 404, {"error": "Нет такого маршрута"}
@@ -125,6 +126,7 @@ def _me(user: dict, me: dict) -> dict:
         "can_anon": analytics.can(me, "posts_anon"),
         "can_delete": analytics.can(me, "posts_delete"),
         "can_pin": analytics.can(me, "posts_pin"),
+        "can_clean_comments": analytics.can(me, "comments_delete"),
         "label": _label(me),
         # Группа с сервера: человек выбрал её в боте — приложение подхватит
         # её на другом устройстве, и наоборот.
@@ -166,7 +168,9 @@ def _track(user: dict, me: dict, body: dict):
     return 200, {"ok": True}
 
 
-POST_PATH = re.compile(r"^/api/posts/(\d+)(/read|/react|/vote|/pin|/delete)?$")
+POST_PATH = re.compile(
+    r"^/api/posts/(\d+)(/read|/react|/vote|/pin|/delete|/comments)?$")
+COMMENT_PATH = re.compile(r"^/api/comments/(\d+)/delete$")
 
 
 def _feed(path: str, method: str, query: dict, body: dict, uid: int, me: dict):
@@ -213,6 +217,10 @@ def _feed(path: str, method: str, query: dict, body: dict, uid: int, me: dict):
         return 200, {"ok": True, "post": post,
                      "pending": post["status"] == "pending"}
 
+    m = COMMENT_PATH.match(path)
+    if m and method == "POST":
+        return _delete_comment(int(m.group(1)), uid, me)
+
     m = POST_PATH.match(path)
     if not m:
         return 404, {"error": "Нет такого маршрута"}
@@ -247,6 +255,24 @@ def _feed(path: str, method: str, query: dict, body: dict, uid: int, me: dict):
         return 200, {"ok": True,
                      "post": posts.one(post_id, uid, group, can_see_authors=deep, see_all=everything)}
 
+    if tail == "/comments":
+        # Комментировать может любой, кто видит пост: право на чтение и
+        # право на голос здесь одно и то же. Заблокированные отсечены выше.
+        if method == "GET":
+            return 200, {"comments": posts.comments_of(post_id),
+                         "can_moderate": analytics.can(me, "comments_delete")}
+        if method == "POST":
+            try:
+                comment = posts.add_comment(post_id, uid, body.get("text") or "",
+                                            author_label=_label(me))
+            except posts.Refused as e:
+                return 400, {"error": str(e)}
+            _tell_author(post, comment)
+            return 200, {"ok": True, "comment": comment,
+                         "post": posts.one(post_id, uid, group,
+                                           can_see_authors=deep,
+                                           see_all=everything)}
+
     if tail == "/pin" and method == "POST":
         if not analytics.can(me, "posts_pin"):
             return 403, {"error": "Нет права закреплять посты"}
@@ -264,6 +290,36 @@ def _feed(path: str, method: str, query: dict, body: dict, uid: int, me: dict):
         return 200, {"ok": True}
 
     return 404, {"error": "Нет такого маршрута"}
+
+
+def _delete_comment(comment_id: int, uid: int, me: dict):
+    """Свой комментарий убирает автор, чужие — тот, кому выдано право."""
+    comment = posts.comment_one(comment_id)
+    if not comment:
+        return 404, {"error": "Комментарий не найден"}
+    if comment["author_id"] != uid and not analytics.can(me, "comments_delete"):
+        return 403, {"error": "Нет права удалять комментарии"}
+    posts.delete_comment(comment_id)
+    return 200, {"ok": True}
+
+
+def _tell_author(post: dict, comment: dict) -> None:
+    """
+    Сообщает автору поста, что его прокомментировали.
+
+    Себе не пишем, новостям с сайта писать некому, а у анонимного поста
+    автор известен серверу — он и получит письмо: скрыт он от читателей,
+    а не от собственного приложения.
+    """
+    author = post.get("author_id")
+    if not author or author == comment["author_id"]:
+        return
+    head = (post.get("title") or post.get("text") or "").strip()
+    notify.to_user(author,
+                   "💬 <b>Новый комментарий</b>\n\n"
+                   f"{render.esc(comment['author_name'])}: "
+                   f"{render.esc(comment['text'][:300])}\n\n"
+                   f"К записи: {render.esc(head[:120]) or 'без заголовка'}")
 
 
 def _save_image(raw: str) -> str:
