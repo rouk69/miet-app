@@ -132,6 +132,7 @@ async function statsPane() {
   const s = await get('/api/admin/stats?days=14');
   const t = s.totals;
 
+  const f = s.feed || {};
   const tiles = [
     [t.users, 'Всего пользователей'],
     [t.today, 'Активны сегодня'],
@@ -141,6 +142,15 @@ async function statsPane() {
     [t.bot, 'Писали боту'],
     [t.premium, 'С Telegram Premium'],
     [t.blocked, 'Заблокировано'],
+  ];
+
+  const feedTiles = [
+    [f.posts ?? 0, 'Постов в ленте'],
+    [f.news ?? 0, 'Новостей с miet.ru'],
+    [f.reads ?? 0, 'Прочтений'],
+    [f.reactions ?? 0, 'Реакций'],
+    [f.votes ?? 0, 'Голосов в опросах'],
+    [f.pending ?? 0, 'Ждут одобрения'],
   ];
 
   const sections = s.tabs.length ? listCard(s.tabs.map(x => {
@@ -171,6 +181,10 @@ async function statsPane() {
 
   return `
     <div class="kpi-grid">${tiles.map(([n, l]) => kpi(n, l)).join('')}</div>
+
+    <div class="section-head"><div class="section-title">Лента</div></div>
+    <p class="section-note">Посты людей, новости с сайта и что с ними делают.</p>
+    <div class="kpi-grid">${feedTiles.map(([n, l]) => kpi(n, l)).join('')}</div>
 
     <div class="section-head"><div class="section-title">Активность</div></div>
     <p class="section-note">Заходы в приложение, новые люди и обращения к боту по дням.</p>

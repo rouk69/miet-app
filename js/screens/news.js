@@ -1,4 +1,8 @@
-// Лента новостей МИЭТ и экран статьи.
+// Архив новостей МИЭТ и экран статьи.
+//
+// Это то, что собрано в data/app.json скриптами tools/ — снимок на момент
+// сборки, с тегами и галереями. Живая лента (свежие новости и посты людей)
+// живёт в screens/feed.js и приходит с сервера.
 
 import { icon } from '../icons.js';
 import { esc, emptyState, lightbox } from '../ui.js';
@@ -38,8 +42,8 @@ export default async function newsScreen() {
   let active = 'all';
 
   const node = screen({
-    title: 'Новости',
-    subtitle: `${all.length} публикаций с miet.ru`,
+    title: 'Архив новостей',
+    subtitle: `${all.length} публикаций, собранных с miet.ru`,
     actions: iconBtn('external', 'site'),
     body: `
       ${tags.length ? `<div class="pill-row" id="tags" style="margin-bottom:16px">

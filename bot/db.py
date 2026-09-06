@@ -64,6 +64,73 @@ SCHEMA = [
         blocked    INTEGER NOT NULL DEFAULT 0,
         updated_at TEXT DEFAULT CURRENT_TIMESTAMP
     )""",
+    # Лента: и написанные людьми посты, и новости, притащенные с miet.ru.
+    # Одна таблица на оба вида намеренно — читаются они вместе, сортируются
+    # вместе, и реакции с прочтениями у них общие. Различает их kind.
+    """CREATE TABLE IF NOT EXISTS posts (
+        id           INTEGER PRIMARY KEY AUTOINCREMENT,
+        kind         TEXT NOT NULL DEFAULT 'post',
+        author_id    INTEGER,
+        author_label TEXT,
+        anon         INTEGER NOT NULL DEFAULT 0,
+        title        TEXT,
+        text         TEXT,
+        media        TEXT,
+        source_url   TEXT,
+        external_id  TEXT,
+        audience     TEXT NOT NULL DEFAULT 'all',
+        status       TEXT NOT NULL DEFAULT 'published',
+        pinned       INTEGER NOT NULL DEFAULT 0,
+        created_at   TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        published_at TEXT
+    )""",
+    "CREATE INDEX IF NOT EXISTS posts_feed ON posts(status, pinned, id)",
+    # Новость с сайта не должна попасть в ленту дважды, даже если сбор
+    # запустится параллельно: уникальность гарантирует база, а не проверка.
+    "CREATE UNIQUE INDEX IF NOT EXISTS posts_external ON posts(external_id) "
+    "WHERE external_id IS NOT NULL",
+    # Кому виден пост. Строки есть только у постов с audience='groups'.
+    """CREATE TABLE IF NOT EXISTS post_groups (
+        post_id    INTEGER NOT NULL,
+        group_name TEXT NOT NULL,
+        PRIMARY KEY (post_id, group_name)
+    )""",
+    "CREATE INDEX IF NOT EXISTS post_groups_name ON post_groups(group_name)",
+    # Варианты опроса. Опрос живёт внутри поста, отдельной сущности нет:
+    # опрос без поста в этой ленте не бывает.
+    """CREATE TABLE IF NOT EXISTS poll_options (
+        id      INTEGER PRIMARY KEY AUTOINCREMENT,
+        post_id INTEGER NOT NULL,
+        text    TEXT NOT NULL,
+        pos     INTEGER NOT NULL DEFAULT 0
+    )""",
+    "CREATE INDEX IF NOT EXISTS poll_options_post ON poll_options(post_id, pos)",
+    # Голос один на человека: ключ по (post_id, user_id), а не по варианту, —
+    # переголосование заменяет строку, а не добавляет вторую.
+    """CREATE TABLE IF NOT EXISTS poll_votes (
+        post_id   INTEGER NOT NULL,
+        user_id   INTEGER NOT NULL,
+        option_id INTEGER NOT NULL,
+        ts        TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (post_id, user_id)
+    )""",
+    # Прочтения: строка на человека, поэтому счётчик — это «сколько людей»,
+    # а не «сколько раз открыли».
+    """CREATE TABLE IF NOT EXISTS post_reads (
+        post_id INTEGER NOT NULL,
+        user_id INTEGER NOT NULL,
+        ts      TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (post_id, user_id)
+    )""",
+    # Реакция тоже одна на человека — как в Telegram: новая заменяет старую,
+    # повторный тап по той же снимает её.
+    """CREATE TABLE IF NOT EXISTS post_reactions (
+        post_id INTEGER NOT NULL,
+        user_id INTEGER NOT NULL,
+        emoji   TEXT NOT NULL,
+        ts      TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (post_id, user_id)
+    )""",
 ]
 
 # Столбцы, доросшие к users позже. У баз, созданных до админки, их нет —

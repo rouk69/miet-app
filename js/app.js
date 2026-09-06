@@ -7,7 +7,8 @@ import { loadMe, account, track, syncGroup } from './api.js';
 
 import home from './screens/home.js';
 import schedule from './screens/schedule.js';
-import news, { articleScreen } from './screens/news.js';
+import newsArchive, { articleScreen } from './screens/news.js';
+import feed, { moderationScreen } from './screens/feed.js';
 import clubs, { clubScreen } from './screens/clubs.js';
 import campus, { campusItemScreen } from './screens/campus.js';
 import institutes, { instituteScreen } from './screens/institutes.js';
@@ -24,7 +25,9 @@ syncChrome(settings.theme);
 
 register('home', home);
 register('schedule', schedule);
-register('news', news);
+register('news', feed);              // вкладка «Новости» — живая лента
+register('newsArchive', newsArchive); // архив из data/app.json
+register('moderation', moderationScreen);
 register('article', articleScreen);
 register('clubs', clubs);
 register('club', clubScreen);
