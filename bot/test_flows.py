@@ -498,6 +498,32 @@ check("обнуление записано, а не только возвращ�
       storage.get_user(UID)["shift"] == 0)
 storage.set_shift(UID, 0, AUT)
 
+print("\n17. Учёт обращений и блокировка")
+tg.reset(); msg("/today")
+card = analytics.user_card(UID)
+check("обращение записано", bool(card) and card["counts"]["commands"] > 0,
+      card["counts"] if card else None)
+check("профиль подтянут из Telegram",
+      card["first_name"] == "Дима" and card["username"] == "ddos", card)
+check("человек помечен пришедшим из бота", card["in_bot"] and not card["in_app"],
+      card)
+
+before = analytics.user_card(UID)["counts"]["commands"]
+analytics.set_blocked(UID, True)
+tg.reset(); msg("/today")
+check("заблокированному бот молчит", not tg.sent, tg.sent)
+tg.reset(); msg("/start")
+check("и на /start тоже", not tg.sent, tg.sent)
+tg.reset(); msg("ПИН-31")
+check("и на обычный текст", not tg.sent, tg.sent)
+check("но обращения всё равно считаются",
+      analytics.user_card(UID)["counts"]["commands"] > before)
+
+analytics.set_blocked(UID, False)
+tg.reset(); msg("/today")
+check("после разблокировки бот отвечает снова", len(tg.sent) == 1, tg.sent)
+
+
 print("\n" + "=" * 58)
 print(f"пройдено {ok}, провалено {fail}")
 print("=" * 58)
