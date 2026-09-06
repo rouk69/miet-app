@@ -134,6 +134,9 @@ export function postCard(p, reactions, expanded = false) {
         ${reactionsBlock(p, reactions)}
         <div class="post-foot">
           <span class="post-author">${esc(p.author_label || 'МИЭТ')}</span>
+          ${p.anon && p.author_id
+      ? `<span class="post-unmask" title="Видно только модерации">id ${p.author_id}</span>`
+      : ''}
           <span>·</span>
           <span>${esc(ago(p.published_at))}</span>
           <span class="post-reads">${icon('eye', 14)} ${p.reads}</span>

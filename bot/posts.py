@@ -208,7 +208,8 @@ def mark_read(post_id: int, user_id: int) -> None:
 # ссылке, а это ровно та ошибка, которую тут нельзя допустить.
 VISIBLE = """(
     p.status='published' AND (
-        p.audience='all'
+        :all_groups = 1
+        OR p.audience='all'
         OR EXISTS (SELECT 1 FROM post_groups g
                    WHERE g.post_id=p.id AND g.group_name = :group)
     )
@@ -298,21 +299,35 @@ def _decorate(rows: list, user_id: int, can_see_authors: bool = False) -> list:
         by_id[pid]["groups"].append(g)
 
     for r in rows:
-        # Автора анонимного поста наружу не отдаём вообще: клиент показывает
-        # то, что получил, и «скрытый» автор в JSON перестал бы быть скрытым.
-        if r["anon"] and not can_see_authors:
-            r["author_id"] = None
+        mine = bool(user_id and r["author_id"] == user_id)
+        if r["anon"]:
+            # Подпись у анонимного поста одна для всех, включая владельца:
+            # иначе в его ленте пост выглядел бы обычным, и не было бы
+            # видно, что человек писал скрытно.
             r["author_label"] = "Анонимно"
-        r["mine"] = bool(user_id and r["author_id"] == user_id)
+            # А вот кто это был, наружу не отдаём вообще — клиент
+            # показывает то, что получил, и «скрытый» автор в JSON
+            # перестал бы быть скрытым. Исключение — тот, кто разбирает
+            # жалобы: анонимность защищает автора от читателей, а не от
+            # разбирательства.
+            if not can_see_authors:
+                r["author_id"] = None
+        r["mine"] = mine
     return rows
 
 
 def feed(user_id: int, group: str = "", limit: int = 20, offset: int = 0,
-         can_see_authors: bool = False) -> dict:
-    """Лента, видимая этому человеку. Закреплённые сверху, дальше свежие."""
+         can_see_authors: bool = False, see_all: bool = False) -> dict:
+    """
+    Лента, видимая этому человеку. Закреплённые сверху, дальше свежие.
+
+    `see_all` снимает ограничение по аудитории — это для владельца:
+    адресные объявления пишутся в его приложении, и не видеть их он не
+    должен. Права на чужую анонимность это не даёт, она отдельно.
+    """
     c = conn()
-    args = {"group": group or "", "limit": max(1, min(limit, 50)),
-            "offset": max(0, offset)}
+    args = {"group": group or "", "all_groups": 1 if see_all else 0,
+            "limit": max(1, min(limit, 50)), "offset": max(0, offset)}
     total = c.execute(f"SELECT COUNT(*) FROM posts p WHERE {VISIBLE}",
                       args).fetchone()[0]
     rows = [_row(r) for r in c.execute(
@@ -326,13 +341,15 @@ def feed(user_id: int, group: str = "", limit: int = 20, offset: int = 0,
 
 
 def one(post_id: int, user_id: int, group: str = "", force: bool = False,
-        can_see_authors: bool = False) -> dict | None:
+        can_see_authors: bool = False, see_all: bool = False) -> dict | None:
     """
     Один пост. `force` пропускает проверку видимости — он для тех мест,
     где право уже проверено выше (админка, модерация, свой свежий пост).
+    `see_all` — то же, что в feed(): владельцу видны все аудитории.
     """
     c = conn()
-    args = {"id": post_id, "group": group or ""}
+    args = {"id": post_id, "group": group or "",
+            "all_groups": 1 if see_all else 0}
     where = "p.id = :id" if force else f"p.id = :id AND {VISIBLE}"
     row = c.execute(f"SELECT {FIELDS} FROM posts p WHERE {where}", args).fetchone()
     if not row:
