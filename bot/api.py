@@ -258,16 +258,24 @@ def _feed(path: str, method: str, query: dict, body: dict, uid: int, me: dict):
     if tail == "/comments":
         # Комментировать может любой, кто видит пост: право на чтение и
         # право на голос здесь одно и то же. Заблокированные отсечены выше.
+        # Ник автора комментария — для связи, когда нужно разобраться:
+        # владельцу и тем, кому выдана уборка комментариев.
+        contacts = me["is_admin"] or analytics.can(me, "comments_delete")
         if method == "GET":
-            return 200, {"comments": posts.comments_of(post_id),
-                         "can_moderate": analytics.can(me, "comments_delete")}
+            return 200, {"comments": posts.comments_of(post_id,
+                                                       with_contacts=contacts),
+                         "can_moderate": analytics.can(me, "comments_delete"),
+                         "contacts": contacts}
         if method == "POST":
             try:
                 comment = posts.add_comment(post_id, uid, body.get("text") or "",
-                                            author_label=_label(me))
+                                            author_label=_label(me),
+                                            reply_to=body.get("reply_to"))
             except posts.Refused as e:
                 return 400, {"error": str(e)}
-            _tell_author(post, comment)
+            # Если автор поста и автор комментария, на который отвечают,
+            # — один человек, письмо должно уйти одно.
+            _tell_author(post, comment, skip=_tell_parent(comment))
             return 200, {"ok": True, "comment": comment,
                          "post": posts.one(post_id, uid, group,
                                            can_see_authors=deep,
@@ -303,7 +311,7 @@ def _delete_comment(comment_id: int, uid: int, me: dict):
     return 200, {"ok": True}
 
 
-def _tell_author(post: dict, comment: dict) -> None:
+def _tell_author(post: dict, comment: dict, skip=frozenset()) -> None:
     """
     Сообщает автору поста, что его прокомментировали.
 
@@ -312,7 +320,7 @@ def _tell_author(post: dict, comment: dict) -> None:
     а не от собственного приложения.
     """
     author = post.get("author_id")
-    if not author or author == comment["author_id"]:
+    if not author or author == comment["author_id"] or author in skip:
         return
     head = (post.get("title") or post.get("text") or "").strip()
     notify.to_user(author,
@@ -320,6 +328,21 @@ def _tell_author(post: dict, comment: dict) -> None:
                    f"{render.esc(comment['author_name'])}: "
                    f"{render.esc(comment['text'][:300])}\n\n"
                    f"К записи: {render.esc(head[:120]) or 'без заголовка'}")
+
+
+def _tell_parent(comment: dict) -> set:
+    """Сообщает человеку, что ему ответили. Возвращает, кому написали."""
+    if not comment.get("reply_to"):
+        return set()
+    parent = posts.comment_one(comment["reply_to"])
+    if not parent or parent["author_id"] == comment["author_id"]:
+        return set()
+    notify.to_user(parent["author_id"],
+                   "↩️ <b>Вам ответили</b>\n\n"
+                   f"{render.esc(comment['author_name'])}: "
+                   f"{render.esc(comment['text'][:300])}\n\n"
+                   f"На ваш комментарий: {render.esc(parent['text'][:120])}")
+    return {parent["author_id"]}
 
 
 def _save_image(raw: str) -> str:

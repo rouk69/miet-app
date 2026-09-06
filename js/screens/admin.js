@@ -10,7 +10,7 @@ import { esc, listCard, listRow, segmented, bindChoice, toggle, toast,
 import { get, post, account } from '../api.js';
 import { data } from '../store.js';
 import { TABS, go, refresh } from '../router.js';
-import { haptic, hapticNotify, confirmDialog } from '../tg.js';
+import { haptic, hapticNotify, confirmDialog, openLink } from '../tg.js';
 import { screen } from './common.js';
 
 // Какую вкладку админки показывать. Живёт в модуле, а не в параметрах
@@ -361,6 +361,11 @@ export async function adminUserScreen({ id }) {
         </div>
       </div>
 
+      ${card.username ? `
+        <button class="btn-secondary" id="tg" style="margin-top:12px">
+          ${icon('external', 17)} Написать в Telegram
+        </button>` : ''}
+
       ${canBlock ? `
         <button class="btn-secondary danger-btn" id="block" style="margin-top:12px">
           ${access.blocked ? 'Разблокировать' : 'Заблокировать'}
@@ -456,6 +461,9 @@ export async function adminUserScreen({ id }) {
       node.querySelector('#saveRole').click();
     });
   }
+
+  node.querySelector('#tg')?.addEventListener('click', () =>
+    openLink(`https://t.me/${card.username}`));
 
   const blockBtn = node.querySelector('#block');
   blockBtn?.addEventListener('click', async () => {
