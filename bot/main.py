@@ -27,6 +27,9 @@ from telebot.apihelper import ApiTelegramException
 from . import analytics
 from . import api as web          # HTTP-API мини-приложения; schedule_api ниже
 from . import keyboards as kbs
+from . import news_feed
+from . import posts as feed
+from . import publish
 from . import render
 from . import rich
 from . import schedule_api as api
@@ -569,6 +572,138 @@ def send_day(chat_id: int, group: str, week: int | None = None,
         bot.send_message(chat_id, f"⚠️ Не получилось загрузить расписание: {e}")
 
 
+# ─────────────────────── посты в ленту ───────────────────────
+
+def rights(user_id: int) -> dict:
+    """Права этого человека — тем же способом, что и в мини-приложении."""
+    return analytics.identity(user_id, web.admin_ids())
+
+
+def author_label(me: dict) -> str:
+    """Подпись автора: должность, а не имя. Совпадает с api._label."""
+    return web._label(me)
+
+
+@bot.message_handler(commands=["post"])
+def cmd_post(m: types.Message) -> None:
+    if not seen(m.from_user, "/post"):
+        return
+    me = rights(m.from_user.id)
+    if not analytics.can(me, "posts_write"):
+        return bot.send_message(
+            m.chat.id,
+            "✍️ Писать в ленту могут те, кому выдано право.\n\n"
+            "Если оно нужно — напиши владельцу приложения.")
+    publish.start(m.from_user.id, author_label(me))
+    anon = ("\n\nМожно отправить анонимно — тогда пост увидят после "
+            "одобрения." if not analytics.can(me, "posts_anon") else
+            "\n\nМожно отправить анонимно — подпись будет «Анонимно».")
+    bot.send_message(
+        m.chat.id,
+        "✍️ <b>Новый пост</b>\n\nПришли текст одним сообщением. "
+        "Следом можно отправить фотографию — она станет обложкой." + anon +
+        "\n\nОтменить — /cancel")
+
+
+@bot.message_handler(commands=["cancel"])
+def cmd_cancel(m: types.Message) -> None:
+    if not seen(m.from_user, "/cancel"):
+        return
+    if publish.draft_of(m.from_user.id):
+        publish.drop(m.from_user.id)
+        return bot.send_message(m.chat.id, "Черновик убран.")
+    bot.send_message(m.chat.id, "Отменять нечего.")
+
+
+@bot.message_handler(content_types=["photo"], chat_types=["private"])
+def on_photo(m: types.Message) -> None:
+    """Фотография имеет смысл только как обложка начатого поста."""
+    if not seen(m.from_user, "фото"):
+        return
+    if not publish.draft_of(m.from_user.id):
+        return bot.send_message(
+            m.chat.id, "Пришли номер группы текстом — расписание я покажу по нему. "
+                       "А фотография пригодится, если начнёшь пост через /post.")
+    try:
+        # Последний размер — самый крупный из тех, что предлагает Telegram.
+        info = bot.get_file(m.photo[-1].file_id)
+        blob = bot.download_file(info.file_path)
+    except Exception as e:
+        log.warning("фотография не скачалась: %s", e)
+        return bot.send_message(m.chat.id, "⚠️ Фотография не скачалась, попробуй ещё раз.")
+    if not publish.take_photo(m.from_user.id, blob):
+        return bot.send_message(m.chat.id, "⚠️ Такую картинку принять не могу.")
+    d = publish.draft_of(m.from_user.id)
+    if d and d["step"] == "text":
+        return bot.send_message(m.chat.id, "Фотография принята. Теперь пришли текст поста.")
+    bot.send_message(m.chat.id, "Фотография принята.",
+                     reply_markup=publish.keyboard_after_text())
+
+
+def on_post_button(call: types.CallbackQuery, what: str) -> None:
+    """Кнопки под черновиком: опубликовать, переключить анонимность, отменить."""
+    uid = call.from_user.id
+    d = publish.draft_of(uid)
+    if not d:
+        return bot.answer_callback_query(call.id, "Черновик уже не активен")
+
+    if what == "cancel":
+        publish.drop(uid)
+        safe_edit(call, "Черновик убран.", None)
+        return bot.answer_callback_query(call.id, "Отменено")
+
+    me = rights(uid)
+
+    if what == "anon":
+        d["anon"] = not d["anon"]
+        safe_edit(call, post_preview(d), publish.keyboard_after_text())
+        return bot.answer_callback_query(
+            call.id, "Подпись: Анонимно" if d["anon"] else "Подпись: должность")
+
+    if what == "go":
+        try:
+            post = publish.publish(uid, me, author_label(me))
+        except feed.Refused as e:
+            return bot.answer_callback_query(call.id, str(e), show_alert=True)
+        if post["status"] == "pending":
+            safe_edit(call, "🕒 Пост отправлен на одобрение.\n\n"
+                            "Анонимные посты появляются в ленте после проверки — "
+                            "так подпись «Анонимно» остаётся тем, чему можно верить.",
+                      None)
+            notify_moderators(post, uid)
+        else:
+            safe_edit(call, "✅ Опубликовано. Пост уже в ленте приложения.", None)
+        return bot.answer_callback_query(call.id, "Готово")
+
+    bot.answer_callback_query(call.id)
+
+
+def notify_moderators(post: dict, author_id: int) -> None:
+    """
+    Сообщает тем, кто одобряет посты, что в очереди появился новый.
+
+    Без этого анонимный пост лежал бы в очереди до тех пор, пока кто-нибудь
+    не заглянет в админку по своим делам.
+    """
+    text = ("🕒 <b>Пост ждёт одобрения</b>\n\n"
+            f"{render.esc((post.get('text') or '')[:300])}\n\n"
+            "Открой админку → «Модерация».")
+    for admin_id in web.admin_ids():
+        if admin_id == author_id:
+            continue
+        try:
+            bot.send_message(admin_id, text, disable_web_page_preview=True)
+        except ApiTelegramException as e:
+            log.info("уведомление админу %s не ушло: %s", admin_id, e)
+
+
+def post_preview(d: dict) -> str:
+    body = render.esc(d["text"])[:600] or "<i>без текста</i>"
+    return (f"📝 <b>Черновик</b>\n\n{body}\n\n"
+            f"{'📷 с фотографией · ' if d['media'] else ''}"
+            f"{'подпись: Анонимно' if d['anon'] else 'подпись: должность'}")
+
+
 # ─────────────────── свободный текст: поиск группы ───────────────────
 
 @bot.message_handler(content_types=["text"], chat_types=["private"])
@@ -576,6 +711,15 @@ def on_text(m: types.Message) -> None:
     query = (m.text or "").strip()
     if query.startswith("/"):
         return
+
+    # Начатый пост важнее поиска группы: человек уже сказал, что пишет
+    # в ленту, и «ПИН-31» в тексте поста — это текст, а не запрос.
+    if publish.take_text(m.from_user.id, query):
+        seen(m.from_user, "черновик поста")
+        d = publish.draft_of(m.from_user.id)
+        return bot.send_message(m.chat.id, post_preview(d),
+                                reply_markup=publish.keyboard_after_text())
+
     # Сам текст запроса в учёт не идёт — только факт обращения.
     if not seen(m.from_user, "поиск группы"):
         return
@@ -619,6 +763,11 @@ def on_callback(call: types.CallbackQuery) -> None:
     try:
         if action == "noop":
             return bot.answer_callback_query(call.id)
+
+        # Кнопки под черновиком поста. Отдельной веткой до всего остального:
+        # к расписанию они отношения не имеют, и группы в них нет.
+        if call.data.startswith("post:"):
+            return on_post_button(call, call.data.split(":", 1)[1])
 
         scope = "inline" if call.inline_message_id else "direct"
 
@@ -807,6 +956,7 @@ def main() -> None:
             types.BotCommand("shift", "Поправка недели цикла"),
             types.BotCommand("help", "Как пользоваться"),
             types.BotCommand("support", "Связаться с автором"),
+            types.BotCommand("post", "Написать пост в ленту"),
         ])
     except ApiTelegramException as e:
         log.warning("не удалось задать команды: %s", e)
@@ -817,6 +967,10 @@ def main() -> None:
     web.serve_in_background()
     if not web.admin_ids():
         log.warning("ADMIN_IDS не задан — админка не откроется никому")
+
+    # Новости с miet.ru бот тянет сам: data/app.json обновляется только
+    # при пересборке руками, а лента должна пополняться без выкладок.
+    news_feed.run_in_background()
 
     log.info("Бот @%s запущен", BOT_USERNAME)
     if WEBAPP_URL:

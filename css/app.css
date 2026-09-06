@@ -796,3 +796,185 @@
 .heat-2 { background: var(--primary); opacity: 0.5; }
 .heat-3 { background: var(--primary); opacity: 0.75; }
 .heat-4 { background: var(--primary); }
+
+/* ---------- Лента: посты и новости ---------- */
+
+.compose-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.post {
+  overflow: hidden;
+}
+
+.post-flag {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 16px 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--primary);
+}
+
+.post-media {
+  display: block;
+  width: 100%;
+  max-height: 320px;
+  object-fit: cover;
+}
+
+.post-body {
+  padding: 14px 16px 12px;
+}
+
+.post-title {
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  margin-bottom: 6px;
+}
+
+.post-text p {
+  margin: 0 0 8px;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.post-text p:last-child { margin-bottom: 0; }
+
+/* Кому виден пост. Показывается автору и получателям одинаково: человек
+   должен понимать, что читает адресное объявление, а не общее. */
+.post-audience {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.post-foot {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 12px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.post-author { font-weight: 700; color: var(--text-secondary); }
+
+.post-reads {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+}
+
+.post-link {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--primary);
+}
+
+.post-menu { color: var(--text-tertiary); }
+
+/* ---------- Опрос ---------- */
+
+.poll { margin-top: 12px; }
+
+.poll-option {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 12px 14px;
+  margin-bottom: 8px;
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  overflow: hidden;
+  text-align: left;
+}
+
+/* Заливка — отдельный слой под текстом: красить фон градиентом означало бы
+   пересчитывать его на каждый процент и терять плавность перехода. */
+.poll-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  background: var(--primary-dim);
+  transition: width 0.35s cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.poll-option.mine .poll-fill { background: var(--primary-dim); }
+.poll-option.mine .poll-text { color: var(--primary); }
+
+.poll-text {
+  position: relative;
+  flex: 1;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.poll-share {
+  position: relative;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.poll-total {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+/* ---------- Реакции ---------- */
+
+.reaction-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.reaction {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 7px 12px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-2);
+  font-size: 15px;
+  line-height: 1;
+  transition: background 0.15s ease, transform 0.1s ease;
+}
+
+.reaction b {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.reaction.mine { background: var(--primary-dim); }
+.reaction.mine b { color: var(--primary); }
+.reaction:active { transform: scale(0.94); }
+
+textarea.field-input {
+  resize: vertical;
+  min-height: 96px;
+  font-family: inherit;
+  line-height: 1.45;
+}

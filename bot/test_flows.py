@@ -524,6 +524,60 @@ tg.reset(); msg("/today")
 check("после разблокировки бот отвечает снова", len(tg.sent) == 1, tg.sent)
 
 
+print("\n18. Пост в ленту из бота")
+from . import posts as feed_mod                                    # noqa: E402
+from . import publish                                              # noqa: E402
+
+analytics.set_role(UID, "none", [], [])
+tg.reset(); msg("/post")
+check("без права писать бот отказывает",
+      "право" in tg.sent[0]["text"], tg.sent[0]["text"][:80])
+check("черновик не заведён", publish.draft_of(UID) is None)
+
+analytics.set_role(UID, "moderator", ["posts_write"], [])
+tg.reset(); msg("/post")
+check("с правом бот зовёт прислать текст",
+      "текст" in tg.sent[0]["text"].lower(), tg.sent[0]["text"][:80])
+check("черновик заведён", publish.draft_of(UID) is not None)
+
+tg.reset(); msg("ПИН-31")
+check("текст ушёл в черновик, а не в поиск группы",
+      "Черновик" in tg.sent[0]["text"], tg.sent[0]["text"][:80])
+check("под черновиком есть кнопки",
+      set(callbacks(tg.sent[0]["markup"])) == {"post:go", "post:anon", "post:cancel"},
+      callbacks(tg.sent[0]["markup"]))
+
+tg.reset(); press("post:go")
+posts_now = feed_mod.feed(UID, "ПИН-31")["posts"]
+check("пост опубликован", posts_now and posts_now[0]["text"] == "ПИН-31", posts_now[:1])
+check("подписан должностью", posts_now[0]["author_label"] == "Модератор",
+      posts_now[0]["author_label"])
+check("черновик убран", publish.draft_of(UID) is None)
+
+tg.reset(); msg("/post"); msg("Аноним из бота"); press("post:anon")
+d = publish.draft_of(UID)
+check("анонимность переключилась", d and d["anon"] is True, d)
+tg.reset(); press("post:go")
+check("анонимный ушёл на одобрение",
+      "одобрение" in tg.edited[0]["text"], tg.edited[0]["text"][:60])
+check("в ленте его нет",
+      all(p["text"] != "Аноним из бота"
+          for p in feed_mod.feed(UID, "ПИН-31")["posts"]))
+check("но он в очереди модерации",
+      any(p["text"] == "Аноним из бота" for p in feed_mod.pending(UID)))
+
+tg.reset(); msg("/post"); msg("Передумал"); press("post:cancel")
+check("отмена убирает черновик", publish.draft_of(UID) is None)
+check("сообщение про отмену", "убран" in tg.edited[-1]["text"],
+      tg.edited[-1]["text"][:50])
+
+tg.reset(); msg("ПИН-31")
+check("после отмены текст снова ищет группу",
+      "ПИН-31" in tg.sent[0]["text"] and "Черновик" not in tg.sent[0]["text"],
+      tg.sent[0]["text"][:80])
+analytics.set_role(UID, "none", [], [])
+
+
 print("\n" + "=" * 58)
 print(f"пройдено {ok}, провалено {fail}")
 print("=" * 58)
