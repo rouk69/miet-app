@@ -130,6 +130,19 @@ SCHEMA = [
         ts      TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         PRIMARY KEY (post_id, user_id)
     )""",
+    # Комментарии. Автор хранится идентификатором, а подпись — отдельной
+    # строкой на момент написания: роль человека потом меняется, а «кто это
+    # сказал тогда» меняться не должно.
+    """CREATE TABLE IF NOT EXISTS comments (
+        id           INTEGER PRIMARY KEY AUTOINCREMENT,
+        post_id      INTEGER NOT NULL,
+        user_id      INTEGER NOT NULL,
+        author_label TEXT,
+        text         TEXT NOT NULL,
+        created_at   TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )""",
+    "CREATE INDEX IF NOT EXISTS comments_post ON comments(post_id, id)",
+    "CREATE INDEX IF NOT EXISTS comments_user ON comments(user_id, id)",
 ]
 
 # Столбцы, доросшие к users позже. У баз, созданных до админки, их нет —
