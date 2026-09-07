@@ -39,6 +39,13 @@ PAUSE = 0.4
 DELAY = 5 * 60
 
 
+# Что происходит прямо сейчас. Снаружи это единственный способ отличить
+# «обход идёт» от «обход упал»: логи Amvera видны только владельцу, а
+# пустой индекс выглядит одинаково в обоих случаях.
+state = {"running": False, "done": 0, "total": 0, "failed": 0,
+         "started_at": None, "error": ""}
+
+
 def _norm(s: str) -> str:
     return re.sub(r"\s+", " ", (s or "").strip())
 
@@ -51,12 +58,16 @@ def rebuild() -> int:
     отвалится на середине, лучше оставить вчерашний полный индекс, чем
     получить половину сегодняшнего.
     """
+    state.update(running=True, done=0, total=0, failed=0, error="",
+                 started_at=time.strftime("%Y-%m-%d %H:%M:%S"))
     try:
         groups = api.fetch_groups()
     except Exception as e:
         log.warning("список групп недоступен: %s", e)
+        state.update(running=False, error=f"список групп: {e}")
         return 0
 
+    state["total"] = len(groups)
     rows, semestr, failed = [], "", 0
     for i, group in enumerate(groups):
         try:
@@ -72,6 +83,7 @@ def rebuild() -> int:
             rows.append((teacher, _norm(l.get("room")), _norm(l.get("subject")),
                          l.get("kindCls") or "", group, l.get("day"),
                          l.get("week"), l.get("pair"), l.get("from"), l.get("to")))
+        state["done"], state["failed"] = i + 1, failed
         if i % 50 == 0 and i:
             log.info("справочник: %d из %d групп", i, len(groups))
         time.sleep(PAUSE)
@@ -79,29 +91,26 @@ def rebuild() -> int:
     if not rows:
         log.warning("справочник не собрался: ни одной записи (групп %d, "
                     "неудачных %d)", len(groups), failed)
+        state.update(running=False,
+                     error=f"пусто: групп {len(groups)}, недоступно {failed}")
         return 0
 
-    c = conn()
-    c.execute("BEGIN")
-    try:
-        c.execute("DELETE FROM lessons_index")
-        c.executemany(
+    with conn().transaction() as raw:
+        raw.execute("DELETE FROM lessons_index")
+        raw.executemany(
             """INSERT INTO lessons_index
                  (teacher, room, subject, kind, group_name, day, week, pair,
                   t_from, t_to)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""", rows)
-        c.execute("""INSERT INTO index_meta (key, value) VALUES ('built_at',
-                     datetime('now')) ON CONFLICT(key) DO UPDATE SET
-                     value=excluded.value""")
-        c.execute("""INSERT INTO index_meta (key, value) VALUES ('semestr', ?)
-                     ON CONFLICT(key) DO UPDATE SET value=excluded.value""",
-                  (semestr,))
-        c.execute("COMMIT")
-    except Exception:
-        c.execute("ROLLBACK")
-        raise
+        raw.execute("""INSERT INTO index_meta (key, value) VALUES ('built_at',
+                       datetime('now')) ON CONFLICT(key) DO UPDATE SET
+                       value=excluded.value""")
+        raw.execute("""INSERT INTO index_meta (key, value) VALUES ('semestr', ?)
+                       ON CONFLICT(key) DO UPDATE SET value=excluded.value""",
+                    (semestr,))
     log.info("справочник собран: %d записей, групп %d, недоступно %d",
              len(rows), len(groups), failed)
+    state.update(running=False, error="")
     return len(rows)
 
 
@@ -109,7 +118,7 @@ def meta() -> dict:
     rows = dict(conn().execute("SELECT key, value FROM index_meta"))
     total = conn().execute("SELECT COUNT(*) FROM lessons_index").fetchone()[0]
     return {"built_at": rows.get("built_at"), "semestr": rows.get("semestr"),
-            "lessons": total}
+            "lessons": total, "progress": dict(state)}
 
 
 # ─────────────────────────── поиск ───────────────────────────
@@ -201,6 +210,7 @@ def run_in_background() -> threading.Thread:
         time.sleep(DELAY)
         while True:
             try:
+                log.info("справочник: проверяю, нужен ли обход")
                 # Если индекс уже собран сегодня — не трогаем сайт лишний
                 # раз: перезапуск контейнера не повод обходить 346 групп.
                 built = meta()
