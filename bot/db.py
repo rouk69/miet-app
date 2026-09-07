@@ -20,6 +20,7 @@
 """
 from __future__ import annotations
 
+import contextlib
 import sqlite3
 import threading
 
@@ -271,6 +272,26 @@ class Shared:
         with self._lock:
             cur = self._raw.executemany(sql, seq)
             return Rows([], cur.lastrowid, cur.rowcount)
+
+    @contextlib.contextmanager
+    def transaction(self):
+        """
+        Несколько запросов одной транзакцией, под одним замком.
+
+        Замок держится всё время: иначе между BEGIN и COMMIT сюда попадёт
+        чужая запись из соседнего потока — а при откате она пропадёт
+        вместе с нашей. Внутри отдаётся сырое соединение, потому что
+        собственный execute снова полез бы за тем же (нерекурсивным для
+        других потоков) замком.
+        """
+        with self._lock:
+            self._raw.execute("BEGIN")
+            try:
+                yield self._raw
+            except Exception:
+                self._raw.execute("ROLLBACK")
+                raise
+            self._raw.execute("COMMIT")
 
     def commit(self) -> None:
         """В режиме автофиксации фиксировать нечего — оставлено для кода."""
