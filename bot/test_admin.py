@@ -155,6 +155,10 @@ s, page = api.handle("GET", "/api/admin/users", {"q": ["ПИН"]}, {}, ADMIN)
 check("поиск по группе", page["total"] == 1, page)
 s, page = api.handle("GET", "/api/admin/users", {"q": ["777"]}, {}, ADMIN)
 check("поиск по числовому id", page["total"] == 1, page)
+s, page = api.handle("GET", "/api/admin/users", {"q": ["студент"]}, {}, ADMIN)
+# SQLite приводит к нижнему регистру только латиницу, поэтому у поиска
+# своя функция lower_ru: без неё «студент» не находил «Студента».
+check("поиск понимает регистр кириллицы", page["total"] == 1, page)
 s, page = api.handle("GET", "/api/admin/users", {"limit": ["1"]}, {}, ADMIN)
 check("страница режется по limit", len(page["users"]) == 1 and page["total"] == 2, page)
 
@@ -382,6 +386,113 @@ sched_api.fetch_schedule = lambda group, force=False: (_ for _ in ()).throw(
 kept = directory.rebuild()
 check("при недоступном сайте прежний индекс сохранён",
       kept == 0 and directory.meta()["lessons"] == 6, directory.meta())
+
+
+print("\n15. Доска взаимопомощи")
+from . import help_board                                           # noqa: E402
+
+help_board.PAUSE = 0
+s, r = api.handle("POST", "/api/help", {},
+                  {"kind": "need", "subject": "Матанализ",
+                   "text": "Не понимаю ряды, нужен разбор"}, USER)
+check("объявление создано", s == 200 and r["offer"]["kind"] == "need", (s, r))
+need_id = r["offer"]["id"]
+check("контакт автора виден — в этом смысл доски",
+      r["offer"]["username"] == "student", r["offer"])
+
+s, r2 = api.handle("POST", "/api/help", {},
+                   {"kind": "offer", "subject": "Схемотехника",
+                    "price": "deal"}, ADMIN)
+check("предложение помощи создано",
+      r2["offer"]["kind"] == "offer" and r2["offer"]["price"] == "deal", r2)
+
+s, board = api.handle("GET", "/api/help", {}, {}, USER)
+check("оба объявления в выдаче", len(board["offers"]) == 2, board["offers"])
+check("счётчики по видам", board["need"] == 1 and board["offer"] == 1, board)
+check("свои объявления отдельно", len(board["mine"]) == 1, board["mine"])
+
+s, only = api.handle("GET", "/api/help", {"kind": ["offer"]}, {}, USER)
+check("фильтр по виду", len(only["offers"]) == 1
+      and only["offers"][0]["kind"] == "offer", only["offers"])
+s, found = api.handle("GET", "/api/help", {"q": ["матан"]}, {}, USER)
+check("поиск по предмету", len(found["offers"]) == 1, found["offers"])
+
+s, _ = api.handle("POST", "/api/help", {}, {"kind": "need", "subject": "  "}, USER)
+check("без предмета не принимается", s == 400, s)
+
+help_board.PAUSE = 60
+s, _ = api.handle("POST", "/api/help", {}, {"subject": "Ещё одно"}, USER)
+check("частые публикации придержаны", s == 400, s)
+help_board.PAUSE = 0
+
+# Больше пяти открытых — это уже не «нужна помощь», а личная доска.
+for i in range(4):
+    api.handle("POST", "/api/help", {}, {"subject": f"Предмет {i}"}, USER)
+s, _ = api.handle("POST", "/api/help", {}, {"subject": "Шестое"}, USER)
+check("больше пяти открытых нельзя", s == 400, s)
+
+# Владелец правит что угодно, поэтому чужое пробует обычный человек.
+s, _ = api.handle("POST", f"/api/help/{r2['offer']['id']}/close", {}, {}, USER)
+check("чужое объявление не закрыть", s == 403, s)
+s, _ = api.handle("POST", f"/api/help/{need_id}/close", {}, {}, USER)
+check("своё закрывается", s == 200, s)
+s, board = api.handle("GET", "/api/help", {}, {}, USER)
+check("закрытого в выдаче нет",
+      all(o["id"] != need_id for o in board["offers"]), board["offers"])
+check("но у автора оно осталось",
+      any(o["id"] == need_id and o["status"] == "closed" for o in board["mine"]),
+      board["mine"])
+s, _ = api.handle("POST", f"/api/help/{need_id}/reopen", {}, {}, USER)
+s, board = api.handle("GET", "/api/help", {}, {}, USER)
+check("и открывается заново",
+      any(o["id"] == need_id for o in board["offers"]), board["offers"])
+
+# Уборку раздела выдают правом help_manage.
+api.handle("POST", "/api/admin/users/42/role", {},
+           {"role": "moderator", "perms": ["help_manage"], "sections": []}, ADMIN)
+s, me = api.handle("GET", "/api/me", {}, {}, USER)
+s, _ = api.handle("POST", f"/api/help/{r2['offer']['id']}/delete", {}, {}, USER)
+check("с правом убирают чужое", s == 200, s)
+api.handle("POST", "/api/admin/users/42/role", {},
+           {"role": "none", "perms": [], "sections": []}, ADMIN)
+s, _ = api.handle("POST", "/api/help/999999/close", {}, {}, ADMIN)
+check("несуществующее — 404", s == 404, s)
+
+print("\n16. Подробная статистика")
+s, st = api.handle("GET", "/api/admin/stats", {}, {}, ADMIN)
+check("часы суток в сводке", len(st["hours"]) == 24, st.get("hours"))
+check("дни недели в сводке", len(st["weekdays"]) == 7, st.get("weekdays"))
+check("неделя начинается с понедельника",
+      st["weekdays"][0]["day"] == "Пн" and st["weekdays"][-1]["day"] == "Вс",
+      [d["day"] for d in st["weekdays"]])
+check("доска помощи в сводке", "help" in st and st["help"]["open"] >= 1,
+      st.get("help"))
+
+s, days = api.handle("GET", "/api/admin/days", {}, {}, ADMIN)
+check("список дней отдан", len(days["days"]) == 30, len(days["days"]))
+today = days["days"][-1]
+check("сегодня есть действия", today["actions"] > 0, today)
+check("и люди посчитаны", today["people"] > 0, today)
+
+s, day = api.handle("GET", "/api/admin/day", {"date": [today["date"]]}, {}, ADMIN)
+check("разбор дня отдан", s == 200 and day["date"] == today["date"], s)
+check("в нём видно, кто был", day["people"] and day["people"][0]["actions"] > 0,
+      day["people"][:1])
+check("у человека есть имя и время", day["people"][0]["name"]
+      and day["people"][0]["first_at"], day["people"][0])
+check("часы дня расписаны", len(day["hours"]) == 24, len(day["hours"]))
+check("виды действий посчитаны", day["kinds"], day["kinds"])
+s, _ = api.handle("GET", "/api/admin/day", {"date": ["вчера"]}, {}, ADMIN)
+check("кривая дата отвергнута", s == 400, s)
+s, _ = api.handle("GET", "/api/admin/days", {}, {}, USER)
+check("постороннему разбор закрыт", s == 403, s)
+
+s, card = api.handle("GET", "/api/admin/users/42", {}, {}, ADMIN)
+check("в карточке видно, что нажимают в боте", isinstance(card["bot_actions"], list),
+      card.get("bot_actions"))
+check("часы человека расписаны", len(card["hours"]) == 24, len(card["hours"]))
+check("дни человека собраны", card["days"] and card["active_days"] >= 1,
+      card.get("days"))
 
 
 print("\n" + "=" * 58)

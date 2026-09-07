@@ -12,6 +12,7 @@ import { data } from '../store.js';
 import { TABS, go, refresh } from '../router.js';
 import { haptic, hapticNotify, confirmDialog, openLink } from '../tg.js';
 import { screen } from './common.js';
+import { hoursStrip, plural, dayLabel, weekdayOf } from './admin-days.js';
 
 // Какую вкладку админки показывать. Живёт в модуле, а не в параметрах
 // экрана: возврат из карточки человека должен вернуть на список, а не
@@ -96,7 +97,8 @@ export default async function adminScreen() {
     title: 'Админка',
     body: `
       <div class="pill-row admin-tabs" id="atabs">
-        ${[['stats', 'Статистика'], ['users', 'Юзеры'], ['roles', 'Роли']]
+        ${[['stats', 'Статистика'], ['days', 'По дням'], ['users', 'Юзеры'],
+    ['roles', 'Роли']]
     .map(([id, label]) => `
           <button class="pill ${tab === id ? 'active' : ''}" data-atab="${id}">${label}</button>`).join('')}
       </div>
@@ -119,6 +121,7 @@ export default async function adminScreen() {
 async function paint(pane) {
   try {
     if (tab === 'stats') pane.innerHTML = await statsPane();
+    else if (tab === 'days') await daysPane(pane);
     else if (tab === 'users') await usersPane(pane);
     else await rolesPane(pane);
   } catch (err) {
@@ -154,6 +157,13 @@ async function statsPane() {
     [f.pending ?? 0, 'Ждут одобрения'],
   ];
 
+  const h = s.help || {};
+  const helpTiles = [
+    [h.need ?? 0, 'Просят помощи'],
+    [h.offer ?? 0, 'Предлагают помощь'],
+    [h.closed ?? 0, 'Вопросов закрыто'],
+  ];
+
   const sections = s.tabs.length ? listCard(s.tabs.map(x => {
     const meta = TAB_META[x.name];
     return `
@@ -187,12 +197,30 @@ async function statsPane() {
     <p class="section-note">Посты людей, новости с сайта и что с ними делают.</p>
     <div class="kpi-grid">${feedTiles.map(([n, l]) => kpi(n, l)).join('')}</div>
 
+    <div class="section-head"><div class="section-title">Помощь в заданиях</div></div>
+    <div class="kpi-grid">${helpTiles.map(([n, l]) => kpi(n, l)).join('')}</div>
+
     <div class="section-head"><div class="section-title">Активность</div></div>
     <p class="section-note">Заходы в приложение, новые люди и обращения к боту по дням.</p>
     <div class="stack">
       ${bars('Заходы в приложение', s.opens, 'primary')}
       ${bars('Новые пользователи', s.newcomers, 'success')}
       ${bars('Обращения к боту', s.commands, 'warning')}
+    </div>
+
+    <div class="section-head"><div class="section-title">Часы и дни</div></div>
+    <p class="section-note">Когда людям удобно — по московскому времени.</p>
+    <div class="card" style="padding:14px">${hoursStrip(s.hours || [])}</div>
+    <div class="card" style="padding:14px;margin-top:10px">
+      <div class="weekdays">
+        ${(s.weekdays || []).map(d => {
+    const top = Math.max(1, ...(s.weekdays || []).map(x => x.count));
+    return `<div class="wd-col" title="${esc(d.day)}: ${d.count}">
+              <div class="wd-bar" style="height:${Math.round(d.count / top * 100)}%"></div>
+              <div class="wd-name">${esc(d.day)}</div>
+            </div>`;
+  }).join('')}
+      </div>
     </div>
 
     <div class="section-head"><div class="section-title">Какие разделы смотрят</div></div>
@@ -206,6 +234,43 @@ async function statsPane() {
     ${groups}
 
     ${cmds ? `<div class="section-head"><div class="section-title">Что нажимают в боте</div></div>${cmds}` : ''}`;
+}
+
+// ─────────────── вкладка «По дням» ───────────────
+
+/**
+ * Оглавление дней. Сам разбор дня живёт в отдельном экране: там список
+ * людей, часы и разделы, и вкладка под ним стала бы длиннее любой другой.
+ */
+async function daysPane(pane) {
+  const list = await get('/api/admin/days?days=30');
+  const days = [...list.days].reverse();
+  const max = Math.max(1, ...days.map(d => d.actions));
+
+  pane.innerHTML = days.some(d => d.actions) ? `
+    <p class="section-note" style="margin-top:0">
+      Тапни день — увидишь, кто в нём был, во сколько и что смотрел.
+    </p>
+    <div class="list-card">
+      ${days.map(d => `
+        <div class="list-row tap" data-date="${d.date}">
+          <div class="list-row-body">
+            <div class="row-title">${esc(dayLabel(d.date))} · ${esc(weekdayOf(d.date))}</div>
+            <div class="row-subtitle">
+              ${d.people} ${plural(d.people, 'человек', 'человека', 'человек')} ·
+              ${d.actions} ${plural(d.actions, 'действие', 'действия', 'действий')}
+            </div>
+          </div>
+          <div class="day-bar"><i style="width:${Math.round(d.actions / max * 100)}%"></i></div>
+          <span class="chevron">${icon('chevronRight', 18)}</span>
+        </div>`).join('')}
+    </div>`
+    : emptyState('Событий пока не было', 'calendar');
+
+  pane.addEventListener('click', e => {
+    const row = e.target.closest('[data-date]');
+    if (row) go('adminDay', { date: row.dataset.date });
+  });
 }
 
 // ─────────────── вкладка «Юзеры» ───────────────
@@ -381,6 +446,42 @@ export async function adminUserScreen({ id }) {
       <div class="section-head"><div class="section-title">Активность за 30 дней</div></div>
       <div class="card heat-card">${heat}</div>
 
+      <div class="section-head"><div class="section-title">Когда заходит</div></div>
+      <p class="section-note">Часы суток по московскому времени.</p>
+      <div class="card" style="padding:14px">${hoursStrip(card.hours || [])}</div>
+
+      ${(card.bot_actions || []).length ? `
+        <div class="section-head"><div class="section-title">Что нажимает в боте</div></div>
+        ${listCard(card.bot_actions.map(a => listRow({
+    title: a.name, value: String(a.count),
+  })))}` : ''}
+
+      ${(card.screens_top || []).length ? `
+        <div class="section-head"><div class="section-title">Какие экраны открывает</div></div>
+        ${listCard(card.screens_top.map(a => listRow({
+    title: SCREEN_NAMES[a.name] || a.name, value: String(a.count),
+  })))}` : ''}
+
+      ${(card.days || []).length ? `
+        <div class="section-head"><div class="section-title">По дням</div></div>
+        <p class="section-note">
+          Активных дней: ${card.active_days}. Тапни, чтобы открыть весь день.
+        </p>
+        <div class="list-card">
+          ${card.days.map(d => `
+            <div class="list-row tap" data-date="${d.date}">
+              <div class="list-row-body">
+                <div class="row-title">${esc(dayLabel(d.date))} · ${esc(weekdayOf(d.date))}</div>
+                <div class="row-subtitle">
+                  ${d.opens ? `${d.opens} ${plural(d.opens, 'заход', 'захода', 'заходов')}` : 'без заходов'}
+                  ${d.bot ? ` · бот: ${d.bot}` : ''}
+                </div>
+              </div>
+              <div class="list-row-value tnum">${d.actions}</div>
+              <span class="chevron">${icon('chevronRight', 18)}</span>
+            </div>`).join('')}
+        </div>` : ''}
+
       <div class="section-head"><div class="section-title">Лента действий</div></div>
       ${feed}
 
@@ -464,6 +565,11 @@ export async function adminUserScreen({ id }) {
 
   node.querySelector('#tg')?.addEventListener('click', () =>
     openLink(`https://t.me/${card.username}`));
+
+  node.addEventListener('click', e => {
+    const day = e.target.closest('[data-date]');
+    if (day) go('adminDay', { date: day.dataset.date });
+  });
 
   const blockBtn = node.querySelector('#block');
   blockBtn?.addEventListener('click', async () => {

@@ -1330,3 +1330,160 @@ textarea.field-input {
   padding: 10px 0;
   color: var(--text-tertiary);
 }
+
+/* ---------- Доска взаимопомощи ---------- */
+
+.offer { padding: 16px; }
+
+.offer.closed { opacity: 0.6; }
+
+.offer-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+/* Два вида объявлений различаются цветом, а не только словом: на доске
+   из двадцати карточек читать подписи глазами утомительно. */
+.offer-kind {
+  padding: 3px 10px;
+  border-radius: var(--radius-pill);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.offer-kind.need { background: var(--primary-dim); color: var(--primary); }
+.offer-kind.offer { background: rgba(52, 199, 89, 0.16); color: var(--success); }
+
+.offer-subject {
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  margin-bottom: 4px;
+}
+
+.offer-text {
+  font-size: 15px;
+  line-height: 1.45;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.offer-foot {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.offer-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.offer-actions .btn-primary,
+.offer-actions .btn-secondary {
+  padding: 12px;
+  font-size: 14px;
+}
+
+/* Предупреждение о том, что ник станет виден: рамка, а не мелкий текст —
+   человек должен это заметить до публикации, а не после. */
+.warn-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 12px 14px;
+  margin-top: 6px;
+  border-radius: var(--radius-md);
+  background: rgba(255, 159, 10, 0.12);
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text);
+}
+
+.warn-note svg { flex-shrink: 0; color: var(--warning); }
+
+/* ---------- Разбор по дням ---------- */
+
+/* Полоска рядом со строкой дня: видно, какой день выделяется, без
+   отдельного графика. */
+.day-bar {
+  width: 54px;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--surface-2);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.day-bar i {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--primary);
+}
+
+.hours {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 76px;
+}
+
+.hour-col {
+  flex: 1;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 4px;
+  min-width: 0;
+}
+
+.hour-bar {
+  border-radius: 3px 3px 0 0;
+  background: var(--primary);
+  min-height: 2px;
+}
+
+.hour-tick {
+  font-size: 9px;
+  line-height: 1;
+  text-align: center;
+  color: var(--text-tertiary);
+}
+
+.weekdays {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  height: 84px;
+}
+
+.wd-col {
+  flex: 1;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.wd-bar {
+  border-radius: 5px 5px 0 0;
+  background: var(--success);
+  min-height: 2px;
+}
+
+.wd-name {
+  font-size: 11px;
+  font-weight: 600;
+  text-align: center;
+  color: var(--text-secondary);
+}

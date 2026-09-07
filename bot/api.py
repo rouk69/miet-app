@@ -29,7 +29,7 @@ import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
-from . import analytics, auth, directory, notify, posts, render, storage
+from . import analytics, auth, directory, help_board, notify, posts, render, storage
 from . import media as mediastore
 
 log = logging.getLogger("miet.api")
@@ -103,6 +103,11 @@ def handle(method: str, path: str, query: dict, body: dict, init_data: str):
 
     if path.startswith("/api/directory/") and method == "GET":
         return _directory(path, query)
+
+    if path == "/api/help" or path.startswith("/api/help/"):
+        if method == "POST" and not me["blocked"]:
+            analytics.touch(user, source="app")
+        return _help(path, method, query, body, uid, me)
 
     if path.startswith("/api/admin/"):
         return _admin(path, method, query, body, uid, me)
@@ -180,6 +185,52 @@ def _directory(path: str, query: dict):
         if not found["slots"]:
             return 404, {"error": "Такой аудитории в расписании нет"}
         return 200, found
+
+    return 404, {"error": "Нет такого маршрута"}
+
+
+HELP_PATH = re.compile(r"^/api/help/(\d+)/(close|reopen|delete)$")
+
+
+def _help(path: str, method: str, query: dict, body: dict, uid: int, me: dict):
+    """Доска взаимопомощи. Читают все вошедшие, пишут тоже — это её смысл."""
+    if me["blocked"]:
+        return 403, {"error": "Доступ закрыт"}
+    manager = analytics.can(me, "help_manage")
+
+    if path == "/api/help" and method == "GET":
+        out = help_board.board(kind=(query.get("kind", [""])[0] or ""),
+                               q=(query.get("q", [""])[0] or "").strip())
+        out["mine"] = help_board.mine(uid)
+        out["can_manage"] = manager
+        return 200, out
+
+    if path == "/api/help" and method == "POST":
+        try:
+            offer = help_board.create(
+                uid, body.get("kind") or "need", body.get("subject") or "",
+                body.get("text") or "", body.get("price") or "free")
+        except help_board.Refused as e:
+            return 400, {"error": str(e)}
+        return 200, {"ok": True, "offer": offer}
+
+    m = HELP_PATH.match(path)
+    if m and method == "POST":
+        offer_id, what = int(m.group(1)), m.group(2)
+        offer = help_board.one(offer_id)
+        if not offer:
+            return 404, {"error": "Объявление не найдено"}
+        # Своё объявление человек ведёт сам: закрыть, открыть заново,
+        # убрать. Чужие — только тот, кому выдана уборка раздела.
+        if offer["author_id"] != uid and not manager:
+            return 403, {"error": "Это чужое объявление"}
+        if what == "close":
+            help_board.close(offer_id)
+        elif what == "reopen":
+            help_board.reopen(offer_id)
+        else:
+            help_board.delete(offer_id)
+        return 200, {"ok": True}
 
     return 404, {"error": "Нет такого маршрута"}
 
@@ -441,7 +492,20 @@ def _admin(path: str, method: str, query: dict, body: dict, uid: int, me: dict):
         days = min(60, max(7, int(query.get("days", ["14"])[0] or 14)))
         out = analytics.overview(days)
         out["feed"] = posts.stats()
+        out["help"] = help_board.stats()
+        out["hours"] = analytics.by_hours(days)
+        out["weekdays"] = analytics.by_weekday()
         return 200, out
+
+    if path == "/api/admin/days" and method == "GET":
+        days = min(90, max(7, int(query.get("days", ["30"])[0] or 30)))
+        return 200, {"days": analytics.days_list(days)}
+
+    if path == "/api/admin/day" and method == "GET":
+        date = (query.get("date", [""])[0] or "").strip()
+        if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", date):
+            return 400, {"error": "Нужна дата вида 2026-09-07"}
+        return 200, analytics.day_detail(date)
 
     if path == "/api/admin/users" and method == "GET":
         return 200, analytics.users_page(
