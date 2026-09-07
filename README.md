@@ -66,6 +66,8 @@ python -m bot.setup_bot
 **Проверка без Telegram** — четыре сюиты, 417 проверок:
 
 ```bash
+python tools/check_modules.py  # клиент: импорты, имена, иконки, классы
+python tools/check_app.py      # клиент: выполнение модулей в движке JS
 python -m bot.selftest     # 50 — единицы кода и живой API miet.ru
 python -m bot.test_flows   # 127 — сценарии целиком
 python -m bot.test_admin   # 134 — права, справочник, доска, дни
