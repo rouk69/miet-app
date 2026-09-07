@@ -293,6 +293,94 @@ def overview(days: int = 14) -> dict:
     }
 
 
+def by_hours(days: int = 14) -> list:
+    """
+    Когда людьми пользуются приложением — по часам суток (московским).
+
+    Отвечает на вопрос, который нельзя получить из дневных графиков:
+    в какое время писать объявление, чтобы его увидели.
+    """
+    rows = dict(conn().execute(
+        """SELECT CAST(strftime('%H', ts, ?) AS INTEGER) h, COUNT(*)
+           FROM events WHERE ts >= datetime('now', ?) GROUP BY h""",
+        (MSK, "-" + str(days) + " days")))
+    return [{"hour": h, "count": rows.get(h, 0)} for h in range(24)]
+
+
+def by_weekday(days: int = 28) -> list:
+    """По дням недели. strftime('%w') отдаёт 0 для воскресенья."""
+    rows = dict(conn().execute(
+        """SELECT CAST(strftime('%w', ts, ?) AS INTEGER) d, COUNT(*)
+           FROM events WHERE ts >= datetime('now', ?) GROUP BY d""",
+        (MSK, "-" + str(days) + " days")))
+    names = ["Вс", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб"]
+    # Неделя начинается с понедельника: воскресенье в конце.
+    order = [1, 2, 3, 4, 5, 6, 0]
+    return [{"day": names[d], "count": rows.get(d, 0)} for d in order]
+
+
+def day_detail(date: str, limit: int = 100) -> dict:
+    """
+    Кто что делал в конкретный день.
+
+    Дневные графики отвечают «сколько», а этот запрос — «кто именно»:
+    список людей с числом действий, первым и последним касанием.
+    """
+    c = conn()
+    rows = c.execute(
+        """SELECT e.user_id, COUNT(*) n,
+                  MIN(time(e.ts, ?)) first_at, MAX(time(e.ts, ?)) last_at,
+                  SUM(e.kind='open'), SUM(e.kind='tab'), SUM(e.kind='bot'),
+                  u.first_name, u.last_name, u.username, u.group_name
+           FROM events e LEFT JOIN users u ON u.user_id = e.user_id
+           WHERE date(e.ts, ?) = ?
+           GROUP BY e.user_id ORDER BY n DESC LIMIT ?""",
+        (MSK, MSK, MSK, date, max(1, min(limit, 300)))).fetchall()
+
+    people = [{
+        "id": r[0], "actions": r[1], "first_at": r[2], "last_at": r[3],
+        "opens": r[4] or 0, "tabs": r[5] or 0, "bot": r[6] or 0,
+        "name": " ".join(x for x in (r[7], r[8]) if x) or f"id {r[0]}",
+        "username": r[9] or "", "group": r[10] or "",
+    } for r in rows]
+
+    kinds = dict(c.execute(
+        "SELECT kind, COUNT(*) FROM events WHERE date(ts, ?) = ? GROUP BY kind",
+        (MSK, date)))
+    tabs = [{"name": n, "count": k} for n, k in c.execute(
+        """SELECT name, COUNT(*) n FROM events
+           WHERE kind='tab' AND date(ts, ?) = ? GROUP BY name ORDER BY n DESC""",
+        (MSK, date))]
+    hours = dict(c.execute(
+        """SELECT CAST(strftime('%H', ts, ?) AS INTEGER) h, COUNT(*)
+           FROM events WHERE date(ts, ?) = ? GROUP BY h""", (MSK, MSK, date)))
+    newcomers = c.execute(
+        "SELECT COUNT(*) FROM users WHERE date(first_seen, ?) = ?",
+        (MSK, date)).fetchone()[0]
+
+    return {
+        "date": date,
+        "people": people,
+        "kinds": kinds,
+        "tabs": tabs,
+        "newcomers": newcomers,
+        "hours": [{"hour": h, "count": hours.get(h, 0)} for h in range(24)],
+    }
+
+
+def days_list(days: int = 30) -> list:
+    """Дни с числом людей и действий — оглавление для разбора по дням."""
+    rows = dict((d, (n, u)) for d, n, u in conn().execute(
+        """SELECT date(ts, ?) d, COUNT(*) n, COUNT(DISTINCT user_id) u
+           FROM events WHERE ts >= datetime('now', ?) GROUP BY d""",
+        (MSK, "-" + str(days) + " days")))
+    out = []
+    for d in _days_back(days):
+        actions, people = rows.get(d, (0, 0))
+        out.append({"date": d, "actions": actions, "people": people})
+    return out
+
+
 USER_FIELDS = ("user_id, username, first_name, last_name, photo_url, "
                "group_name, is_premium, opens, seen_app, seen_bot, "
                "first_seen, last_seen")
@@ -314,10 +402,14 @@ def users_page(q: str = "", limit: int = 50, offset: int = 0) -> dict:
         # Ищем сразу по всему, чем человек может быть назван: ник, имя,
         # группа, числовой id. Гадать, что именно ввели, не нужно — список
         # маленький, и лишнее совпадение дешевле пустого ответа.
-        where = ("WHERE username LIKE ?1 OR first_name LIKE ?1 OR "
-                 "last_name LIKE ?1 OR group_name LIKE ?1 OR "
-                 "CAST(user_id AS TEXT) LIKE ?1")
-        args = ["%" + q + "%"]
+        # lower_ru вместо LIKE как есть: SQLite не знает регистра
+        # кириллицы, и «иванов» не находил «Иванова».
+        where = ("WHERE lower_ru(username) LIKE ?1 "
+                 "OR lower_ru(first_name) LIKE ?1 "
+                 "OR lower_ru(last_name) LIKE ?1 "
+                 "OR lower_ru(group_name) LIKE ?1 "
+                 "OR CAST(user_id AS TEXT) LIKE ?1")
+        args = ["%" + q.lower() + "%"]
     total = c.execute("SELECT COUNT(*) FROM users " + where, args).fetchone()[0]
     rows = c.execute(
         "SELECT " + USER_FIELDS + " FROM users " + where +
@@ -361,6 +453,29 @@ def user_card(user_id: int, days: int = 30) -> dict | None:
         "screens": counts.get("screen", 0),
         "commands": counts.get("bot", 0),
     }
+
+    # Чем человек пользуется в боте: команды и кнопки по отдельности.
+    # «12 обращений» ничего не говорят, а «/today — 9 раз» говорят всё.
+    card["bot_actions"] = [{"name": n, "count": k} for n, k in c.execute(
+        """SELECT name, COUNT(*) n FROM events
+           WHERE user_id=? AND kind='bot' GROUP BY name ORDER BY n DESC LIMIT 15""",
+        (user_id,)).fetchall()]
+    card["screens_top"] = [{"name": n, "count": k} for n, k in c.execute(
+        """SELECT name, COUNT(*) n FROM events
+           WHERE user_id=? AND kind='screen' GROUP BY name
+           ORDER BY n DESC LIMIT 10""", (user_id,)).fetchall()]
+    # В какие часы он обычно заходит.
+    hours = dict(c.execute(
+        """SELECT CAST(strftime('%H', ts, ?) AS INTEGER) h, COUNT(*)
+           FROM events WHERE user_id=? GROUP BY h""", (MSK, user_id)))
+    card["hours"] = [{"hour": h, "count": hours.get(h, 0)} for h in range(24)]
+    # Дни, когда он вообще появлялся, — с разбивкой по видам действий.
+    card["days"] = [{"date": d, "actions": n, "opens": o or 0, "bot": b or 0}
+                    for d, n, o, b in c.execute(
+        """SELECT date(ts, ?) d, COUNT(*), SUM(kind='open'), SUM(kind='bot')
+           FROM events WHERE user_id=? GROUP BY d ORDER BY d DESC LIMIT 30""",
+        (MSK, user_id)).fetchall()]
+    card["active_days"] = len(card["days"])
     card["activity"] = [{"date": d, "count": have.get(d, 0)}
                         for d in _days_back(days)]
     card["feed"] = [{"kind": k, "name": n, "ts": t} for k, n, t in c.execute(

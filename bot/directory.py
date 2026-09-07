@@ -141,9 +141,10 @@ def teachers(q: str = "", limit: int = 40) -> list:
     if q:
         rows = c.execute(
             """SELECT teacher, COUNT(*) n, COUNT(DISTINCT group_name) g
-               FROM lessons_index WHERE teacher LIKE ? AND teacher NOT LIKE ?
+               FROM lessons_index
+               WHERE lower_ru(teacher) LIKE ? AND teacher NOT LIKE ?
                GROUP BY teacher ORDER BY teacher LIMIT ?""",
-            (f"%{q}%", PLACEHOLDER, max(1, min(limit, 100)))).fetchall()
+            (f"%{q.lower()}%", PLACEHOLDER, max(1, min(limit, 100)))).fetchall()
     else:
         rows = c.execute(
             """SELECT teacher, COUNT(*) n, COUNT(DISTINCT group_name) g
@@ -192,8 +193,8 @@ def teacher_schedule(name: str) -> dict:
 
 def rooms(q: str = "", limit: int = 60) -> list:
     c = conn()
-    where = "WHERE room <> ''" + (" AND room LIKE ?" if q else "")
-    args = ([f"%{q}%"] if q else []) + [max(1, min(limit, 200))]
+    where = "WHERE room <> ''" + (" AND lower_ru(room) LIKE ?" if q else "")
+    args = ([f"%{q.lower()}%"] if q else []) + [max(1, min(limit, 200))]
     rows = c.execute(
         f"""SELECT room, COUNT(*) n FROM lessons_index {where}
             GROUP BY room ORDER BY room LIMIT ?""", args).fetchall()

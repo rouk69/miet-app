@@ -169,6 +169,23 @@ SCHEMA = [
         key   TEXT PRIMARY KEY,
         value TEXT
     )""",
+    # Доска взаимопомощи: «нужна помощь по матанализу» и «могу помочь с
+    # схемотехникой». Отдельно от ленты намеренно — у объявления другая
+    # жизнь: оно закрывается, когда вопрос решён, и не имеет смысла в
+    # хронологическом потоке рядом с новостями.
+    """CREATE TABLE IF NOT EXISTS help_offers (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id    INTEGER NOT NULL,
+        kind       TEXT NOT NULL DEFAULT 'need',
+        subject    TEXT NOT NULL,
+        text       TEXT,
+        price      TEXT NOT NULL DEFAULT 'free',
+        status     TEXT NOT NULL DEFAULT 'open',
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        closed_at  TEXT
+    )""",
+    "CREATE INDEX IF NOT EXISTS help_open ON help_offers(status, kind, id)",
+    "CREATE INDEX IF NOT EXISTS help_author ON help_offers(user_id, status)",
 ]
 
 # Столбцы, доросшие к таблицам позже. У баз, созданных раньше, их нет —
@@ -195,6 +212,11 @@ ADDED_COLUMNS = {
         ("reply_to", "INTEGER"),
     ],
 }
+
+
+def _lower_ru(value):
+    """Нижний регистр с кириллицей. NULL остаётся NULL, как в SQL."""
+    return value.lower() if isinstance(value, str) else value
 
 
 class Rows(list):
@@ -252,6 +274,13 @@ class Shared:
             self._raw.execute("PRAGMA journal_mode=WAL")
             self._raw.execute("PRAGMA synchronous=NORMAL")
             self._raw.execute("PRAGMA busy_timeout=5000")
+            # LIKE в SQLite приводит к нижнему регистру только латиницу:
+            # «матан» не находил «Матанализ», а «иванов» — «Иванова».
+            # Своя функция чинит это для всего поиска сразу; индекс на ней
+            # не работает, но таблицы здесь маленькие, а полный скан
+            # десятка тысяч строк — доли миллисекунды.
+            self._raw.create_function("lower_ru", 1, _lower_ru,
+                                      deterministic=True)
             for stmt in SCHEMA:
                 self._raw.execute(stmt)
             for table, columns in ADDED_COLUMNS.items():

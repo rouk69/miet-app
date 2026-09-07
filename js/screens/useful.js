@@ -32,6 +32,8 @@ const SECTIONS = [
         sub: 'Сколько нужно набрать' },
       { id: 'dates', ico: 'calendar', tone: 'blue', title: 'Ключевые даты',
         sub: 'Семестр, недели, сессия' },
+      { id: 'help', ico: 'handshake', tone: 'blue', title: 'Помощь в заданиях',
+        sub: 'Найти старшекурсника' },
       { id: 'curators', ico: 'handHeart', tone: 'blue', title: 'Кураторы',
         sub: 'Кто ведёт первый курс' },
     ],
