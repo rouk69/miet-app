@@ -32,6 +32,8 @@ const SECTIONS = [
         sub: 'Сколько нужно набрать' },
       { id: 'dates', ico: 'calendar', tone: 'blue', title: 'Ключевые даты',
         sub: 'Семестр, недели, сессия' },
+      { id: 'curators', ico: 'handHeart', tone: 'blue', title: 'Кураторы',
+        sub: 'Кто ведёт первый курс' },
     ],
   },
   {
@@ -45,6 +47,8 @@ const SECTIONS = [
         sub: 'Библиотека, столовая, спорт' },
       { id: 'contacts', ico: 'phone', tone: 'green', title: 'Контакты',
         sub: 'Телефоны и почта' },
+      { id: 'chats', ico: 'messageCircle', tone: 'green', title: 'Чаты',
+        sub: 'Каналы и сообщества' },
       { id: 'dorm', ico: 'homes', tone: 'warm', title: 'Общежития',
         sub: 'Адреса и заселение' },
       { id: 'money', ico: 'wallet', tone: 'warm', title: 'Деньги',

@@ -22,6 +22,7 @@ import useful from './screens/useful.js';
 import directory, { teacherScreen, roomScreen } from './screens/teachers.js';
 import { scoreScreen, convertScreen } from './screens/tools.js';
 import { glossaryScreen, contactsScreen, datesScreen } from './screens/guide.js';
+import { chatsScreen, curatorsScreen } from './screens/community.js';
 
 applyTheme(settings.theme);
 initTelegram(settings.theme);
@@ -41,6 +42,8 @@ register('convert', convertScreen);
 register('glossary', glossaryScreen);
 register('contacts', contactsScreen);
 register('dates', datesScreen);
+register('chats', chatsScreen);
+register('curators', curatorsScreen);
 register('article', articleScreen);
 register('clubs', clubs);
 register('club', clubScreen);
