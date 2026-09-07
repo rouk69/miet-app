@@ -1,0 +1,147 @@
+# -*- coding: utf-8 -*-
+"""Сверка импортов и экспортов между ES-модулями: движка JS в системе нет."""
+import io
+import os
+import re
+import sys
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.stdout.reconfigure(encoding="utf-8")
+
+files = []
+for base, _, names in os.walk(os.path.join(ROOT, "js")):
+    for n in names:
+        if n.endswith(".js"):
+            files.append(os.path.join(base, n))
+
+src = {f: io.open(f, encoding="utf-8").read() for f in files}
+
+EXPORT_NAMED = re.compile(r"^export\s+(?:async\s+)?(?:const|let|var|function|class)\s+([A-Za-z_$][\w$]*)", re.M)
+EXPORT_LIST = re.compile(r"^export\s*\{([^}]*)\}", re.M)
+EXPORT_DEFAULT = re.compile(r"^export\s+default\b", re.M)
+IMPORT = re.compile(r"^import\s+(.+?)\s+from\s+['\"](.+?)['\"]", re.M | re.S)
+
+exports = {}
+for f, s in src.items():
+    names = set(EXPORT_NAMED.findall(s))
+    for chunk in EXPORT_LIST.findall(s):
+        for part in chunk.split(","):
+            part = part.strip()
+            if not part:
+                continue
+            names.add(part.split(" as ")[-1].strip())
+    if EXPORT_DEFAULT.search(s):
+        names.add("default")
+    exports[os.path.normpath(f)] = names
+
+problems = []
+for f, s in src.items():
+    for clause, target in IMPORT.findall(s):
+        path = os.path.normpath(os.path.join(os.path.dirname(f), target))
+        if path not in exports:
+            problems.append(f"{os.path.relpath(f, ROOT)}: нет файла {target}")
+            continue
+        wanted = set()
+        m = re.search(r"\{([^}]*)\}", clause)
+        if m:
+            for part in m.group(1).split(","):
+                part = part.strip()
+                if part:
+                    wanted.add(part.split(" as ")[0].strip())
+        if re.match(r"^[A-Za-z_$][\w$]*\s*(,|$)", clause.strip()):
+            wanted.add("default")
+        missing = wanted - exports[path]
+        for name in sorted(missing):
+            problems.append(
+                f"{os.path.relpath(f, ROOT)}: {target} не экспортирует «{name}»")
+
+# Имена иконок должны существовать: опечатка рисует пустое место молча.
+icons_src = src[os.path.normpath(os.path.join(ROOT, "js", "icons.js"))]
+known = set(re.findall(r"^\s{2}([A-Za-z][\w$]*):", icons_src, re.M))
+for f, s in src.items():
+    if f.endswith("icons.js"):
+        continue
+    for name in re.findall(r"icon\(\s*'([A-Za-z][\w$]*)'", s):
+        if name not in known:
+            problems.append(f"{os.path.relpath(f, ROOT)}: нет иконки «{name}»")
+
+# Классы, которые рисует админка, должны быть в CSS.
+css = "".join(io.open(os.path.join(ROOT, "css", n), encoding="utf-8").read()
+              for n in ("tokens.css", "app.css"))
+for name in ("admin.js", "admin-days.js", "feed.js", "home.js", "useful.js", "teachers.js", "tools.js", "guide.js", "community.js", "help.js"):
+    js = src[os.path.normpath(os.path.join(ROOT, "js", "screens", name))]
+    for cls in sorted(set(re.findall(r'class="([^"$]+)"', js))):
+        for one in cls.split():
+            if one and "." + one not in css:
+                problems.append(f"{name}: класс «{one}» не описан в CSS")
+
+SHARED = {
+    "esc", "el", "icon", "listCard", "listRow", "emptyState", "toast", "sheet",
+    "lightbox", "segmented", "bindChoice", "toggle", "kpi", "skeleton",
+    "iconTile", "pillRow", "contactRows", "screen", "pickGroup", "newsCard",
+    "newsRow", "humanDate", "shortDate", "iconBtn", "go", "switchTab",
+    "refresh", "register", "current", "depth", "isTab", "TABS", "data",
+    "settings", "save", "loadData", "applyTheme", "markRead", "toggleFavorite",
+    "isFavorite", "account", "canTalk", "get", "post", "track", "syncGroup",
+    "loadMe", "flush", "API_BASE", "tg", "tgUser", "inTelegram", "haptic",
+    "hapticSelect", "hapticNotify", "openLink", "confirmDialog", "alertDialog",
+    "BackButton", "initTelegram", "syncChrome", "fetchSchedule", "weekOfCycle",
+    "semesterStart", "nowState", "slotsOf", "lessonsOf", "dayCounts",
+    "DAY_NAMES", "DAY_SHORT", "weekDates", "parseSubject", "shortSemestr",
+    "mondayOf", "lessonRow", "postCard", "feedRow", "excerpt", "hoursStrip",
+    "plural", "dayLabel", "weekdayOf", "KIND_NAMES", "TAB_NAMES",
+    "moderationScreen", "articleScreen", "clubScreen", "campusItemScreen",
+    "instituteScreen", "adminUserScreen", "teacherScreen", "roomScreen",
+    "scoreScreen", "convertScreen", "glossaryScreen", "contactsScreen",
+    "datesScreen", "chatsScreen", "curatorsScreen", "dayScreen",
+}
+
+IMPORT_NAMES = re.compile(r"^import\s+([\s\S]*?)\s+from", re.M)
+DECLARED = re.compile(
+    r"\b(?:const|let|var|function|class)\s+([A-Za-z_$][\w$]*)")
+
+
+def module_names(src: str):
+    """Что модуль получает извне и что объявляет сам."""
+    known = set()
+    for clause in IMPORT_NAMES.findall(src):
+        inside = re.search(r"\{([^}]*)\}", clause)
+        if inside:
+            for part in inside.group(1).split(","):
+                part = part.strip()
+                if part:
+                    known.add(part.split(" as ")[-1].strip())
+        head = clause.strip().split(",")[0].strip()
+        if head and not head.startswith("{"):
+            known.add(head)
+    known |= set(DECLARED.findall(src))
+    return known
+
+
+
+def check_free_names(src_map, problems):
+    """
+    Имена, которые модуль использует, но нигде не берёт.
+
+    Сверка импортов проверяет обратное — что импортируемое имя кем-то
+    экспортировано. Забытый импорт она не видит, а в браузере это
+    ReferenceError и пустой экран.
+    """
+    for path, text in src_map.items():
+        known = module_names(text)
+        used = set(re.findall(r"(?<![.\w$])([A-Za-z_$][\w$]*)\s*\(", text))
+        used |= set(re.findall(r"(?<![.\w$])([A-Z][\w$]*)", text))
+        for n in sorted((used & SHARED) - known):
+            problems.append(
+                f"{os.path.relpath(path, ROOT)}: «{n}» используется, "
+                "но не импортирован")
+
+
+check_free_names(src, problems)
+
+if problems:
+    print("НАЙДЕНО:")
+    for p in problems:
+        print("  ! " + p)
+    sys.exit(1)
+print(f"импорты, иконки и классы сходятся ({len(files)} модулей)")
