@@ -100,7 +100,7 @@ export default async function adminScreen() {
     body: `
       <div class="pill-row admin-tabs" id="atabs">
         ${[['stats', 'Статистика'], ['days', 'По дням'], ['users', 'Юзеры'],
-    ['roles', 'Роли']]
+    ['roles', 'Роли'], ['flags', 'Настройки']]
     .map(([id, label]) => `
           <button class="pill ${tab === id ? 'active' : ''}" data-atab="${id}">${label}</button>`).join('')}
       </div>
@@ -125,6 +125,7 @@ async function paint(pane) {
     if (tab === 'stats') pane.innerHTML = await statsPane();
     else if (tab === 'days') await daysPane(pane);
     else if (tab === 'users') await usersPane(pane);
+    else if (tab === 'flags') await flagsPane(pane);
     else await rolesPane(pane);
   } catch (err) {
     pane.innerHTML = errorCard(err);
@@ -373,6 +374,56 @@ async function rolesPane(pane) {
         одним тапом закрыть себе вход.
       </div>
     </div>`;
+}
+
+// ─────────────── вкладка «Настройки» ───────────────
+
+/**
+ * Переключатели режима ленты. Меняет их только полный админ — сервер это
+ * и проверяет; здесь тумблеры просто не показываются остальным.
+ */
+async function flagsPane(pane) {
+  const { flags } = await get('/api/admin/settings');
+
+  const draw = list => {
+    pane.innerHTML = `
+      <p class="section-note" style="margin-top:0">
+        Меняются на ходу и переживают перезапуск бота.
+      </p>
+      <div class="list-card">
+        ${list.map(f => `
+          <div class="list-row">
+            <div class="list-row-body">
+              <div class="row-title">${esc(f.title)}</div>
+              <div class="row-subtitle">${esc(f.note)}</div>
+            </div>
+            ${toggle(f.value, f.key)}
+          </div>`).join('')}
+      </div>
+
+      <div class="fab-note">
+        Премодерация не касается тех, кто сам разбирает очередь: отправлять
+        пост на одобрение самому себе незачем.
+      </div>`;
+  };
+  draw(flags);
+
+  pane.addEventListener('click', async e => {
+    const t = e.target.closest('[data-toggle]');
+    if (!t) return;
+    const key = t.dataset.toggle;
+    const value = !t.classList.contains('on');
+    t.classList.toggle('on', value);
+    haptic('light');
+    try {
+      const r = await post('/api/admin/settings', { key, value });
+      hapticNotify('success');
+      draw(r.flags);
+    } catch (err) {
+      toast(err.message);
+      t.classList.toggle('on', !value);
+    }
+  });
 }
 
 // ─────────────── карточка человека ───────────────

@@ -29,7 +29,8 @@ import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
-from . import analytics, auth, directory, help_board, notify, posts, render, storage
+from . import analytics, appconf, auth, directory, help_board, notify, posts
+from . import render, storage
 from . import media as mediastore
 
 log = logging.getLogger("miet.api")
@@ -135,7 +136,10 @@ def _me(user: dict, me: dict) -> dict:
         "blocked": me["blocked"],
         "is_admin": me["is_admin"],
         "can_stats": analytics.can(me, "stats"),
-        "can_write": analytics.can(me, "posts_write"),
+        # Право писать даёт либо выданное разрешение, либо режим
+        # «писать могут все», включённый владельцем.
+        "can_write": _may_write(me),
+        "premoderate": _waits_approval(me),
         "can_moderate": analytics.can(me, "posts_moderate"),
         "can_anon": analytics.can(me, "posts_anon"),
         "can_delete": analytics.can(me, "posts_delete"),
@@ -146,6 +150,22 @@ def _me(user: dict, me: dict) -> dict:
         # её на другом устройстве, и наоборот.
         "group": saved.get("group"),
     }
+
+
+def _may_write(me: dict) -> bool:
+    return analytics.can(me, "posts_write") or appconf.get("posts_open")
+
+
+def _waits_approval(me: dict) -> bool:
+    """
+    Пойдёт ли пост этого человека в очередь.
+
+    Режим премодерации не распространяется на тех, кто сам разбирает
+    очередь: отправлять пост на одобрение самому себе бессмысленно, а
+    очередь из собственных записей мешает увидеть чужие.
+    """
+    return (appconf.get("posts_premoderate")
+            and not analytics.can(me, "posts_moderate"))
 
 
 def _label(me: dict) -> str:
@@ -283,7 +303,7 @@ def _feed(path: str, method: str, query: dict, body: dict, uid: int, me: dict):
             can_see_authors=deep, see_all=everything)
 
     if path == "/api/posts" and method == "POST":
-        if not analytics.can(me, "posts_write"):
+        if not _may_write(me):
             return 403, {"error": "Нет права писать посты"}
         media = ""
         if body.get("image"):
@@ -301,7 +321,8 @@ def _feed(path: str, method: str, query: dict, body: dict, uid: int, me: dict):
                 anon=bool(body.get("anon")),
                 media=media,
                 author_label=_label(me),
-                may_publish_anon=analytics.can(me, "posts_anon"))
+                may_publish_anon=analytics.can(me, "posts_anon"),
+                premoderate=_waits_approval(me))
         except posts.Refused as e:
             return 400, {"error": str(e)}
         return 200, {"ok": True, "post": post,
@@ -496,6 +517,19 @@ def _admin(path: str, method: str, query: dict, body: dict, uid: int, me: dict):
         out["hours"] = analytics.by_hours(days)
         out["weekdays"] = analytics.by_weekday()
         return 200, out
+
+    if path == "/api/admin/settings":
+        if method == "GET":
+            return 200, {"flags": appconf.described()}
+        if method == "POST":
+            if not me["is_admin"]:
+                return 403, {"error": "Настройки меняет только полный админ"}
+            key = str(body.get("key") or "")
+            try:
+                appconf.set_flag(key, bool(body.get("value")))
+            except KeyError:
+                return 400, {"error": "Неизвестная настройка"}
+            return 200, {"ok": True, "flags": appconf.described()}
 
     if path == "/api/admin/days" and method == "GET":
         days = min(90, max(7, int(query.get("days", ["30"])[0] or 30)))

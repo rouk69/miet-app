@@ -26,14 +26,17 @@ const QUICK = [
 
 export default async function home() {
   const user = tgUser();
-  const name = user?.first_name ? `Привет, ${user.first_name}` : 'МИЭТ';
   const now = new Date();
 
   const node = screen({
-    title: name,
-    subtitle: humanDate(now),
+    // Заголовок называет приложение, а не здоровается: «Привет, Дима»
+    // человек читает один раз, а потом оно просто занимает верх экрана.
+    // Имя осталось в приветственной карточке для тех, кто здесь впервые.
+    title: 'НИУ МИЭТ',
+    subtitle: 'Расписание, новости и жизнь университета',
     actions: iconBtn('search', 'search') + iconBtn('user', 'profile'),
     body: `
+      <div id="hello-slot"></div>
       <div id="now-slot" class="stack"></div>
 
       <div class="section-head"><div class="section-title">Разделы</div></div>
@@ -68,6 +71,9 @@ export default async function home() {
 
       <div class="fab-note">Данные с miet.ru · обновлено ${esc(data.meta?.generated || '')}</div>`,
   });
+
+  // ── знакомство ──
+  renderHello(node.querySelector('#hello-slot'), user);
 
   // ── карточка «сейчас» ──
   const slot = node.querySelector('#now-slot');
@@ -104,6 +110,53 @@ export default async function home() {
   });
 
   return node;
+}
+
+// Карточку «что это такое» человек читает один раз. Дальше она мешает:
+// главная нужна, чтобы за две секунды увидеть свою пару.
+const HELLO_KEY = 'miet-hello-seen';
+
+/**
+ * Короткий рассказ о приложении — только тем, кто здесь впервые, и
+ * ровно до первого «Понятно».
+ */
+function renderHello(slot, user) {
+  if (!slot) return;
+  let seen = false;
+  try {
+    seen = localStorage.getItem(HELLO_KEY) === '1';
+  } catch { /* приватный режим — покажем ещё раз, не страшно */ }
+  if (seen) return;
+
+  const name = user?.first_name ? `${user.first_name}, привет` : 'Привет';
+  slot.innerHTML = `
+    <div class="card hello">
+      <div class="hello-title">${esc(name)}</div>
+      <div class="hello-text">
+        Это неофициальное приложение студентов МИЭТ. Здесь расписание твоей
+        группы с живого сайта, лента новостей и объявлений, справочник
+        преподавателей и аудиторий, кружки и всё, что обычно приходится
+        искать по чатам.
+      </div>
+      <div class="hello-list">
+        ${[
+      ['calendar', 'Расписание', 'Пары на сегодня и всю неделю цикла'],
+      ['news', 'Лента', 'Новости университета и объявления'],
+      ['teacher', 'Преподаватели', 'Кто ведёт, где и с какими группами'],
+      ['grid', 'Полезное', 'Баллы, кураторы, контакты, помощь с заданиями'],
+    ].map(([ico, title, sub]) => `
+          <div class="hello-row">
+            <span class="hello-ico">${icon(ico, 17)}</span>
+            <span><b>${esc(title)}</b> — ${esc(sub)}</span>
+          </div>`).join('')}
+      </div>
+      <button class="btn-primary" id="hello-ok">Понятно</button>
+    </div>`;
+
+  slot.querySelector('#hello-ok').addEventListener('click', () => {
+    try { localStorage.setItem(HELLO_KEY, '1'); } catch { /* не критично */ }
+    slot.innerHTML = '';
+  });
 }
 
 /**
@@ -183,7 +236,7 @@ async function renderNow(slot, now) {
   slot.innerHTML = `
     ${card}
     <div class="section-head" style="margin-top:6px">
-      <div class="section-title">${day <= 6 ? DAY_NAMES[day] : 'Расписание'}</div>
+      <div class="section-title">${day <= 6 ? DAY_NAMES[day] : 'Расписание'}, ${humanDate(now).split(', ')[1]}</div>
       <button class="section-link" data-go="schedule">Вся неделя</button>
     </div>
     ${today.length

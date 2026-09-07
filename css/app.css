@@ -1487,3 +1487,53 @@ textarea.field-input {
   text-align: center;
   color: var(--text-secondary);
 }
+
+/* ---------- Знакомство на главной ---------- */
+
+/* Показывается один раз: дальше главная нужна, чтобы за две секунды
+   увидеть свою пару, а не читать описание приложения. */
+.hello {
+  padding: 18px;
+  margin-bottom: 12px;
+}
+
+.hello-title {
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  margin-bottom: 6px;
+}
+
+.hello-text {
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+.hello-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 14px 0 16px;
+}
+
+.hello-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 14px;
+  line-height: 1.4;
+  color: var(--text);
+}
+
+.hello-ico {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 9px;
+  background: var(--primary-dim);
+  color: var(--primary);
+  flex-shrink: 0;
+}
