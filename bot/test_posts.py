@@ -459,6 +459,19 @@ check("владельцу приходит контакт", last.get("contact") 
       last.get("contact"))
 check("и признак, что контакты доступны", lst["contacts"] is True, lst)
 
+# Профиль автора должен попасть в базу вместе с самим комментарием: раньше
+# он приезжал только с событиями, и у того, чей клиент не успел их
+# отправить, не было даже ника — контакт получался пустым.
+FRESH = init_data(55, "Новичок", "fresh_nick")
+s, c = api.handle("POST", f"/api/posts/{tree_id}/comments", {},
+                  {"text": "Первый раз здесь"}, FRESH)
+s, lst = api.handle("GET", f"/api/posts/{tree_id}/comments", {}, {}, ADMIN)
+check("ник новичка известен сразу",
+      lst["comments"][-1]["contact"]["username"] == "fresh_nick",
+      lst["comments"][-1]["contact"])
+check("и имя тоже", lst["comments"][-1]["author_name"] == "Новичок",
+      lst["comments"][-1]["author_name"])
+
 s, lst = api.handle("GET", f"/api/posts/{tree_id}/comments", {}, {}, PIN)
 check("обычному человеку контактов не отдают",
       all("contact" not in c for c in lst["comments"]), lst["comments"][:1])
@@ -468,8 +481,8 @@ api.handle("POST", "/api/admin/users/20/role", {},
            {"role": "moderator", "perms": ["comments_delete"], "sections": []}, ADMIN)
 s, lst = api.handle("GET", f"/api/posts/{tree_id}/comments", {}, {}, PIN)
 check("тому, кто убирает комментарии, контакт нужен и приходит",
-      lst["comments"][-1].get("contact", {}).get("username") == "en24",
-      lst["comments"][-1].get("contact"))
+      all(c.get("contact", {}).get("username") for c in lst["comments"]),
+      [c.get("contact") for c in lst["comments"]])
 api.handle("POST", "/api/admin/users/20/role", {},
            {"role": "none", "perms": [], "sections": []}, ADMIN)
 
