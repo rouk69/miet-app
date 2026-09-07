@@ -553,7 +553,16 @@ function composer() {
         </div>
       </div>
 
-      <button class="btn-primary" id="send">Опубликовать</button>`,
+      ${account.premoderate ? `
+        <div class="warn-note">
+          ${icon('info', 16)}
+          Пост появится в ленте после одобрения — сейчас так работает вся
+          лента, а не только анонимные записи.
+        </div>` : ''}
+
+      <button class="btn-primary" id="send">
+        ${account.premoderate ? 'Отправить на одобрение' : 'Опубликовать'}
+      </button>`,
     onMount(root, close) {
       const aud = root.querySelector('#aud');
 
@@ -598,6 +607,8 @@ function composer() {
           hapticNotify('success');
           close();
           toast(r.pending ? 'Отправлено на одобрение' : 'Опубликовано');
+          // Пост в очереди в ленте не появится — обновлять её незачем,
+          // но человек должен видеть, что кнопка сработала.
           refresh();
         } catch (err) {
           toast(err.message);

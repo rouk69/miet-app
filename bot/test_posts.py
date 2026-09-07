@@ -510,6 +510,78 @@ check("сам себе писем не шлём", not letters2, letters2)
 notify.bind(None)
 
 
+print("\n23. Режимы ленты")
+from . import appconf                                              # noqa: E402
+
+# Обычный студент писать не может: права нет, лента закрыта.
+api.handle("POST", "/api/admin/users/20/role", {},
+           {"role": "none", "perms": [], "sections": []}, ADMIN)
+s, me = api.handle("GET", "/api/me", {}, {}, PIN)
+check("по умолчанию писать нельзя", not me["can_write"], me)
+s, _ = api.handle("POST", "/api/posts", {}, {"text": "Проба"}, PIN)
+check("и сервер отказывает", s == 403, s)
+
+s, flags = api.handle("GET", "/api/admin/settings", {}, {}, ADMIN)
+check("настройки отдаются", s == 200 and len(flags["flags"]) == 2, flags)
+check("по умолчанию всё выключено",
+      all(not f["value"] for f in flags["flags"]), flags["flags"])
+
+s, _ = api.handle("POST", "/api/admin/settings", {},
+                  {"key": "posts_open", "value": True}, PIN)
+check("настройки меняет не всякий", s == 403, s)
+
+api.handle("POST", "/api/admin/settings", {},
+           {"key": "posts_open", "value": True}, ADMIN)
+s, me = api.handle("GET", "/api/me", {}, {}, PIN)
+check("с открытой лентой писать можно", me["can_write"], me)
+s, r = api.handle("POST", "/api/posts", {}, {"text": "Первый пост студента"}, PIN)
+check("и пост публикуется сразу", s == 200
+      and r["post"]["status"] == "published", (s, r))
+open_post = r["post"]["id"]
+
+# Теперь включаем общую премодерацию: через очередь идёт всё.
+api.handle("POST", "/api/admin/settings", {},
+           {"key": "posts_premoderate", "value": True}, ADMIN)
+s, me = api.handle("GET", "/api/me", {}, {}, PIN)
+check("человек знает, что пост уйдёт на одобрение", me["premoderate"], me)
+s, r = api.handle("POST", "/api/posts", {}, {"text": "Обычный, не анонимный"}, PIN)
+check("даже подписанный пост ждёт одобрения",
+      r["pending"] and r["post"]["status"] == "pending", r)
+waiting = r["post"]["id"]
+s, f = api.handle("GET", "/api/feed", {}, {}, EN)
+check("в ленте его нет", all(p["id"] != waiting for p in f["posts"]), f["total"])
+s, q = api.handle("GET", "/api/admin/moderation", {}, {}, ADMIN)
+check("зато он в очереди", any(x["id"] == waiting for x in q["posts"]), q["posts"])
+
+# У того, кто сам разбирает очередь, премодерации нет: отправлять пост
+# самому себе на одобрение бессмысленно.
+s, me_admin = api.handle("GET", "/api/me", {}, {}, ADMIN)
+check("владельца премодерация не касается", not me_admin["premoderate"], me_admin)
+s, r = api.handle("POST", "/api/posts", {}, {"text": "От владельца"}, ADMIN)
+check("его пост публикуется сразу", r["post"]["status"] == "published", r["post"])
+
+api.handle("POST", f"/api/admin/posts/{waiting}/approve", {}, {}, ADMIN)
+s, f = api.handle("GET", "/api/feed", {}, {}, EN)
+check("после одобрения появляется в ленте",
+      any(p["id"] == waiting for p in f["posts"]), f["total"])
+
+s, _ = api.handle("POST", "/api/admin/settings", {},
+                  {"key": "выдумка", "value": True}, ADMIN)
+check("неизвестная настройка отвергнута", s == 400, s)
+
+# Возвращаем всё как было: настройки живут в базе и переживают перезапуск,
+# поэтому проверка обязана убирать за собой.
+api.handle("POST", "/api/admin/settings", {},
+           {"key": "posts_premoderate", "value": False}, ADMIN)
+api.handle("POST", "/api/admin/settings", {},
+           {"key": "posts_open", "value": False}, ADMIN)
+check("режимы выключились", not appconf.get("posts_open")
+      and not appconf.get("posts_premoderate"), appconf.all_flags())
+s, me = api.handle("GET", "/api/me", {}, {}, PIN)
+check("и писать снова нельзя", not me["can_write"], me)
+api.handle("POST", f"/api/posts/{open_post}/delete", {}, {}, ADMIN)
+
+
 print("\n" + "=" * 58)
 print(f"пройдено {ok}, провалено {fail}")
 print("=" * 58)

@@ -48,7 +48,8 @@ def _clean(s: str, limit: int) -> str:
 
 def create(author_id: int, text: str, *, title: str = "", groups=None,
            options=None, anon: bool = False, media: str = "",
-           author_label: str = "", may_publish_anon: bool = False) -> dict:
+           author_label: str = "", may_publish_anon: bool = False,
+           premoderate: bool = False) -> dict:
     """
     Заводит пост. Возвращает его же, прочитанным обратно из базы.
 
@@ -56,6 +57,10 @@ def create(author_id: int, text: str, *, title: str = "", groups=None,
     обычного автора его нет, поэтому анонимный пост встаёт в очередь:
     подпись «Анонимно» снимает ответственность с автора, и раздавать её
     без разбора нельзя.
+
+    `premoderate` — общий режим «всё через очередь». Включается, когда
+    ленту открывают всем: тогда неважно, анонимный пост или подписанный,
+    сначала его читает человек.
     """
     text = _clean(text, MAX_TEXT)
     title = _clean(title, MAX_TITLE)
@@ -69,7 +74,8 @@ def create(author_id: int, text: str, *, title: str = "", groups=None,
 
     groups = [g for g in {str(g).strip() for g in (groups or [])} if g]
     audience = "groups" if groups else "all"
-    status = "published" if (not anon or may_publish_anon) else "pending"
+    anon_waits = anon and not may_publish_anon
+    status = "pending" if (premoderate or anon_waits) else "published"
 
     c = conn()
     cur = c.execute(
