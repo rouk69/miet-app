@@ -106,6 +106,12 @@ def handle(method: str, path: str, query: dict, body: dict, init_data: str):
 
     if (path == "/api/feed" or path.startswith("/api/posts")
             or path.startswith("/api/comments")):
+        # Всё, что человек оставляет после себя, подписано им: профиль
+        # должен быть в базе до того, как понадобится. Раньше он попадал
+        # туда только вместе с событиями, и у автора комментария, чей
+        # клиент не успел их отправить, не было даже ника.
+        if method == "POST" and not me["blocked"]:
+            analytics.touch(user, source="app")
         return _feed(path, method, query, body, uid, me)
 
     return 404, {"error": "Нет такого маршрута"}
