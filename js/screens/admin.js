@@ -51,7 +51,9 @@ function ago(ts) {
   return parseTs(ts).toLocaleDateString('ru-RU');
 }
 
-const dayLabel = iso => iso.slice(8, 10) + '.' + iso.slice(5, 7);
+// dayLabel и weekdayOf приезжают из admin-days.js — свои копии здесь были
+// бы вторым определением того же имени, а это уже не дубль кода, а
+// SyntaxError: модуль перестаёт грузиться целиком.
 
 const fullName = u =>
   [u.first_name, u.last_name].filter(Boolean).join(' ') || `id ${u.id}`;
