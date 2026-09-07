@@ -9,12 +9,14 @@ const routes = new Map();
 const stack = [];
 let appEl, navEl;
 
+// Четыре вкладки — предел, после которого подписи начинают жаться, а
+// нижняя панель превращается в свалку. Кружки и профиль переехали внутрь
+// «Полезного»: туда заходят по делу, а не постоянно.
 export const TABS = [
   { id: 'home', label: 'Главная', ico: 'home' },
   { id: 'schedule', label: 'Расписание', ico: 'calendar' },
-  { id: 'news', label: 'Новости', ico: 'news' },
-  { id: 'clubs', label: 'Кружки', ico: 'sparkles' },
-  { id: 'profile', label: 'Профиль', ico: 'user' },
+  { id: 'news', label: 'Лента', ico: 'news' },
+  { id: 'useful', label: 'Полезное', ico: 'grid' },
 ];
 
 const isTab = name => TABS.some(t => t.id === name);

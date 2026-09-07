@@ -143,6 +143,31 @@ SCHEMA = [
     )""",
     "CREATE INDEX IF NOT EXISTS comments_post ON comments(post_id, id)",
     "CREATE INDEX IF NOT EXISTS comments_user ON comments(user_id, id)",
+    # Плоский слепок расписания всех групп: по нему ищутся преподаватели и
+    # аудитории. miet.ru отдаёт расписание только по группе, поэтому вопрос
+    # «где сейчас Иванов» без такого индекса требует 346 запросов к сайту.
+    # Таблица целиком пересобирается раз в сутки — история тут не нужна.
+    """CREATE TABLE IF NOT EXISTS lessons_index (
+        teacher    TEXT NOT NULL,
+        room       TEXT,
+        subject    TEXT,
+        kind       TEXT,
+        group_name TEXT NOT NULL,
+        day        INTEGER NOT NULL,
+        week       INTEGER NOT NULL,
+        pair       INTEGER,
+        t_from     TEXT,
+        t_to       TEXT
+    )""",
+    "CREATE INDEX IF NOT EXISTS lessons_teacher ON lessons_index(teacher)",
+    "CREATE INDEX IF NOT EXISTS lessons_room ON lessons_index(room)",
+    "CREATE INDEX IF NOT EXISTS lessons_when ON lessons_index(week, day, pair)",
+    # Когда индекс собран и по какому семестру: смена семестра означает,
+    # что старые данные показывать уже нельзя.
+    """CREATE TABLE IF NOT EXISTS index_meta (
+        key   TEXT PRIMARY KEY,
+        value TEXT
+    )""",
 ]
 
 # Столбцы, доросшие к таблицам позже. У баз, созданных раньше, их нет —

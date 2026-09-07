@@ -27,6 +27,7 @@ from telebot.apihelper import ApiTelegramException
 from . import analytics
 from . import api as web          # HTTP-API мини-приложения; schedule_api ниже
 from . import keyboards as kbs
+from . import directory
 from . import news_feed
 from . import notify
 from . import posts as feed
@@ -977,6 +978,10 @@ def main() -> None:
     # Новости с miet.ru бот тянет сам: data/app.json обновляется только
     # при пересборке руками, а лента должна пополняться без выкладок.
     news_feed.run_in_background()
+
+    # Справочник преподавателей и аудиторий: обход всех групп раз в сутки.
+    # Стартует с задержкой — сначала должен подняться опрос Telegram.
+    directory.run_in_background()
 
     log.info("Бот @%s запущен", BOT_USERNAME)
     if WEBAPP_URL:

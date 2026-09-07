@@ -15,13 +15,13 @@ import { feedRow } from './feed.js';
 // всего, поэтому стоят прямо на главной.
 const QUICK = [
   { id: 'url:https://orioks.miet.ru/main/login', ico: 'chart', label: 'ОРИОКС' },
+  { id: 'teachers', ico: 'teacher', label: 'Преподаватели' },
+  { id: 'score', ico: 'target', label: 'Баллы' },
   { id: 'url:https://account.miet.ru/', ico: 'key', label: 'Кабинет' },
   { id: 'campus:canteen', ico: 'utensils', label: 'Столовая' },
   { id: 'campus:library', ico: 'book', label: 'Библиотека' },
-  { id: 'campus:dorm', ico: 'homes', label: 'Общежития' },
-  { id: 'campus:scholarship', ico: 'wallet', label: 'Стипендии' },
-  { id: 'links', ico: 'link', label: 'Ссылки' },
-  { id: 'campus', ico: 'compass', label: 'Все разделы' },
+  { id: 'clubs', ico: 'sparkles', label: 'Кружки' },
+  { id: 'useful-tab', ico: 'grid', label: 'Всё полезное' },
 ];
 
 export default async function home() {
@@ -32,7 +32,7 @@ export default async function home() {
   const node = screen({
     title: name,
     subtitle: humanDate(now),
-    actions: iconBtn('search', 'search'),
+    actions: iconBtn('search', 'search') + iconBtn('user', 'profile'),
     body: `
       <div id="now-slot" class="stack"></div>
 
@@ -80,11 +80,15 @@ export default async function home() {
 
   // ── обработчики ──
   node.querySelector('[data-action="search"]')?.addEventListener('click', () => go('search'));
+  // Профиль перестал быть вкладкой, но с главной до него должно быть
+  // одно нажатие: там группа, тема и всё своё.
+  node.querySelector('[data-action="profile"]')?.addEventListener('click', () => go('profile'));
   node.addEventListener('click', e => {
     const q = e.target.closest('[data-quick]');
     if (q) {
       const raw = q.dataset.quick;
       if (raw.startsWith('url:')) return openLink(raw.slice(4));
+      if (raw === 'useful-tab') return switchTab('useful');
       const [route, id] = raw.split(':');
       return go(route === 'campus' && id ? 'campusItem' : route, { id });
     }

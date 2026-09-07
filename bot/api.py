@@ -29,7 +29,7 @@ import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
-from . import analytics, auth, notify, posts, render, storage
+from . import analytics, auth, directory, notify, posts, render, storage
 from . import media as mediastore
 
 log = logging.getLogger("miet.api")
@@ -101,6 +101,9 @@ def handle(method: str, path: str, query: dict, body: dict, init_data: str):
     if path == "/api/track" and method == "POST":
         return _track(user, me, body)
 
+    if path.startswith("/api/directory/") and method == "GET":
+        return _directory(path, query)
+
     if path.startswith("/api/admin/"):
         return _admin(path, method, query, body, uid, me)
 
@@ -149,6 +152,36 @@ def _label(me: dict) -> str:
     if me["role"] == "moderator":
         return "Модератор"
     return "Студент"
+
+
+def _directory(path: str, query: dict):
+    """
+    Справочник преподавателей и аудиторий. Открыт всем, кто вошёл: это
+    то же расписание, что и так лежит на miet.ru, только повёрнутое
+    другой стороной.
+    """
+    q = (query.get("q", [""])[0] or "").strip()
+    name = (query.get("name", [""])[0] or "").strip()
+
+    if path == "/api/directory/teachers":
+        return 200, {"teachers": directory.teachers(q), "meta": directory.meta()}
+
+    if path == "/api/directory/teacher" and name:
+        found = directory.teacher_schedule(name)
+        if not found["slots"]:
+            return 404, {"error": "Такого преподавателя в расписании нет"}
+        return 200, found
+
+    if path == "/api/directory/rooms":
+        return 200, {"rooms": directory.rooms(q), "meta": directory.meta()}
+
+    if path == "/api/directory/room" and name:
+        found = directory.room_schedule(name)
+        if not found["slots"]:
+            return 404, {"error": "Такой аудитории в расписании нет"}
+        return 200, found
+
+    return 404, {"error": "Нет такого маршрута"}
 
 
 def _track(user: dict, me: dict, body: dict):
