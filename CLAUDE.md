@@ -312,7 +312,7 @@ python tools/update.py
 ```bash
 python -m bot.selftest      # логика, рендер, клавиатуры, лимиты — 50
 python -m bot.test_flows    # обработчики целиком, Telegram подменён — 127
-python -m bot.test_admin    # подпись, учёт, права, справочник — 95
+python -m bot.test_admin    # подпись, учёт, права, справочник — 98
 python -m bot.test_posts    # лента, комментарии, ветки — 106
 ```
 

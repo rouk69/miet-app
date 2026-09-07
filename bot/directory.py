@@ -127,20 +127,29 @@ def meta() -> dict:
 
 # ─────────────────────────── поиск ───────────────────────────
 
+# У физкультуры, военной подготовки и практик МИЭТ ставит в расписание не
+# фамилию, а заглушку «Преподаватель ФВ», «Преподаватель П.П.». Пар у них
+# тысячи, поэтому в списке они забивают весь верх, а найти по ним никого
+# нельзя. Из поиска убираем, из расписания аудиторий — нет: там эта пара
+# занимает кабинет так же, как любая другая.
+PLACEHOLDER = "Преподаватель%"
+
+
 def teachers(q: str = "", limit: int = 40) -> list:
     """Преподаватели с числом пар. Пустой запрос — самые загруженные."""
     c = conn()
     if q:
         rows = c.execute(
             """SELECT teacher, COUNT(*) n, COUNT(DISTINCT group_name) g
-               FROM lessons_index WHERE teacher LIKE ?
+               FROM lessons_index WHERE teacher LIKE ? AND teacher NOT LIKE ?
                GROUP BY teacher ORDER BY teacher LIMIT ?""",
-            (f"%{q}%", max(1, min(limit, 100)))).fetchall()
+            (f"%{q}%", PLACEHOLDER, max(1, min(limit, 100)))).fetchall()
     else:
         rows = c.execute(
             """SELECT teacher, COUNT(*) n, COUNT(DISTINCT group_name) g
-               FROM lessons_index GROUP BY teacher
-               ORDER BY n DESC LIMIT ?""", (max(1, min(limit, 100)),)).fetchall()
+               FROM lessons_index WHERE teacher NOT LIKE ?
+               GROUP BY teacher ORDER BY n DESC LIMIT ?""",
+            (PLACEHOLDER, max(1, min(limit, 100)))).fetchall()
     return [{"name": t, "lessons": n, "groups": g} for t, n, g in rows]
 
 
