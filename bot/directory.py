@@ -38,6 +38,10 @@ PAUSE = 0.4
 # Ждём после старта: сначала должен подняться опрос Telegram и API.
 DELAY = 5 * 60
 
+# Через сколько повторить, если обход не удался. Сутки без справочника
+# из-за одной неудачной попытки — слишком дорого.
+RETRY = 60 * 60
+
 
 # Что происходит прямо сейчас. Снаружи это единственный способ отличить
 # «обход идёт» от «обход упал»: логи Amvera видны только владельцу, а
@@ -209,16 +213,25 @@ def run_in_background() -> threading.Thread:
     def loop():
         time.sleep(DELAY)
         while True:
+            wait = EVERY
             try:
-                log.info("справочник: проверяю, нужен ли обход")
                 # Если индекс уже собран сегодня — не трогаем сайт лишний
                 # раз: перезапуск контейнера не повод обходить 346 групп.
                 built = meta()
-                if not built["lessons"] or _stale(built["built_at"]):
-                    rebuild()
+                if built["lessons"] and not _stale(built["built_at"]):
+                    log.info("справочник свежий (%d записей), обход не нужен",
+                             built["lessons"])
+                else:
+                    log.info("справочник: начинаю обход групп")
+                    if not rebuild():
+                        # Сутки без справочника из-за одной неудачной
+                        # попытки — слишком дорого. Пробуем снова через час.
+                        wait = RETRY
             except Exception:
                 log.exception("сбор справочника сорвался")
-            time.sleep(EVERY)
+                state.update(running=False, error="сорвался, см. лог")
+                wait = RETRY
+            time.sleep(wait)
 
     t = threading.Thread(target=loop, name="directory", daemon=True)
     t.start()
