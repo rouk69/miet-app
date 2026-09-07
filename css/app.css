@@ -1210,3 +1210,123 @@ textarea.field-input {
   display: flex;
   gap: 8px;
 }
+
+/* ---------- Плитки «Полезного» ---------- */
+
+.tile-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.tile-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 16px;
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+  text-align: left;
+  transition: transform 0.12s ease;
+}
+
+.tile-card:active { transform: scale(0.97); }
+
+.tile-ico {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  margin-bottom: 6px;
+  border-radius: 13px;
+}
+
+/* Пять оттенков закреплены за смыслом: учёба синяя, справочное зелёное,
+   деньги и жильё тёплые, инструменты фиолетовые, своё серое. Одинаковые
+   плитки не различались бы, пёстрые превратили бы экран в ёлку. */
+.tone-blue .tile-ico { background: var(--primary-dim); color: var(--primary); }
+.tone-green .tile-ico { background: rgba(52, 199, 89, 0.14); color: var(--success); }
+.tone-warm .tile-ico { background: rgba(255, 159, 10, 0.16); color: var(--warning); }
+.tone-violet .tile-ico { background: rgba(124, 92, 255, 0.14); color: #7C5CFF; }
+.tone-grey .tile-ico { background: var(--surface-2); color: var(--text-secondary); }
+
+.tile-name {
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.25;
+  color: var(--text);
+}
+
+.tile-sub {
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--text-secondary);
+}
+
+/* ---------- Справочник: день расписания ---------- */
+
+.day-block { margin-bottom: 14px; }
+
+.day-name {
+  margin-bottom: 8px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+/* ---------- Калькулятор баллов ---------- */
+
+.kt-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.kt-label {
+  width: 40px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+.kt-row .field-input { flex: 1; }
+
+.kt-drop {
+  color: var(--text-tertiary);
+  display: flex;
+}
+
+.need-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 14px;
+  color: var(--text);
+}
+
+.need-row b { font-weight: 700; color: var(--primary); }
+
+/* Недостижимая ступень: гасим целиком, чтобы взгляд не цеплялся за
+   цифру, которую всё равно не набрать. */
+.need-row.unreal { color: var(--text-tertiary); }
+.need-row.unreal b { color: var(--text-tertiary); font-weight: 600; }
+
+/* ---------- Конвертер ---------- */
+
+.convert-row {
+  display: flex;
+  gap: 10px;
+}
+
+.convert-row .field-input:first-child { flex: 1.2; }
+.convert-row select.field-input { flex: 1; }
+
+.convert-eq {
+  display: flex;
+  justify-content: center;
+  padding: 10px 0;
+  color: var(--text-tertiary);
+}

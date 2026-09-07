@@ -290,6 +290,82 @@ check("96 запросов уложились в 15 секунд", spent < 15, r
 print(f"    96 запросов из 8 потоков за {spent:.1f} с")
 
 
+print("\n14. Справочник преподавателей и аудиторий")
+from . import directory                                            # noqa: E402
+from . import schedule_api as sched_api                            # noqa: E402
+
+# Расписание подменяем фикстурой: обход настоящего miet.ru в проверках
+# означал бы 346 запросов к чужому сайту на каждый прогон.
+FIXTURE = {
+    "semestr": "Осенний семестр 2026/2027",
+    "lessons": [
+        {"day": 1, "week": 0, "pair": 1, "from": "09:00", "to": "10:20",
+         "subject": "Базы данных", "kindCls": "lek",
+         "teacher": "Иванов И.И.", "room": "3105"},
+        {"day": 1, "week": 0, "pair": 2, "from": "10:30", "to": "11:50",
+         "subject": "Матанализ", "kindCls": "pr",
+         "teacher": "Петров П.П.", "room": "3105"},
+        {"day": 2, "week": 1, "pair": 1, "from": "09:00", "to": "10:20",
+         "subject": "Базы данных", "kindCls": "lab",
+         "teacher": "Иванов И.И.", "room": "3118"},
+        # Пара без преподавателя — такие в расписании МИЭТ встречаются.
+        {"day": 3, "week": 0, "pair": 1, "from": "09:00", "to": "10:20",
+         "subject": "Физкультура", "kindCls": "oth", "teacher": "", "room": ""},
+    ],
+}
+sched_api.fetch_groups = lambda force=False: ["ПИН-31", "ПИН-32"]
+sched_api.fetch_schedule = lambda group, force=False: FIXTURE
+directory.PAUSE = 0
+
+rows = directory.rebuild()
+check("индекс собран", rows == 6, rows)
+check("пары без преподавателя не индексируются",
+      all(t["name"] for t in directory.teachers()), directory.teachers())
+meta = directory.meta()
+check("в мете записан семестр", meta["semestr"] == FIXTURE["semestr"], meta)
+check("и время сборки", bool(meta["built_at"]), meta)
+
+people = {t["name"]: t for t in directory.teachers()}
+check("преподаватели найдены", set(people) == {"Иванов И.И.", "Петров П.П."},
+      set(people))
+check("считаются группы", people["Иванов И.И."]["groups"] == 2, people)
+
+found = directory.teachers("Иван")
+check("поиск по части фамилии", [t["name"] for t in found] == ["Иванов И.И."], found)
+
+card = directory.teacher_schedule("Иванов И.И.")
+check("лекция потока схлопнута в одну пару", len(card["slots"]) == 2, card["slots"])
+check("но группы перечислены обе",
+      card["slots"][0]["groups"] == ["ПИН-31", "ПИН-32"], card["slots"][0])
+check("аудитории собраны", card["rooms"] == ["3105", "3118"], card["rooms"])
+check("предметы собраны", card["subjects"] == ["Базы данных"], card["subjects"])
+
+room = directory.room_schedule("3105")
+check("в аудитории две пары", len(room["slots"]) == 2, room["slots"])
+check("и два преподавателя", len(room["teachers"]) == 2, room["teachers"])
+
+s, r = api.handle("GET", "/api/directory/teachers", {"q": ["Петров"]}, {}, USER)
+check("справочник открыт обычному человеку", s == 200 and len(r["teachers"]) == 1,
+      (s, r))
+s, r = api.handle("GET", "/api/directory/teacher", {"name": ["Иванов И.И."]}, {}, USER)
+check("карточка отдаётся", s == 200 and len(r["slots"]) == 2, s)
+s, _ = api.handle("GET", "/api/directory/teacher", {"name": ["Сидоров"]}, {}, USER)
+check("неизвестного нет", s == 404, s)
+s, r = api.handle("GET", "/api/directory/rooms", {}, {}, USER)
+check("аудитории отдаются", s == 200 and len(r["rooms"]) == 2, r)
+s, _ = api.handle("GET", "/api/directory/room", {"name": ["9999"]}, {}, USER)
+check("несуществующей аудитории нет", s == 404, s)
+s, _ = api.handle("GET", "/api/directory/teachers", {}, {}, "мусор")
+check("без подписи справочник закрыт", s == 401, s)
+
+# Пересборка не должна оставлять половину данных, если сайт отвалился.
+sched_api.fetch_schedule = lambda group, force=False: (_ for _ in ()).throw(
+    RuntimeError("сайт недоступен"))
+kept = directory.rebuild()
+check("при недоступном сайте прежний индекс сохранён",
+      kept == 0 and directory.meta()["lessons"] == 6, directory.meta())
+
+
 print("\n" + "=" * 58)
 print(f"пройдено {ok}, провалено {fail}")
 print("=" * 58)

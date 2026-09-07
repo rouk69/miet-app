@@ -18,6 +18,10 @@ import search from './screens/search.js';
 import links from './screens/links.js';
 import support from './screens/support.js';
 import admin, { adminUserScreen } from './screens/admin.js';
+import useful from './screens/useful.js';
+import directory, { teacherScreen, roomScreen } from './screens/teachers.js';
+import { scoreScreen, convertScreen } from './screens/tools.js';
+import { glossaryScreen, contactsScreen, datesScreen } from './screens/guide.js';
 
 applyTheme(settings.theme);
 initTelegram(settings.theme);
@@ -28,6 +32,15 @@ register('schedule', schedule);
 register('news', feed);              // вкладка «Новости» — живая лента
 register('newsArchive', newsArchive); // архив из data/app.json
 register('moderation', moderationScreen);
+register('useful', useful);
+register('teachers', directory);
+register('teacher', teacherScreen);
+register('room', roomScreen);
+register('score', scoreScreen);
+register('convert', convertScreen);
+register('glossary', glossaryScreen);
+register('contacts', contactsScreen);
+register('dates', datesScreen);
 register('article', articleScreen);
 register('clubs', clubs);
 register('club', clubScreen);
