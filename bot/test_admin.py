@@ -333,6 +333,24 @@ check("считаются группы", people["Иванов И.И."]["groups"]
 found = directory.teachers("Иван")
 check("поиск по части фамилии", [t["name"] for t in found] == ["Иванов И.И."], found)
 
+# Физкультуре и военке МИЭТ вместо фамилии ставит заглушку, и пар у неё
+# тысячи: в списке она забивает весь верх, а найти по ней некого.
+FIXTURE["lessons"].append(
+    {"day": 4, "week": 0, "pair": 1, "from": "09:00", "to": "10:20",
+     "subject": "Физкультура", "kindCls": "oth",
+     "teacher": "Преподаватель ФВ", "room": "Спорткомплекс"})
+directory.rebuild()
+check("заглушка не попадает в список",
+      all(not t["name"].startswith("Преподаватель")
+          for t in directory.teachers()), directory.teachers())
+check("и в поиск тоже", directory.teachers("Преподаватель") == [],
+      directory.teachers("Преподаватель"))
+check("но аудиторию она занимает",
+      len(directory.room_schedule("Спорткомплекс")["slots"]) == 1,
+      directory.room_schedule("Спорткомплекс"))
+FIXTURE["lessons"].pop()
+directory.rebuild()
+
 card = directory.teacher_schedule("Иванов И.И.")
 check("лекция потока схлопнута в одну пару", len(card["slots"]) == 2, card["slots"])
 check("но группы перечислены обе",
