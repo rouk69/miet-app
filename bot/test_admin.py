@@ -553,6 +553,25 @@ def fake_sign_in(login, password):
 
 orioks_web.sign_in_cookie = fake_sign_in
 
+
+# Материалы: подменяем разбор страницы, чтобы проверки не ходили в сеть.
+WEB_FAIL = {"how": None}
+
+
+def fake_study(cookie):
+    if WEB_FAIL["how"] == "expired":
+        raise orioks_web.SessionExpired("Сессия ОРИОКС кончилась")
+    if WEB_FAIL["how"] == "down":
+        raise orioks_web.WebError("ОРИОКС недоступен (TimeoutError)")
+    return {"dises": [{"name": "Матанализ", "segments": [{"allKms": [
+        {"name": "Домашнее задание 1", "week": 4, "irs": [
+            {"name": "Условие ДЗ", "type": "Задание",
+             "link": "https://orioks.miet.ru/storage/d/1/dz.pdf"}]},
+    ]}]}]}
+
+
+orioks_web.study_json = fake_study
+
 s, r = api.handle("GET", "/api/orioks", {}, {}, USER)
 check("без подключения так и сказано", s == 200 and r["linked"] is False, r)
 
@@ -723,6 +742,44 @@ check("csrf вынимается из скрытого поля",
       == "Ab-9_z")
 check("без формы csrf пустой", orioks_web._csrf_of("<p>нет</p>") == "")
 
+
+
+# ── материалы, выложенные преподавателем ──
+# Текста задания в ОРИОКС нет нигде; есть вложение, которое его несёт.
+# Связь выше разрывали — подключаемся заново.
+api.handle("POST", "/api/orioks/link", {},
+           {"login": "stud", "password": "secret"}, USER)
+orioks.forget_materials(42)
+s_, r_ = api.handle("GET", "/api/orioks", {}, {}, USER)
+ev = r_["tasks"]["disciplines"][0]["events"]
+dz = [e for e in ev if e["name"] == "Домашнее задание 1"]
+check("вложение приклеилось к своему мероприятию",
+      dz and dz[0].get("materials"), ev)
+check("у вложения есть название и ссылка",
+      dz[0]["materials"][0]["name"] == "Условие ДЗ"
+      and dz[0]["materials"][0]["link"].endswith("dz.pdf"), dz[0]["materials"])
+check("у мероприятия без вложений список пуст",
+      not [e for e in ev if e["name"] == "Экзамен"][0].get("materials"), ev)
+check("счётчик вложений отдан", r_["tasks"]["materials_count"] == 1,
+      r_["tasks"].get("materials_count"))
+
+# Заминка у института не должна стоить человеку пароля.
+orioks.forget_materials(42)
+WEB_FAIL["how"] = "down"
+s_, r_ = api.handle("GET", "/api/orioks", {}, {}, USER)
+check("при недоступности ОРИОКС задания остаются", s_ == 200 and r_["linked"])
+check("и доступ не стирается", orioks.cookie_of(42) != "", orioks.cookie_of(42))
+
+# А кончившаяся сессия — стирается: держать мёртвую незачем.
+orioks.forget_materials(42)
+WEB_FAIL["how"] = "expired"
+api.handle("GET", "/api/orioks", {}, {}, USER)
+check("кончившаяся сессия убрана", orioks.cookie_of(42) == "")
+WEB_FAIL["how"] = None
+
+check("вложения без ссылки не берём",
+      orioks_web.materials({"dises": [{"name": "Д", "segments": [
+          {"allKms": [{"name": "К", "irs": [{"name": "без ссылки"}]}]}]}]}) == [])
 
 print("\n" + "=" * 58)
 print(f"пройдено {ok}, провалено {fail}")

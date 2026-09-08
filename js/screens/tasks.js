@@ -98,6 +98,12 @@ const taskRow = t => `
       <div class="todo-what">
         ${esc(t.title.main)}${t.title.note ? ` · ${esc(t.title.note)}` : ''}
       </div>
+      ${t.materials && t.materials.length ? `
+        <button class="todo-files" data-files="${t.idx}">
+          ${icon('fileText', 14)}
+          ${t.materials.length === 1 ? 'Файл задания'
+            : `Файлов: ${t.materials.length}`}
+        </button>` : ''}
     </div>
     <div class="todo-side">
       <div class="todo-when">${esc(t.due ? humanDate(t.due) : `${t.week || '?'} нед`)}</div>
@@ -105,6 +111,17 @@ const taskRow = t => `
         ${esc(leftLabel(t.left))}${t.max_grade ? ` · ${t.max_grade} б.` : ''}
       </div>
     </div>
+  </div>`;
+
+const fileRow = f => `
+  <div class="todo file-row" data-link="${esc(f.link)}">
+    <div class="todo-main">
+      <div class="todo-subject">${esc(f.name)}</div>
+      <div class="todo-what">
+        ${esc(f.subject)}${f.kind ? ` · ${esc(f.kind)}` : ''}
+      </div>
+    </div>
+    <div class="todo-side">${icon('external', 16)}</div>
   </div>`;
 
 const doneRow = t => `
@@ -156,6 +173,7 @@ export default async function tasksScreen() {
     const left = daysLeft(due);
     all.push({
       ...e,
+      idx: all.length,
       subject: d.name,
       title: titleOf(e),
       due,
@@ -177,6 +195,12 @@ export default async function tasksScreen() {
   const done = tasks.filter(t => t.done);
 
   const soon = pending.filter(t => t.left !== null && t.left <= 7).length;
+
+  // Вложения со всех мероприятий разом, включая те, что висят не на
+  // заданиях: у живого студента половина файлов лежит именно там.
+  const files = [];
+  all.forEach(t => (t.materials || []).forEach(
+    m => files.push({ ...m, subject: t.subject, event: t.title.main })));
 
   const node = screen({
     title: 'Что сдать',
@@ -215,6 +239,19 @@ export default async function tasksScreen() {
         </div>
         <div class="list-card" id="done-list" hidden>
           ${done.map(doneRow).join('')}
+        </div>` : ''}
+
+      ${files.length ? `
+        <div class="section-head">
+          <div class="section-title">Файлы от преподавателей</div>
+          <button class="section-link" id="toggle-files">${files.length}</button>
+        </div>
+        <p class="section-note">
+          Методички, условия и бланки. Это всё, что ОРИОКС знает о
+          заданиях сверх их названий.
+        </p>
+        <div class="list-card" id="files-list" hidden>
+          ${files.map(fileRow).join('')}
         </div>` : ''}
 
       ${formal.length ? `
@@ -262,8 +299,9 @@ export default async function tasksScreen() {
         Отключить ОРИОКС
       </button>
       <div class="fab-note">
-        Текста задания в ОРИОКС API нет — только что сдавать и к какому
-        сроку. Подробности и файлы открываются в самом ОРИОКС.
+        Текста задания в ОРИОКС нет вовсе — ни в приложении, ни на сайте.
+        Есть файлы, которые выложил преподаватель: они собраны здесь и
+        открываются в ОРИОКС.
       </div>`,
   });
 
@@ -313,6 +351,8 @@ export default async function tasksScreen() {
   });
 
   listBox.addEventListener('click', e => {
+    const filesBtn = e.target.closest('[data-files]');
+    if (filesBtn) return filesSheet(all[+filesBtn.dataset.files]);
     const more = e.target.closest('[data-unfold]');
     if (!more) return;
     // Перерисовываем список целиком вместо поиска соседних узлов: так
@@ -328,6 +368,11 @@ export default async function tasksScreen() {
       e.target.textContent = list.hidden ? count : 'скрыть';
     });
   toggler('#toggle-done', '#done-list', done.length);
+  toggler('#toggle-files', '#files-list', files.length);
+  node.querySelector('#files-list')?.addEventListener('click', e => {
+    const row = e.target.closest('[data-link]');
+    if (row) openLink(row.dataset.link);
+  });
   toggler('#toggle-formal', '#formal-list', formal.length);
   node.querySelector('[data-action="orioks"]').addEventListener('click',
     () => openLink('https://orioks.miet.ru/main/login'));
@@ -431,6 +476,45 @@ function linkSheet() {
           go.disabled = false;
           go.textContent = 'Войти';
         }
+      });
+    },
+  });
+}
+
+
+/**
+ * Файлы одного задания.
+ *
+ * Открываются в ОРИОКС, а не скачиваются сюда: ссылка живёт под
+ * сессией института, и подменять её собственным хранилищем значило бы
+ * копировать чужие материалы неизвестно куда.
+ */
+function filesSheet(task) {
+  const items = task.materials || [];
+  sheet({
+    title: task.title.main,
+    body: `
+      <div class="row-subtitle" style="margin-bottom:12px">
+        ${esc(task.subject)}
+      </div>
+      <div class="list-card">
+        ${items.map((m, i) => `
+          <div class="todo file-row" data-open="${i}">
+            <div class="todo-main">
+              <div class="todo-subject">${esc(m.name)}</div>
+              ${m.kind ? `<div class="todo-what">${esc(m.kind)}</div>` : ''}
+            </div>
+            <div class="todo-side">${icon('external', 16)}</div>
+          </div>`).join('')}
+      </div>
+      <div class="fab-note">
+        Откроется в ОРИОКС. Если попросит войти — это обычный вход,
+        приложение тут ни при чём.
+      </div>`,
+    onMount(root) {
+      root.addEventListener('click', e => {
+        const row = e.target.closest('[data-open]');
+        if (row) openLink(items[+row.dataset.open].link);
       });
     },
   });
