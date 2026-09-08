@@ -591,9 +591,33 @@ async function newsSheet(href, list) {
               ${it.date ? ` · ${esc(it.date)}` : ''}
             </div>
             ${it.text.split('\n').filter(Boolean)
-              .map(p => `<p>${esc(p)}</p>`).join('')}`;
+              .map(p => `<p>${linkify(p)}</p>`).join('')}`;
         })
         .catch(err => { box.textContent = err.message; });
+      box.addEventListener('click', e => {
+        const a = e.target.closest('a[data-url]');
+        if (!a) return;
+        e.preventDefault();
+        openLink(a.dataset.url);
+      });
     },
   });
+}
+
+
+/**
+ * Текст со ссылками: преподаватели дают в объявлениях литературу
+ * ссылками, и оставлять их непрожимаемой строкой — значит заставлять
+ * переписывать адрес руками.
+ *
+ * Экранируем по кускам, а не целиком: экранированный текст уже нельзя
+ * разбирать регулярным выражением, не рискуя склеить разметку.
+ */
+function linkify(text) {
+  const parts = String(text).split(/(https?:\/\/[^\s<>"']+)/g);
+  return parts.map((part, i) => {
+    if (i % 2 === 0) return esc(part);
+    const shown = part.length > 48 ? part.slice(0, 45) + '…' : part;
+    return `<a href="#" data-url="${esc(part)}">${esc(shown)}</a>`;
+  }).join('');
 }

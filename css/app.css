@@ -1646,6 +1646,14 @@ textarea.field-input {
 .news-body p { margin: 0 0 10px; }
 .news-body p:last-child { margin-bottom: 0; }
 
+/* Длинный адрес переносим по символам: иначе одна ссылка на PDF
+   растягивает лист шире экрана. */
+.news-body a {
+  color: var(--primary);
+  text-decoration: none;
+  word-break: break-all;
+}
+
 .news-meta {
   margin-bottom: 12px;
   font-size: 13px;
