@@ -302,6 +302,43 @@ def study_json(cookie: str) -> dict:
         raise WebError("Не разобрал данные учёбы (" + str(e) + ")")
 
 
+def form_fields(cookie: str, path: str) -> dict:
+    """
+    Поля формы на странице: имена, значения и что выбрано сейчас.
+
+    Пустая таблица на сайте — это либо «данных нет», либо «фильтр их
+    прячет». Различить можно, только прочитав сам фильтр.
+    """
+    html = get_page(cookie, path)
+    inputs = []
+    for tag in re.findall(r"<input[^>]*>", html, re.I):
+        inputs.append({
+            "name": _attr(tag, "name"),
+            "type": _attr(tag, "type"),
+            "value": _attr(tag, "value")[:60],
+        })
+    selects = []
+    for whole in re.findall(r"(?is)<select[^>]*>.*?</select>", html):
+        head = whole[:whole.find(">") + 1]
+        options = []
+        for opt in re.findall(r"(?is)<option[^>]*>.*?</option>", whole):
+            options.append({
+                "value": _attr(opt, "value"),
+                "selected": "selected" in opt.lower(),
+                "text": re.sub(r"\s+", " ",
+                               re.sub(r"<[^>]+>", "", opt)).strip()[:60],
+            })
+        selects.append({"name": _attr(head, "name"), "options": options})
+    rows = len(re.findall(r"(?i)<tr[\s>]", html))
+    return {"страница": path, "поля": [i for i in inputs if i["name"]],
+            "списки": selects, "строк таблицы": rows}
+
+
+def _attr(tag: str, name: str) -> str:
+    m = re.search(name + r"=[\"']([^\"']*)[\"']", tag, re.I)
+    return m.group(1) if m else ""
+
+
 def endpoints(cookie: str, path: str = STUDY_PATH, limit: int = 8) -> dict:
     """
     Какие адреса дёргает сам кабинет.

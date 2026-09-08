@@ -634,6 +634,11 @@ def _admin(path: str, method: str, query: dict, body: dict, uid: int, me: dict):
                                   "переподключи ОРИОКС в разделе заданий"}
         page = (query.get("page", [""])[0] or "").strip()
         try:
+            if query.get("form"):
+                # Поля фильтра: пустая таблица — это либо «данных нет»,
+                # либо «фильтр их прячет», и различить можно только так.
+                return 200, orioks_web.form_fields(
+                    cookie, page or "/student/homework/list")
             if query.get("urls"):
                 # Куда ходит сам кабинет: адреса источников данных лежат
                 # в его скриптах, а не в разметке.
