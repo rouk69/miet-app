@@ -208,6 +208,30 @@ def forget(user_id: int) -> None:
     conn().execute("DELETE FROM orioks_links WHERE user_id=?", (user_id,))
 
 
+def save_cookie(user_id: int, cookie: str) -> None:
+    """
+    Сессия веб-версии. Строка появляется только после подключения, а
+    подключение — только по явному вводу пароля самим человеком.
+    """
+    conn().execute(
+        "UPDATE orioks_links SET web_cookie=?, web_at=CURRENT_TIMESTAMP "
+        "WHERE user_id=?", (cookie, user_id))
+
+
+def cookie_of(user_id: int) -> str:
+    row = conn().execute(
+        "SELECT web_cookie FROM orioks_links WHERE user_id=?",
+        (user_id,)).fetchone()
+    return (row[0] or "") if row else ""
+
+
+def drop_cookie(user_id: int) -> None:
+    """Отключение стирает сессию сразу, не дожидаясь, пока протухнет."""
+    conn().execute(
+        "UPDATE orioks_links SET web_cookie=NULL, web_at=NULL "
+        "WHERE user_id=?", (user_id,))
+
+
 def linked_count() -> int:
     return conn().execute("SELECT COUNT(*) FROM orioks_links").fetchone()[0]
 
