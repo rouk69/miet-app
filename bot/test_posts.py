@@ -582,6 +582,53 @@ check("и писать снова нельзя", not me["can_write"], me)
 api.handle("POST", f"/api/posts/{open_post}/delete", {}, {}, ADMIN)
 
 
+print("\n24. Мусор из очереди можно убрать")
+# Раньше запись со статусом pending не проходила проверку видимости, и её
+# нельзя было ни открыть, ни удалить — даже владельцу. Отклонить можно, а
+# отклонённое оставалось в базе навсегда. Поймано на боевом сервере.
+api.handle("POST", "/api/admin/users/10/role", {},
+           {"role": "moderator", "perms": ["posts_write"], "sections": []}, ADMIN)
+s, r = api.handle("POST", "/api/posts", {},
+                  {"text": "Мусор в очереди", "anon": True}, WRITER)
+trash = r["post"]["id"]
+check("запись ждёт одобрения", r["post"]["status"] == "pending", r["post"])
+
+s, _ = api.handle("GET", f"/api/posts/{trash}", {}, {}, PIN)
+check("посторонний её не откроет", s == 404, s)
+s, _ = api.handle("POST", f"/api/posts/{trash}/delete", {}, {}, PIN)
+# 404, а не 403: посторонний не должен даже узнать, что такая запись есть.
+check("и не удалит", s == 404, s)
+
+s, _ = api.handle("POST", f"/api/posts/{trash}/delete", {}, {}, ADMIN)
+check("владелец удаляет запись прямо из очереди", s == 200, s)
+s, q = api.handle("GET", "/api/admin/moderation", {}, {}, ADMIN)
+check("из очереди она исчезла",
+      all(x["id"] != trash for x in q["posts"]), q["posts"])
+check("и из базы тоже", posts_mod.one(trash, 777, force=True) is None)
+
+# Отклонённая запись тоже должна убираться: она не опубликована, значит
+# обычную проверку видимости не проходит.
+s, r = api.handle("POST", "/api/posts", {},
+                  {"text": "Отклонить и убрать", "anon": True}, WRITER)
+rejected = r["post"]["id"]
+api.handle("POST", f"/api/admin/posts/{rejected}/reject", {}, {}, ADMIN)
+s, _ = api.handle("POST", f"/api/posts/{rejected}/delete", {}, {}, ADMIN)
+check("отклонённая запись удаляется", s == 200, s)
+
+# Послабление не должно открывать чтение: адресные посты чужих групп
+# модератору по-прежнему недоступны.
+s, r = api.handle("POST", "/api/posts", {},
+                  {"text": "Только ПИН-31", "groups": ["ПИН-31"]}, WRITER)
+closed = r["post"]["id"]
+api.handle("POST", "/api/admin/users/30/role", {},
+           {"role": "moderator", "perms": ["posts_moderate"], "sections": []}, ADMIN)
+s, _ = api.handle("GET", f"/api/posts/{closed}", {}, {}, EN)
+check("модератор не читает адресный пост чужой группы", s == 404, s)
+api.handle("POST", "/api/admin/users/30/role", {},
+           {"role": "none", "perms": [], "sections": []}, ADMIN)
+api.handle("POST", f"/api/posts/{closed}/delete", {}, {}, ADMIN)
+
+
 print("\n" + "=" * 58)
 print(f"пройдено {ok}, провалено {fail}")
 print("=" * 58)
