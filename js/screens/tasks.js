@@ -179,16 +179,34 @@ const newsRow = n => {
   </button>`;
 };
 
-const fileRow = f => `
-  <div class="todo file-row" data-link="${esc(f.link)}">
-    <div class="todo-main">
-      <div class="todo-subject">${esc(f.name)}</div>
-      <div class="todo-what">
-        ${esc(f.subject)}${f.kind ? ` · ${esc(f.kind)}` : ''}
+// Что за файл — видно по значку раньше, чем прочитано название: у
+// преподавателей они называются «Федотова_ТА_КРиДК_СР1_Деловое письмо».
+export function fileLook(name, link) {
+  const what = (name + ' ' + (link || '')).toLowerCase();
+  if (/\.pdf(\?|$|%|\s)/.test(what)) return { glyph: 'fileText', label: 'PDF' };
+  if (/\.docx?(\?|$|%|\s)/.test(what)) return { glyph: 'edit', label: 'DOC' };
+  if (/\.xlsx?(\?|$|%|\s)/.test(what)) return { glyph: 'grid', label: 'Таблица' };
+  if (/\.pptx?(\?|$|%|\s)/.test(what)) return { glyph: 'palette', label: 'Слайды' };
+  if (/\.zip|\.rar|\.7z/.test(what)) return { glyph: 'folder', label: 'Архив' };
+  if (/ссылк|http/.test(what)) return { glyph: 'link', label: 'Ссылка' };
+  return { glyph: 'clipboard', label: '' };
+}
+
+const fileRow = f => {
+  const look = fileLook(f.name, f.link);
+  return `
+  <button class="news-card file-card" data-link="${esc(f.link)}">
+    <div class="news-badge">${icon(look.glyph, 19)}</div>
+    <div class="news-main">
+      <div class="news-title">${esc(f.name)}</div>
+      <div class="news-foot">
+        <span>${esc(f.subject)}</span>
+        ${look.label ? `<span class="file-kind">${esc(look.label)}</span>` : ''}
+        <span class="news-open">Открыть ${icon('external', 13)}</span>
       </div>
     </div>
-    <div class="todo-side">${icon('external', 16)}</div>
-  </div>`;
+  </button>`;
+};
 
 const doneRow = t => `
   <div class="todo done">
@@ -320,7 +338,7 @@ export default async function tasksScreen() {
       <div id="task-list"></div>
 
       ${session.length ? `
-        <div class="section-head"><div class="section-title">Сессия</div></div>
+        <div class="section-head"><div class="section-title with-icon">${icon('award', 17)} Сессия</div></div>
         <p class="section-note">Экзамены и зачёты — ими семестр кончается.</p>
         <div class="list-card">${session.map(taskRow).join('')}</div>` : ''}
 
@@ -335,14 +353,14 @@ export default async function tasksScreen() {
 
       ${files.length ? `
         <div class="section-head">
-          <div class="section-title">Файлы от преподавателей</div>
+          <div class="section-title with-icon">${icon('folder', 17)} Файлы от преподавателей</div>
           <button class="section-link" id="toggle-files">${files.length}</button>
         </div>
         <p class="section-note">
           Методички, условия и бланки. Это всё, что ОРИОКС знает о
           заданиях сверх их названий.
         </p>
-        <div class="list-card" id="files-list" hidden>
+        <div class="news-list" id="files-list" hidden>
           ${files.map(fileRow).join('')}
         </div>` : ''}
 
@@ -591,18 +609,35 @@ function filesSheet(task) {
   sheet({
     title: task.title.main,
     body: `
-      <div class="row-subtitle" style="margin-bottom:12px">
-        ${esc(task.subject)}
+      <div class="news-head tone-${subjectLook(task.subject).tone}">
+        <div class="news-badge">
+          ${icon(subjectLook(task.subject).glyph, 22)}
+        </div>
+        <div class="news-head-text">
+          <div class="news-subject">${esc(task.subject)}</div>
+          <div class="news-head-meta">
+            ${icon('clipboard', 13)}
+            <span>${esc(task.title.main)}</span>
+          </div>
+        </div>
       </div>
-      <div class="list-card">
-        ${items.map((m, i) => `
-          <div class="todo file-row" data-open="${i}">
-            <div class="todo-main">
-              <div class="todo-subject">${esc(m.name)}</div>
-              ${m.kind ? `<div class="todo-what">${esc(m.kind)}</div>` : ''}
+      <div class="news-list">
+        ${items.map((m, i) => {
+          const look = fileLook(m.name, m.link);
+          return `
+          <button class="news-card file-card" data-open="${i}">
+            <div class="news-badge">${icon(look.glyph, 19)}</div>
+            <div class="news-main">
+              <div class="news-title">${esc(m.name)}</div>
+              <div class="news-foot">
+                ${m.kind ? `<span>${esc(m.kind)}</span>` : ''}
+                ${look.label
+                  ? `<span class="file-kind">${esc(look.label)}</span>` : ''}
+                <span class="news-open">Открыть ${icon('external', 13)}</span>
+              </div>
             </div>
-            <div class="todo-side">${icon('external', 16)}</div>
-          </div>`).join('')}
+          </button>`;
+        }).join('')}
       </div>
       <div class="fab-note">
         Откроется в ОРИОКС. Если попросит войти — это обычный вход,

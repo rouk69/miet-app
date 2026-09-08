@@ -1618,10 +1618,28 @@ textarea.field-input {
 
 .todo-files svg { flex-shrink: 0; }
 
-.file-row { cursor: pointer; align-items: center; }
-.file-row .todo-subject { font-weight: 600; font-size: 14px; }
-.file-row .todo-side { color: var(--text-secondary); }
-.file-row:active { background: var(--primary-dim); }
+/* Файл — та же карточка, что и объявление, но приглушённая: он не
+   сообщение к занятию, а справочный материал, и спорить с объявлением
+   за внимание не должен. */
+.file-card {
+  --tone-fg: var(--text-secondary);
+  --tone-bg: var(--bg);
+  padding: 12px 14px;
+}
+
+.file-card .news-title { font-size: 14px; font-weight: 600; }
+.file-card .news-badge { width: 36px; height: 36px; border-radius: 11px; }
+.file-card .news-foot { margin-top: 6px; }
+
+.file-kind {
+  flex-shrink: 0;
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-tertiary);
+}
 
 /* ---------- Объявления преподавателей ---------- */
 

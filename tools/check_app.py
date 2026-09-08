@@ -221,6 +221,14 @@ CASES = [
      "String(linkify('см. https://a.ru/x').indexOf('data-url=') > 0)", "true"),
     ("разметка в тексте экранирована",
      "String(linkify('<b>тут</b>').indexOf('&lt;b&gt;') >= 0)", "true"),
+    ("вложение-PDF узнано",
+     "fileLook('Задание', 'https://orioks.miet.ru/x/dz.pdf').label", "PDF"),
+    ("вложение-документ узнано",
+     "fileLook('Деловое письмо.docx', '').label", "DOC"),
+    ("ссылка на ресурс узнана",
+     "fileLook('Ссылки на лекции', 'https://vk.com/x').label", "Ссылка"),
+    ("незнакомое вложение без подписи",
+     "fileLook('Материал', '/storage/d/1/abc').label", ""),
 ]
 
 
@@ -228,7 +236,7 @@ CASES = [
 # таблицы экспортов и раскладываем по коротким именам.
 PRELUDE = ("var _t = __mod['js/screens/tasks.js'];"
            "var subjectLook = _t.subjectLook, newsDate = _t.newsDate,"
-           "    linkify = _t.linkify, NUMBERED = _t.NUMBERED;")
+           "    linkify = _t.linkify, NUMBERED = _t.NUMBERED,    fileLook = _t.fileLook;")
 
 
 def check_logic(bundle: str) -> int:
