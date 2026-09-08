@@ -1,13 +1,14 @@
-// Задания из ОРИОКС: что сдать, когда и на сколько баллов.
+// Задания из ОРИОКС — список дел, а не выгрузка данных.
 //
-// В ОРИОКС домашние задания живут контрольными мероприятиями: у каждого
-// есть название, тип, учебная неделя сдачи и баллы. Текста задания и
-// файлов API не отдаёт — поэтому экран честно отвечает на вопрос «что и
-// когда сдавать», а не заменяет собой ОРИОКС.
+// Первая версия показывала всё подряд, сгруппированное по предметам, и
+// была нечитаемой: у студента шесть-восемь дисциплин по пять-десять
+// контрольных мероприятий в каждой, то есть полсотни строк, в которых
+// не видно главного — что делать в ближайшие дни.
 //
-// Неделю в дату превращаем здесь: начало семестра считается из
-// расписания, и второй раз выводить его на сервере значило бы получить
-// два разных ответа на один вопрос.
+// Поэтому здесь один список, отсортированный по сроку и разбитый на
+// «просрочено / эта неделя / следующая / потом». Предмет крупно, тип
+// задания мелко: человек ищет глазами «Матанализ», а не «ДЗ №2».
+// Сданное убрано вниз и свёрнуто — оно уже не дело.
 
 import { icon } from '../icons.js';
 import { esc, emptyState, toast, sheet } from '../ui.js';
@@ -18,64 +19,94 @@ import { refresh } from '../router.js';
 import { hapticNotify, confirmDialog, openLink } from '../tg.js';
 import { screen } from './common.js';
 
-const MONTHS = ['янв', 'фев', 'мар', 'апр', 'мая', 'июн', 'июл', 'авг',
-  'сен', 'окт', 'ноя', 'дек'];
+const MONTHS = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня',
+  'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
 
-/** Понедельник учебной недели N от начала семестра. */
-function weekDate(start, week) {
+const WEEKDAYS = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'];
+
+/** Конец учебной недели N — до него задание и сдают. */
+function dueDate(start, week) {
   if (!start || !week) return null;
   const d = new Date(start.getTime());
-  d.setDate(d.getDate() + (week - 1) * 7);
+  d.setDate(d.getDate() + (week - 1) * 7 + 6);
   return d;
 }
 
-const human = d => d ? `${d.getDate()} ${MONTHS[d.getMonth()]}` : '';
+const humanDate = d =>
+  d ? `${d.getDate()} ${MONTHS[d.getMonth()]}, ${WEEKDAYS[d.getDay()]}` : '';
 
-/** Сколько дней осталось: по этому же числу задания и сортируются. */
-function daysLeft(date) {
-  if (!date) return null;
+function daysLeft(due) {
+  if (!due) return null;
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  // Срок — конец недели, а не её понедельник: задание сдают в течение
-  // недели, и пугать человека раньше времени незачем.
-  const due = new Date(date.getTime());
-  due.setDate(due.getDate() + 6);
   return Math.round((due - today) / 86400000);
 }
 
-function dueLabel(left) {
-  if (left === null) return 'срок не указан';
-  if (left < 0) return `просрочено на ${-left} дн`;
-  if (left === 0) return 'сегодня последний день';
-  if (left === 1) return 'остался день';
-  if (left < 7) return `осталось ${left} дн`;
-  return `осталось ${Math.round(left / 7)} нед`;
+/**
+ * Название задания у ОРИОКС бывает кодом: «dz.1», «КТ.2», иногда пустым.
+ * Человеку нужен смысл, поэтому главным делаем тип («Домашнее задание»),
+ * а код показываем рядом — по нему задание ищут уже в самом ОРИОКС.
+ */
+function titleOf(t) {
+  const name = (t.name || '').trim();
+  const type = (t.type || '').trim();
+  const looksLikeCode = name.length <= 6 || /^[a-zA-Z.\d\s]+$/.test(name);
+  if (type && looksLikeCode) return { main: type, note: name };
+  return { main: name || type || 'Задание', note: type === name ? '' : type };
 }
 
-const taskRow = (t, start) => {
-  const date = weekDate(start, t.week);
-  const left = t.done ? null : daysLeft(date);
-  const urgent = left !== null && left <= 7;
-  const late = left !== null && left < 0;
-  return `
-    <div class="task ${t.done ? 'done' : ''} ${late ? 'late' : urgent ? 'soon' : ''}">
-      <div class="task-mark">
-        ${t.done ? icon('check', 16) : icon(t.homework ? 'edit' : 'clipboard', 16)}
+// Группы по срочности. Порядок здесь же задаёт порядок на экране.
+const BUCKETS = [
+  { id: 'late', title: 'Просрочено', note: 'Срок уже прошёл' },
+  { id: 'now', title: 'На этой неделе', note: '' },
+  { id: 'next', title: 'На следующей неделе', note: '' },
+  { id: 'later', title: 'Потом', note: '' },
+  { id: 'nodate', title: 'Без срока', note: 'ОРИОКС не указал неделю' },
+];
+
+function bucketOf(left) {
+  if (left === null) return 'nodate';
+  if (left < 0) return 'late';
+  if (left <= 7) return 'now';
+  if (left <= 14) return 'next';
+  return 'later';
+}
+
+function leftLabel(left) {
+  if (left === null) return '';
+  if (left < 0) return `${-left} дн назад`;
+  if (left === 0) return 'сегодня';
+  if (left === 1) return 'завтра';
+  if (left < 7) return `через ${left} дн`;
+  return `через ${Math.round(left / 7)} нед`;
+}
+
+const taskRow = t => `
+  <div class="todo ${t.bucket}">
+    <div class="todo-main">
+      <div class="todo-subject">${esc(t.subject)}</div>
+      <div class="todo-what">
+        ${esc(t.title.main)}${t.title.note ? ` · ${esc(t.title.note)}` : ''}
       </div>
-      <div class="task-body">
-        <div class="task-name">${esc(t.name)}</div>
-        <div class="task-meta">
-          ${t.type ? `<span>${esc(t.type)}</span>` : ''}
-          ${date ? `<span>${icon('calendar', 13)} ${esc(human(date))} · ${t.week} нед</span>` : ''}
-          ${t.done
-    ? `<span class="task-grade">${t.grade} из ${t.max_grade}</span>`
-    : `<span class="${late ? 'task-late' : urgent ? 'task-soon' : ''}">
-         ${esc(dueLabel(left))}</span>
-       <span class="task-grade">до ${t.max_grade} б.</span>`}
-        </div>
+    </div>
+    <div class="todo-side">
+      <div class="todo-when">${esc(t.due ? humanDate(t.due) : `${t.week || '?'} нед`)}</div>
+      <div class="todo-left">
+        ${esc(leftLabel(t.left))}${t.max_grade ? ` · ${t.max_grade} б.` : ''}
       </div>
-    </div>`;
-};
+    </div>
+  </div>`;
+
+const doneRow = t => `
+  <div class="todo done">
+    <div class="todo-main">
+      <div class="todo-subject">${esc(t.subject)}</div>
+      <div class="todo-what">${esc(t.title.main)}</div>
+    </div>
+    <div class="todo-side">
+      <div class="todo-grade">${t.grade} из ${t.max_grade}</div>
+    </div>
+  </div>`;
 
 export default async function tasksScreen() {
   if (!canTalk) {
@@ -99,77 +130,106 @@ export default async function tasksScreen() {
   if (!data.linked) return notLinked();
   if (data.error) return linkedButBroken(data.error);
 
-  // Начало семестра берём из расписания своей группы: в ОРИОКС его нет,
-  // а без него номер недели остаётся числом без смысла.
   let start = null;
   if (settings.group) {
     try {
       const sched = await fetchSchedule(settings.group);
       start = semesterStart(sched.semestr);
-    } catch { /* покажем без дат — недели всё равно видны */ }
+    } catch { /* без дат покажем недели */ }
   }
 
+  // Разворачиваем всё в один плоский список: предмет — часть строки, а
+  // не заголовок блока, иначе задание нельзя понять в отрыве от него.
   const all = [];
-  data.tasks.disciplines.forEach(d => d.events.forEach(e =>
-    all.push({ ...e, subject: d.name })));
+  data.tasks.disciplines.forEach(d => d.events.forEach(e => {
+    const due = dueDate(start, e.week);
+    const left = daysLeft(due);
+    all.push({
+      ...e,
+      subject: d.name,
+      title: titleOf(e),
+      due,
+      left,
+      bucket: bucketOf(left),
+    });
+  }));
 
   const pending = all.filter(t => !t.done)
-    .sort((a, b) => (a.week || 99) - (b.week || 99));
-  const soon = pending.filter(t => {
-    const left = daysLeft(weekDate(start, t.week));
-    return left !== null && left <= 14;
-  });
+    .sort((a, b) => (a.left ?? 9999) - (b.left ?? 9999));
+  const done = all.filter(t => t.done);
+
+  const groups = BUCKETS
+    .map(b => ({ ...b, items: pending.filter(t => t.bucket === b.id) }))
+    .filter(b => b.items.length);
+
+  const soon = pending.filter(t => t.left !== null && t.left <= 7).length;
 
   const node = screen({
-    title: 'Задания',
-    subtitle: `${data.tasks.done} из ${data.tasks.total} сдано`,
+    title: 'Что сдать',
+    subtitle: start ? 'Сроки — по твоему расписанию'
+      : 'Выбери группу в профиле, чтобы видеть даты',
     actions: `<button class="icon-btn" data-action="orioks">${icon('external', 19)}</button>`,
     body: `
       <div class="kpi-grid">
         <div class="kpi-tile">
           <div class="kpi-number">${pending.length}</div>
-          <div class="kpi-label">Осталось сдать</div>
+          <div class="kpi-label">Не сдано</div>
         </div>
         <div class="kpi-tile">
-          <div class="kpi-number">${soon.length}</div>
-          <div class="kpi-label">В ближайшие две недели</div>
+          <div class="kpi-number">${soon}</div>
+          <div class="kpi-label">На этой неделе</div>
         </div>
       </div>
 
-      ${soon.length ? `
-        <div class="section-head"><div class="section-title">Ближайшее</div></div>
-        <div class="stack">${soon.map(t => `
-          <div class="card" style="padding:0">
-            <div class="task-subject">${esc(t.subject)}</div>
-            ${taskRow(t, start)}
-          </div>`).join('')}</div>` : ''}
+      ${groups.length ? groups.map(g => `
+        <div class="section-head"><div class="section-title">${esc(g.title)}</div></div>
+        ${g.note ? `<p class="section-note">${esc(g.note)}</p>` : ''}
+        <div class="list-card">${g.items.map(taskRow).join('')}</div>
+      `).join('') : emptyState('Всё сдано — свободен', 'check')}
+
+      ${done.length ? `
+        <div class="section-head">
+          <div class="section-title">Сдано</div>
+          <button class="section-link" id="toggle-done">${done.length}</button>
+        </div>
+        <div class="list-card" id="done-list" hidden>
+          ${done.map(doneRow).join('')}
+        </div>` : ''}
 
       <div class="section-head"><div class="section-title">По предметам</div></div>
-      ${data.tasks.disciplines.map(d => {
+      <div class="list-card">
+        ${data.tasks.disciplines.map(d => {
       const left = d.events.filter(e => !e.done).length;
       return `
-        <div class="card" style="padding:0;margin-bottom:10px">
-          <div class="task-subject">
-            ${esc(d.name)}
-            <span class="task-subject-note">
-              ${d.current_grade ?? 0} из ${d.max_grade ?? 0} б.${
-  left ? ` · ${left} не сдано` : ' · всё сдано'}
-            </span>
-          </div>
-          ${d.events.map(e => taskRow(e, start)).join('')
-        || '<div class="task-empty">Контрольных мероприятий нет</div>'}
-        </div>`;
+          <div class="list-row">
+            <div class="list-row-body">
+              <div class="row-title">${esc(d.name)}</div>
+              <div class="row-subtitle">
+                ${d.current_grade ?? 0} из ${d.max_grade ?? 0} б.
+                ${d.control_form ? ` · ${esc(d.control_form)}` : ''}
+              </div>
+            </div>
+            <div class="list-row-value ${left ? '' : 'muted'}">
+              ${left ? `${left} ост.` : 'всё'}
+            </div>
+          </div>`;
     }).join('')}
+      </div>
 
       <button class="btn-secondary danger-btn" id="unlink" style="margin-top:14px">
         Отключить ОРИОКС
       </button>
       <div class="fab-note">
-        Данные приходят из ОРИОКС по токену. Текст задания и файлы там же —
-        их API не отдаёт, поэтому за подробностями всё равно в ОРИОКС.
+        Текста задания в ОРИОКС API нет — только что сдавать и к какому
+        сроку. Подробности и файлы открываются в самом ОРИОКС.
       </div>`,
   });
 
+  node.querySelector('#toggle-done')?.addEventListener('click', e => {
+    const list = node.querySelector('#done-list');
+    list.hidden = !list.hidden;
+    e.target.textContent = list.hidden ? done.length : 'скрыть';
+  });
   node.querySelector('[data-action="orioks"]').addEventListener('click',
     () => openLink('https://orioks.miet.ru/main/login'));
   node.querySelector('#unlink').addEventListener('click', async () => {
@@ -189,32 +249,27 @@ export default async function tasksScreen() {
 
 function notLinked() {
   const node = screen({
-    title: 'Задания',
-    subtitle: 'Что сдать и когда — из ОРИОКС',
+    title: 'Что сдать',
+    subtitle: 'Задания и сроки из ОРИОКС',
     body: `
       <div class="card" style="padding:18px">
         <div class="row-title" style="margin-bottom:8px">Подключи ОРИОКС</div>
         <div class="row-subtitle" style="line-height:1.55">
-          Приложение покажет все контрольные мероприятия семестра: что за
-          задание, к какой неделе сдавать, сколько даёт баллов и что уже
-          закрыто. Сроки посчитаются в даты по твоему расписанию.
+          Приложение соберёт все контрольные мероприятия семестра в один
+          список: что сдавать, к какому числу и сколько это даёт баллов.
+          Ближайшее — сверху, просроченное — отдельно.
         </div>
       </div>
 
       <div class="warn-note" style="margin-top:12px">
         ${icon('shield', 16)}
         Пароль не сохраняется. ОРИОКС меняет его на токен — в базе лежит
-        только токен, и отозвать его можно в любой момент кнопкой
-        «Отключить».
+        только токен, и отозвать его можно кнопкой «Отключить».
       </div>
 
       <button class="btn-primary" id="link" style="margin-top:14px">
         Подключить
-      </button>
-
-      <div class="fab-note">
-        Логин и пароль — те же, что для входа в ОРИОКС.
-      </div>`,
+      </button>`,
   });
 
   node.querySelector('#link').addEventListener('click', linkSheet);
@@ -223,7 +278,7 @@ function notLinked() {
 
 function linkedButBroken(message) {
   const node = screen({
-    title: 'Задания',
+    title: 'Что сдать',
     body: `
       <div class="card" style="padding:18px">
         <div class="row-title" style="margin-bottom:6px">ОРИОКС не ответил</div>
