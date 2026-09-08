@@ -1595,6 +1595,15 @@ textarea.field-input {
 .todo.now .todo-when { color: var(--warning); }
 .todo.now .todo-left { color: var(--warning); font-weight: 600; }
 
+/* Время и аудитория пары под сроком: если задание сдают на занятии,
+   человеку нужно знать, куда идти, а не только когда. */
+.todo-lesson {
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+
 .todo.done { opacity: 0.6; }
 
 /* Скрепка под названием задания: заметная, но не спорящая с предметом —
