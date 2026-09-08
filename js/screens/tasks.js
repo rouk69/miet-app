@@ -120,7 +120,9 @@ const newsRow = n => `
       <div class="todo-what">
         ${esc(n.discipline || (n.course ? 'Дисциплина' : 'Новость института'))}
         ${n.date ? ` · ${esc(n.date)}` : ''}
+        ${n.author ? ` · ${esc(n.author)}` : ''}
       </div>
+      ${n.preview ? `<div class="news-preview">${esc(n.preview)}</div>` : ''}
     </div>
     <div class="todo-side">${icon('chevronRight', 16)}</div>
   </div>`;

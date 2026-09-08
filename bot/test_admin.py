@@ -781,6 +781,54 @@ check("вложения без ссылки не берём",
       orioks_web.materials({"dises": [{"name": "Д", "segments": [
           {"allKms": [{"name": "К", "irs": [{"name": "без ссылки"}]}]}]}]}) == [])
 
+
+# ── объявления преподавателей ──
+# Здесь и живёт «задание к следующему занятию»: преподаватель пишет
+# его объявлением к дисциплине, а не мероприятием.
+PAGE_NEWS = (
+    '<a href="/student/news/view?id=45462">Инструкция к ЛР №1</a>'
+    '<div>Дата публикации: 04.09.2026 17:16</div>'
+    '<p>Ищем модуль Лабораторный практикум.</p>'
+    '<div>Автор: Королева Е.Н.</div><div>Комментариев: 0</div>'
+    '<a href="/student/news/view?id=45415">Подготовка к ЛР №1</a>'
+    '<div>Дата публикации: 03.09.2026 15:05</div>'
+    '<p>На первом занятии студенты приступают к работе.</p>'
+    '<div>Автор: Трифонов А.Ю.</div><div>Комментариев: 0</div>')
+
+
+def fake_page(cookie, path, ajax=False):
+    if "discipline_id=1" in path:
+        return PAGE_NEWS
+    if "discipline_id=2" in path:
+        raise orioks_web.WebError("ОРИОКС ответил 403 на " + path)
+    return "<html></html>"
+
+
+_real_page = orioks_web.get_page
+orioks_web.get_page = fake_page
+
+got = orioks_web.course_news("c", {"dises": [
+    {"id": 1, "name": "Физика"}, {"id": 2, "name": "Матанализ"}]})
+check("объявления дисциплины разобраны", len(got) == 2, got)
+check("заголовок взят из ссылки", got[0]["title"] == "Инструкция к ЛР №1", got[0])
+check("новое объявление первое", got[0]["date"].startswith("04.09"), got)
+check("автор распознан", got[1]["author"] == "Трифонов А.Ю.", got[1])
+check("выжимка без подписи автора",
+      "Комментариев" not in got[0]["preview"]
+      and "Лабораторный практикум" in got[0]["preview"], got[0]["preview"])
+check("закрытая дисциплина не роняет список",
+      all(n["discipline"] == "Физика" for n in got), got)
+
+# Сортировка по дате, а не по строке: «09.09» не должно оказаться
+# старше «10.08» только потому, что девятка больше единицы.
+check("даты сравниваются по-человечески",
+      orioks_web._when({"date": "10.08.2026 09:00"})
+      < orioks_web._when({"date": "09.09.2026 09:00"}))
+check("объявление без даты не ломает сортировку",
+      orioks_web._when({"date": ""}) == "")
+
+orioks_web.get_page = _real_page
+
 print("\n" + "=" * 58)
 print(f"пройдено {ok}, провалено {fail}")
 print("=" * 58)
