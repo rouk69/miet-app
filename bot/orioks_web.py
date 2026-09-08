@@ -302,6 +302,28 @@ def study_json(cookie: str) -> dict:
         raise WebError("Не разобрал данные учёбы (" + str(e) + ")")
 
 
+def find_in(cookie: str, path: str, needle: str, around: int = 220) -> dict:
+    """
+    Куски разметки вокруг искомого слова.
+
+    Половина нужного в ОРИОКС спрятана не в ссылках, а в обработчиках и
+    атрибутах: кнопка «Отобразить все» ведёт куда-то, но <a> у неё нет.
+    Смотреть глазами в разметку — единственный способ это найти.
+    """
+    html = get_page(cookie, path)
+    low, low_needle = html.lower(), needle.lower()
+    spots, start = [], 0
+    while len(spots) < 12:
+        i = low.find(low_needle, start)
+        if i < 0:
+            break
+        chunk = html[max(0, i - around):i + around]
+        spots.append(re.sub(r"\s+", " ", chunk).strip())
+        start = i + len(needle)
+    return {"страница": path, "искали": needle, "нашли": len(spots),
+            "куски": spots}
+
+
 def form_fields(cookie: str, path: str) -> dict:
     """
     Поля формы на странице: имена, значения и что выбрано сейчас.
