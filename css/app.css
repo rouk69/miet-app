@@ -1629,6 +1629,19 @@ textarea.field-input {
 .news-row .todo-subject { font-size: 14px; }
 .news-row:active { background: var(--primary-dim); }
 
+/* Выжимка объявления: три строки, дальше многоточие. Полный текст
+   открывается по нажатию — в списке он занимал бы весь экран. */
+.news-preview {
+  margin-top: 6px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--text-secondary);
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
 .news-body { font-size: 15px; line-height: 1.55; color: var(--text); }
 .news-body p { margin: 0 0 10px; }
 .news-body p:last-child { margin-bottom: 0; }

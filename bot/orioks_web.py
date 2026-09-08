@@ -351,32 +351,62 @@ def course_news(cookie: str, data: dict | None = None) -> list:
             # список.
             log.info("объявления дисциплины %s недоступны: %s", dis_id, e)
             continue
-        for row in re.findall(r"(?is)<tr[^>]*>(.*?)</tr>", html):
-            link = re.search(r"href=[\"']([^\"']*news/view[^\"']*)", row, re.I)
-            if not link:
-                continue
-            href = link.group(1).replace("&amp;", "&")
-            cells = [_plain(c) for c in
-                     re.findall(r"(?is)<td[^>]*>(.*?)</td>", row)]
-            title = max(cells, key=len) if cells else ""
-            out.append({
-                "id": _news_id(href),
-                "href": href if href.startswith("/") else "/" + href,
-                "date": _first_date(cells),
-                "title": title or "Объявление",
-                "discipline": dis.get("name") or "",
-                "course": True,
-            })
-    out.sort(key=lambda n: n["date"], reverse=True)
+        out.extend(_news_blocks(html, dis.get("name") or ""))
+    out.sort(key=_when, reverse=True)
     return out
 
 
-def _first_date(cells: list) -> str:
-    """Первая ячейка, похожая на дату: колонки у ОРИОКС не закреплены."""
-    for cell in cells:
-        if re.match(r"\d{2}[.\-/]\d{2}[.\-/]\d{4}|\d{4}-\d{2}-\d{2}", cell):
-            return cell
-    return cells[0] if cells else ""
+# Объявления на странице дисциплины идут подряд, каждое начинается
+# ссылкой на само себя. Таблицы там нет — резать приходится по этим
+# ссылкам, беря всё до следующей.
+NEWS_LINK = r"<a[^>]*href=[\"']([^\"']*news/view\?id=\d+)[\"'][^>]*>(.*?)</a>"
+
+
+def _news_blocks(html: str, discipline: str) -> list:
+    marks = list(re.finditer(NEWS_LINK, html, re.I | re.S))
+    out = []
+    for i, m in enumerate(marks):
+        end = marks[i + 1].start() if i + 1 < len(marks) else len(html)
+        block = html[m.end():end]
+        href = m.group(1).replace("&amp;", "&")
+        date = re.search(r"Дата публикации:\s*([\d.]{8,10}(?:\s+[\d:]{4,5})?)",
+                         block)
+        author = re.search(r"Автор:\s*(?:<[^>]*>\s*)*([^<]{2,60})", block)
+
+        # Выжимка — то, что между датой и подписью автора: сам текст
+        # объявления, каким его видно в списке.
+        body = block
+        if date:
+            body = body[date.end():]
+        body = re.split(r"Автор:|Комментариев:", body)[0]
+
+        out.append({
+            "id": _news_id(href),
+            "href": href if href.startswith("/") else "/" + href,
+            "date": date.group(1).strip() if date else "",
+            "title": _plain(m.group(2)) or "Объявление",
+            "author": author.group(1).strip() if author else "",
+            "preview": text_of(body)[:400],
+            "discipline": discipline,
+            "course": True,
+        })
+    return out
+
+
+def _when(item: dict):
+    """
+    Ключ сортировки: дата вида 03.09.2026 15:05 задом наперёд.
+
+    Строкой такие даты сравнивать нельзя — «09.09» окажется старше
+    «10.08», а разбирать их в datetime ради сортировки списка из
+    десятка записей незачем.
+    """
+    m = re.match(r"(\d{2})\.(\d{2})\.(\d{4})(?:\s+(\d{2}):(\d{2}))?",
+                 item.get("date") or "")
+    if not m:
+        return ""
+    d, mo, y, hh, mm = m.groups()
+    return f"{y}{mo}{d}{hh or '00'}{mm or '00'}"
 
 
 def announcements(cookie: str, limit: int = 40) -> list:
@@ -445,7 +475,7 @@ def news_item(cookie: str, href: str) -> dict:
     html = get_page(cookie, href)
 
     def after(label):
-        m = re.search(label + r"\s*:?\s*</?[^>]*>?\s*([^<]{2,140})", html)
+        m = re.search(label + r"\s*:?\s*(?:<[^>]*>\s*)*([^<]{2,140})", html)
         return m.group(1).strip() if m else ""
 
     # Заголовок объявления — ссылка на само себя внутри h2; в <title>
