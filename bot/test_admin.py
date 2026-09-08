@@ -594,6 +594,36 @@ check("и аннулирован в ОРИОКС",
 s, r = api.handle("GET", "/api/orioks", {}, {}, USER)
 check("после отключения снова не подключено", r["linked"] is False, r)
 
+# Коды ответов ОРИОКС расходятся с его же документацией: на неверный
+# пароль приходит 403, отведённый в документации под лимит токенов.
+# Поймано разведкой на боевом сервере — сообщение решает текст, не код.
+
+
+class FakeHTTPError(Exception):
+    def __init__(self, code, body):
+        self.code = code
+        self._body = body.encode("utf-8")
+
+    def read(self):
+        return self._body
+
+
+check("неверный пароль под кодом 403 назван правильно",
+      orioks._explain(FakeHTTPError(403, '{"error":"Неверный логин или пароль"}'))
+      == "ОРИОКС не принял логин или пароль",
+      orioks._explain(FakeHTTPError(403, '{"error":"Неверный логин или пароль"}')))
+check("лимит токенов отличается от неверного пароля",
+      "восемь" in orioks._explain(FakeHTTPError(
+          403, '{"error":"Нельзя получить больше восьми токенов"}')),
+      orioks._explain(FakeHTTPError(403, '{"error":"Нельзя получить больше восьми токенов"}')))
+check("вложенный текст ошибки тоже читается",
+      "обработке" in orioks._explain(FakeHTTPError(
+          400, '{"error":{"code":400,"text":"Произошла ошибка при обработке запроса"}}')),
+      orioks._explain(FakeHTTPError(400, '{"error":{"code":400,"text":"Произошла ошибка при обработке запроса"}}')))
+check("пустое тело не роняет разбор",
+      orioks._explain(FakeHTTPError(500, "")) == "ОРИОКС ответил 500",
+      orioks._explain(FakeHTTPError(500, "")))
+
 
 print("\n" + "=" * 58)
 print(f"пройдено {ok}, провалено {fail}")
