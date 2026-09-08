@@ -827,6 +827,27 @@ check("даты сравниваются по-человечески",
 check("объявление без даты не ломает сортировку",
       orioks_web._when({"date": ""}) == "")
 
+# Текст объявления — без хвоста разметки: он начинался с «/div>».
+orioks_web.get_page = lambda c, p, ajax=False: (
+    '<h2><a href="/student/news/view?id=1">Задание к семинару</a></h2>'
+    '<div>Дата публикации: 08.09.2026 22:53</div>'
+    '<p>Подготовить доклады по теме.</p>'
+    '<div>Дисциплина: История России</div>')
+one = orioks_web.news_item("c", "/student/news/view?id=1")
+check("заголовок объявления взят из самой новости",
+      one["title"] == "Задание к семинару", one)
+check("текст без хвоста тега",
+      one["text"].startswith("Подготовить"), one["text"][:40])
+check("дата объявления разобрана", one["date"] == "08.09.2026 22:53", one)
+# Адрес объявления приходит от клиента, поэтому наружу он вести не
+# должен: иначе через нашу сессию можно было бы дёрнуть чужой сайт.
+try:
+    orioks_web.news_item("c", "http://evil/x")
+    outside = False
+except orioks_web.WebError:
+    outside = True
+check("чужой адрес не открыть", outside)
+
 orioks_web.get_page = _real_page
 
 print("\n" + "=" * 58)

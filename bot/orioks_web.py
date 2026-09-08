@@ -483,7 +483,8 @@ def news_item(cookie: str, href: str) -> dict:
     head = re.search(r"(?is)<h2[^>]*>\s*<a[^>]*news/view[^>]*>(.*?)</a>", html)
 
     body = html
-    cut = re.search(r"Дата публикации[^<]*<", body)
+    # Режем вместе с закрывающим тегом, иначе текст начинается с «/div>».
+    cut = re.search(r"Дата публикации[^<]*<[^>]*>", body)
     if cut:
         body = body[cut.end():]
     # Ниже текста висит модальное окно «Инструкции» — оно к объявлению
