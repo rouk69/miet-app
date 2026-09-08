@@ -229,22 +229,42 @@ def tasks(token: str) -> dict:
     return {"disciplines": out, "total": total, "done": done}
 
 
+def _raw_code(path: str, headers: dict, method: str = "GET"):
+    """Код ответа как есть — для разведки, без перевода на человеческий."""
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    req = urllib.request.Request(BASE + path, headers=headers, method=method)
+    try:
+        with opener.open(req, timeout=TIMEOUT) as r:
+            return r.status, r.read()[:200].decode("utf-8", "replace")
+    except urllib.error.HTTPError as e:
+        return e.code, e.read()[:200].decode("utf-8", "replace")
+    except Exception as e:                              # noqa: BLE001
+        return 0, type(e).__name__
+
+
 def probe() -> dict:
     """
-    Достучаться до ОРИОКС без всякой авторизации.
+    Разведка: как именно ОРИОКС отвечает нашему серверу.
 
-    Нужно ровно для одного: понять, видит ли наш сервер ОРИОКС вообще.
-    С адресов вне России он рвёт TLS-соединение — та же защита, из-за
-    которой miet.ru молчит через VPN.
+    Проверяем несколько форм одного запроса. Заведомо неверный пароль
+    здесь безопасен и нужен по делу: если на него приходит 401, значит
+    запрос разобран правильно и формат верен, а 400 означает, что
+    ОРИОКС не понял сам запрос. Отличить одно от другого иначе нельзя —
+    настоящего пароля у разработчика нет и быть не должно.
     """
-    try:
-        _request("/auth", {})
-        return {"reachable": True, "note": "ответил без авторизации"}
-    except OrioksError as e:
-        text = str(e)
-        # Любой осмысленный ответ означает, что запрос дошёл и был
-        # разобран, — а это и есть искомая доступность. Недоступность
-        # выглядит иначе: обрыв TLS или таймаут.
-        reachable = "недоступен" not in text
-        return {"reachable": reachable, "note": text,
-                "events_path": _events_path or "ещё не выяснен"}
+    wrong = base64.b64encode(b"00000000:definitely-wrong").decode("ascii")
+    checks = {
+        "без заголовков вовсе": ("/auth", {}),
+        "только Authorization": ("/auth", {"Authorization": "Basic " + wrong}),
+        "полный набор": ("/auth", {**HEADERS, "Authorization": "Basic " + wrong}),
+        "корень API": ("", HEADERS),
+    }
+    out = {}
+    for name, (path, headers) in checks.items():
+        code, body = _raw_code(path, headers)
+        out[name] = {"code": code, "body": body[:120]}
+    return {
+        "reachable": any(v["code"] for v in out.values()),
+        "checks": out,
+        "events_path": _events_path or "ещё не выяснен",
+    }
