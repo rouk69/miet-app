@@ -629,7 +629,19 @@ def _admin(path: str, method: str, query: dict, body: dict, uid: int, me: dict):
         if not cookie:
             return 200, {"error": "Сессия веб-версии не сохранена — "
                                   "переподключи ОРИОКС в разделе заданий"}
+        page = (query.get("page", [""])[0] or "").strip()
         try:
+            if page:
+                # Одна конкретная страница целиком: обход по ссылкам
+                # показывает, что раздел есть, а разбирать приходится
+                # уже его содержимое.
+                if not page.startswith("/"):
+                    return 400, {"error": "Адрес должен начинаться с /"}
+                html = orioks_web.get_page(cookie, page)
+                return 200, {"href": page, "title": orioks_web._title(html),
+                             "text": orioks_web.text_of(html)[:6000],
+                             "links": [{"href": h, "text": t}
+                                       for h, t in orioks_web._links(html)[:80]]}
             return 200, orioks_web.explore(cookie)
         except orioks_web.WebError as e:
             return 200, {"error": str(e)}
