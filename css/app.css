@@ -1623,6 +1623,22 @@ textarea.field-input {
 .file-row .todo-side { color: var(--text-secondary); }
 .file-row:active { background: var(--primary-dim); }
 
+/* Объявление преподавателя — текст, а не строка данных: читается
+   абзацами, поэтому межстрочный интервал больше обычного. */
+.news-row { cursor: pointer; }
+.news-row .todo-subject { font-size: 14px; }
+.news-row:active { background: var(--primary-dim); }
+
+.news-body { font-size: 15px; line-height: 1.55; color: var(--text); }
+.news-body p { margin: 0 0 10px; }
+.news-body p:last-child { margin-bottom: 0; }
+
+.news-meta {
+  margin-bottom: 12px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
 .todo-grade {
   font-size: 13px;
   font-weight: 700;
