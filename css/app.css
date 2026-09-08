@@ -1597,6 +1597,32 @@ textarea.field-input {
 
 .todo.done { opacity: 0.6; }
 
+/* Скрепка под названием задания: заметная, но не спорящая с предметом —
+   файл есть далеко не у всех работ, и строка без него не должна
+   выглядеть обделённой. */
+.todo-files {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 6px;
+  padding: 3px 9px 3px 7px;
+  border: none;
+  border-radius: 999px;
+  background: var(--primary-dim);
+  color: var(--primary);
+  font-size: 12px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.todo-files svg { flex-shrink: 0; }
+
+.file-row { cursor: pointer; align-items: center; }
+.file-row .todo-subject { font-weight: 600; font-size: 14px; }
+.file-row .todo-side { color: var(--text-secondary); }
+.file-row:active { background: var(--primary-dim); }
+
 .todo-grade {
   font-size: 13px;
   font-weight: 700;

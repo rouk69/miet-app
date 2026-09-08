@@ -230,7 +230,8 @@ def _orioks(path: str, method: str, body: dict, uid: int, me: dict):
         if not token:
             return 200, {"linked": False}
         try:
-            return 200, {"linked": True, "tasks": orioks.tasks(token)}
+            return 200, {"linked": True,
+                         "tasks": orioks.with_materials(uid, orioks.tasks(token))}
         except orioks.OrioksError as e:
             # Токен мог протухнуть или быть отозван — тогда честнее
             # предложить подключиться заново, чем показывать ошибку.
@@ -256,7 +257,8 @@ def _orioks(path: str, method: str, body: dict, uid: int, me: dict):
         # Пароль дальше этой строки не идёт: в базе только токен и cookie.
         del password
         try:
-            return 200, {"ok": True, "linked": True, "tasks": orioks.tasks(token)}
+            return 200, {"ok": True, "linked": True,
+                         "tasks": orioks.with_materials(uid, orioks.tasks(token))}
         except orioks.OrioksError as e:
             return 200, {"ok": True, "linked": True, "error": str(e)}
 
@@ -273,6 +275,7 @@ def _orioks(path: str, method: str, body: dict, uid: int, me: dict):
         if token:
             orioks.revoke(token)
         orioks.forget(uid)
+        orioks.forget_materials(uid)
         return 200, {"ok": True, "linked": False}
 
     return 404, {"error": "Нет такого маршрута"}

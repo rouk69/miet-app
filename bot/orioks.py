@@ -21,9 +21,12 @@ from __future__ import annotations
 import base64
 import json
 import logging
+import re
+import time
 import urllib.error
 import urllib.request
 
+from . import orioks_web
 from .db import conn
 
 log = logging.getLogger("miet.orioks")
@@ -321,6 +324,72 @@ def tasks(token: str) -> dict:
             "events": events,
         })
     return {"disciplines": out, "total": total, "done": done}
+
+
+# ──────────────────── материалы из веб-версии ────────────────────
+
+# Разбор веб-страницы стоит секунд, а меняются вложения раз в семестр.
+# Держим их в памяти: ключ — человек, значение — время и материалы.
+_MATERIALS: dict = {}
+_MATERIALS_TTL = 30 * 60
+
+
+def _key(text: str) -> str:
+    """Название мероприятия для сверки: без регистра, пробелов и точек."""
+    return re.sub(r"[\s.]+", "", (text or "").lower())
+
+
+def with_materials(user_id: int, data: dict) -> dict:
+    """
+    Приклеивает к мероприятиям файлы, выложенные преподавателем.
+
+    Текста задания в ОРИОКС нет нигде — ни в API, ни на сайте. Но у
+    части мероприятий висит вложение: условие, методичка, бланк. Оно и
+    есть настоящее «домашнее задание», и добыть его можно только из
+    веб-версии, поэтому берём оттуда — если человек её подключил.
+    """
+    cookie = cookie_of(user_id)
+    if not cookie:
+        return data
+
+    cached = _MATERIALS.get(user_id)
+    if cached and time.time() - cached[0] < _MATERIALS_TTL:
+        items = cached[1]
+    else:
+        try:
+            items = orioks_web.materials(orioks_web.study_json(cookie))
+        except orioks_web.SessionExpired:
+            # Доступ кончился — держать мёртвую сессию незачем.
+            drop_cookie(user_id)
+            return data
+        except orioks_web.WebError as e:
+            # ОРИОКС молчит или изменил страницу. Задания при этом на
+            # месте, просто без вложений: рушить из-за этого экран не
+            # нужно, а стирать доступ — тем более, иначе человек вводил
+            # бы пароль после каждой заминки у института.
+            log.info("материалы ОРИОКС не получены: %s", e)
+            return data
+        _MATERIALS[user_id] = (time.time(), items)
+
+    by_event: dict = {}
+    for m in items:
+        by_event.setdefault(
+            (_key(m["discipline"]), _key(m["event"])), []).append(m)
+
+    for dis in data.get("disciplines", []):
+        dkey = _key(dis.get("name"))
+        for ev in dis.get("events", []):
+            found = by_event.get((dkey, _key(ev.get("name"))))
+            if found:
+                ev["materials"] = [{"name": m["name"], "kind": m["kind"],
+                                    "link": m["link"]} for m in found]
+    data["materials_count"] = len(items)
+    return data
+
+
+def forget_materials(user_id: int) -> None:
+    """При отключении память о вложениях уходит вместе с сессией."""
+    _MATERIALS.pop(user_id, None)
 
 
 def _raw_code(path: str, headers: dict, method: str = "GET"):
