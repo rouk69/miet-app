@@ -25,6 +25,7 @@ import { glossaryScreen, contactsScreen, datesScreen } from './screens/guide.js'
 import { chatsScreen, curatorsScreen } from './screens/community.js';
 import help from './screens/help.js';
 import adminDays, { dayScreen } from './screens/admin-days.js';
+import tasks from './screens/tasks.js';
 
 applyTheme(settings.theme);
 initTelegram(settings.theme);
@@ -47,6 +48,7 @@ register('dates', datesScreen);
 register('chats', chatsScreen);
 register('curators', curatorsScreen);
 register('help', help);
+register('tasks', tasks);
 register('adminDays', adminDays);
 register('adminDay', dayScreen);
 register('article', articleScreen);

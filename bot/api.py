@@ -106,6 +106,9 @@ def handle(method: str, path: str, query: dict, body: dict, init_data: str):
     if path.startswith("/api/directory/") and method == "GET":
         return _directory(path, query)
 
+    if path.startswith("/api/orioks"):
+        return _orioks(path, method, body, uid, me)
+
     if path == "/api/help" or path.startswith("/api/help/"):
         if method == "POST" and not me["blocked"]:
             analytics.touch(user, source="app")
@@ -146,6 +149,7 @@ def _me(user: dict, me: dict) -> dict:
         "can_delete": analytics.can(me, "posts_delete"),
         "can_pin": analytics.can(me, "posts_pin"),
         "can_clean_comments": analytics.can(me, "comments_delete"),
+        "orioks": bool(orioks.token_of(me["id"])),
         "label": _label(me),
         # Группа с сервера: человек выбрал её в боте — приложение подхватит
         # её на другом устройстве, и наоборот.
@@ -206,6 +210,54 @@ def _directory(path: str, query: dict):
         if not found["slots"]:
             return 404, {"error": "Такой аудитории в расписании нет"}
         return 200, found
+
+    return 404, {"error": "Нет такого маршрута"}
+
+
+def _orioks(path: str, method: str, body: dict, uid: int, me: dict):
+    """
+    Личное подключение к ОРИОКС: задания, сроки и баллы.
+
+    Данные здесь строго свои: токен привязан к человеку, и чужие задания
+    получить нельзя даже владельцу — в ОРИОКС ходим под токеном того, кто
+    спрашивает, и ничьим больше.
+    """
+    if me["blocked"]:
+        return 403, {"error": "Доступ закрыт"}
+
+    if path == "/api/orioks" and method == "GET":
+        token = orioks.token_of(uid)
+        if not token:
+            return 200, {"linked": False}
+        try:
+            return 200, {"linked": True, "tasks": orioks.tasks(token)}
+        except orioks.OrioksError as e:
+            # Токен мог протухнуть или быть отозван — тогда честнее
+            # предложить подключиться заново, чем показывать ошибку.
+            return 200, {"linked": True, "error": str(e)}
+
+    if path == "/api/orioks/link" and method == "POST":
+        login = (body.get("login") or "").strip()
+        password = body.get("password") or ""
+        if not login or not password:
+            return 400, {"error": "Нужны логин и пароль от ОРИОКС"}
+        try:
+            token = orioks.get_token(login, password)
+        except orioks.OrioksError as e:
+            return 400, {"error": str(e)}
+        # Пароль дальше этой строки не идёт: сохраняем только токен.
+        orioks.save_token(uid, token)
+        try:
+            return 200, {"ok": True, "linked": True, "tasks": orioks.tasks(token)}
+        except orioks.OrioksError as e:
+            return 200, {"ok": True, "linked": True, "error": str(e)}
+
+    if path == "/api/orioks/unlink" and method == "POST":
+        token = orioks.token_of(uid)
+        if token:
+            orioks.revoke(token)
+        orioks.forget(uid)
+        return 200, {"ok": True, "linked": False}
 
     return 404, {"error": "Нет такого маршрута"}
 

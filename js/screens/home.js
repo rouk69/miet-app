@@ -16,7 +16,7 @@ import { feedRow } from './feed.js';
 const QUICK = [
   { id: 'url:https://orioks.miet.ru/main/login', ico: 'chart', label: 'ОРИОКС' },
   { id: 'teachers', ico: 'teacher', label: 'Преподаватели' },
-  { id: 'score', ico: 'target', label: 'Баллы' },
+  { id: 'tasks', ico: 'clipboard', label: 'Задания' },
   { id: 'url:https://account.miet.ru/', ico: 'key', label: 'Кабинет' },
   { id: 'campus:canteen', ico: 'utensils', label: 'Столовая' },
   { id: 'campus:library', ico: 'book', label: 'Библиотека' },
