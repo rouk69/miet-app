@@ -634,6 +634,10 @@ def _admin(path: str, method: str, query: dict, body: dict, uid: int, me: dict):
                                   "переподключи ОРИОКС в разделе заданий"}
         page = (query.get("page", [""])[0] or "").strip()
         try:
+            find = (query.get("find", [""])[0] or "").strip()
+            if find:
+                return 200, orioks_web.find_in(
+                    cookie, page or "/", find)
             if query.get("form"):
                 # Поля фильтра: пустая таблица — это либо «данных нет»,
                 # либо «фильтр их прячет», и различить можно только так.
