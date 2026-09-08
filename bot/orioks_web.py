@@ -325,6 +325,60 @@ NOTIFY_PATH = "/notification/index"
 NEWS_VIEW = "/student/news/view"
 
 
+NEWS_INDEX = "/student/news/index?discipline_id="
+
+
+def course_news(cookie: str, data: dict | None = None) -> list:
+    """
+    Объявления преподавателей по всем дисциплинам студента.
+
+    Это и есть «домашнее задание к следующему занятию»: преподаватель
+    пишет его объявлением к дисциплине. Страница уведомлений для этого
+    не годится — там висят только непрочитанные, и объявление исчезает
+    оттуда, стоит его один раз открыть.
+    """
+    data = data if data is not None else study_json(cookie)
+    out = []
+    for dis in data.get("dises", []):
+        dis_id = dis.get("id")
+        if not dis_id:
+            continue
+        try:
+            html = get_page(cookie, NEWS_INDEX + str(dis_id))
+        except WebError as e:
+            # Часть дисциплин ОРИОКС закрывает даже своему студенту —
+            # молча пропускаем, иначе одна закрытая рушила бы весь
+            # список.
+            log.info("объявления дисциплины %s недоступны: %s", dis_id, e)
+            continue
+        for row in re.findall(r"(?is)<tr[^>]*>(.*?)</tr>", html):
+            link = re.search(r"href=[\"']([^\"']*news/view[^\"']*)", row, re.I)
+            if not link:
+                continue
+            href = link.group(1).replace("&amp;", "&")
+            cells = [_plain(c) for c in
+                     re.findall(r"(?is)<td[^>]*>(.*?)</td>", row)]
+            title = max(cells, key=len) if cells else ""
+            out.append({
+                "id": _news_id(href),
+                "href": href if href.startswith("/") else "/" + href,
+                "date": _first_date(cells),
+                "title": title or "Объявление",
+                "discipline": dis.get("name") or "",
+                "course": True,
+            })
+    out.sort(key=lambda n: n["date"], reverse=True)
+    return out
+
+
+def _first_date(cells: list) -> str:
+    """Первая ячейка, похожая на дату: колонки у ОРИОКС не закреплены."""
+    for cell in cells:
+        if re.match(r"\d{2}[.\-/]\d{2}[.\-/]\d{4}|\d{4}-\d{2}-\d{2}", cell):
+            return cell
+    return cells[0] if cells else ""
+
+
 def announcements(cookie: str, limit: int = 40) -> list:
     """
     Объявления, пришедшие студенту: заголовок, дата и куда смотреть.
@@ -551,6 +605,8 @@ def study_report(data: dict) -> dict:
         "заполнено": dict(sorted(filled.items(), key=lambda p: -p[1])),
         "примеры": samples,
         "материалы": materials(data),
+        "дисциплины": [{"id": d.get("id"), "name": d.get("name")}
+                       for d in data.get("dises", [])],
     }
 
 
