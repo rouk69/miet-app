@@ -302,6 +302,113 @@ def study_json(cookie: str) -> dict:
         raise WebError("Не разобрал данные учёбы (" + str(e) + ")")
 
 
+# ──────────────────── объявления преподавателей ────────────────────
+
+# Здесь и лежит то, что студент называет домашним заданием: «Подготовка
+# к ЛР №1», «Задание к семинару». Преподаватель пишет это объявлением к
+# дисциплине, а не мероприятием, поэтому ни в API, ни в ведомости их
+# нет — только на этой странице.
+NOTIFY_PATH = "/notification/index"
+
+# Список объявлений самой дисциплины (/student/news/index?discipline_id=)
+# закрыт: ОРИОКС отвечает 403 даже своему студенту. Поэтому идём тем же
+# путём, что и человек, — через страницу уведомлений.
+NEWS_VIEW = "/student/news/view"
+
+
+def announcements(cookie: str, limit: int = 40) -> list:
+    """
+    Объявления, пришедшие студенту: заголовок, дата и куда смотреть.
+
+    Текст каждого не тянем — их бывает много, а нужен обычно один.
+    Открывается он отдельно, по news_item().
+    """
+    html = get_page(cookie, NOTIFY_PATH)
+    out, seen = [], set()
+    for row in re.findall(r"(?is)<tr[^>]*>(.*?)</tr>", html):
+        cells = re.findall(r"(?is)<td[^>]*>(.*?)</td>", row)
+        if not cells:
+            continue
+        date = _plain(cells[0])
+        link = re.search(r"href=[\"']([^\"']*(?:news/view|view-news)[^\"']*)",
+                         row, re.I)
+        if not link:
+            continue
+        href = link.group(1).replace("&amp;", "&")
+        if not href.startswith("/"):
+            href = "/" + href
+        title = ""
+        for cell in cells[1:]:
+            text = _plain(cell)
+            # «Новость» — это подпись вида объявления, а не заголовок:
+            # настоящее название лежит в соседней ячейке.
+            if text and text != "Новость" and len(text) > len(title):
+                title = text
+        if not title or href in seen:
+            continue
+        seen.add(href)
+        out.append({
+            "id": _news_id(href),
+            "href": href,
+            "date": date,
+            "title": title,
+            # Объявление дисциплины — от преподавателя, остальное —
+            # общие новости института; в списке дел они не равны.
+            "course": "news/view" in href,
+        })
+        if len(out) >= limit:
+            break
+    return out
+
+
+def _news_id(href: str) -> str:
+    m = re.search(r"(?:id=|view-news/)(\d+)", href)
+    return m.group(1) if m else ""
+
+
+def _plain(html: str) -> str:
+    return re.sub(r"\s+", " ", re.sub(r"(?s)<[^>]+>", " ", html)).strip()
+
+
+def news_item(cookie: str, href: str) -> dict:
+    """
+    Одно объявление целиком: дисциплина, автор, дата и текст.
+
+    Текст берём после строки с датой публикации — до неё идёт шапка
+    сайта, после начинается сам разговор преподавателя со студентами.
+    """
+    if not href.startswith("/") or ".." in href:
+        raise WebError("Неверный адрес объявления")
+    html = get_page(cookie, href)
+
+    def after(label):
+        m = re.search(label + r"\s*:?\s*</?[^>]*>?\s*([^<]{2,140})", html)
+        return m.group(1).strip() if m else ""
+
+    # Заголовок объявления — ссылка на само себя внутри h2; в <title>
+    # страницы стоит безликое «Новость».
+    head = re.search(r"(?is)<h2[^>]*>\s*<a[^>]*news/view[^>]*>(.*?)</a>", html)
+
+    body = html
+    cut = re.search(r"Дата публикации[^<]*<", body)
+    if cut:
+        body = body[cut.end():]
+    # Ниже текста висит модальное окно «Инструкции» — оно к объявлению
+    # отношения не имеет и в тексте выглядит обрывком.
+    for tail in ("&times;", "Инструкция к разделу"):
+        if tail in body:
+            body = body.split(tail)[0]
+
+    when = re.search(r"Дата публикации:\s*([\d.]{8,10}(?:\s+[\d:]{4,5})?)", html)
+    return {
+        "title": _plain(head.group(1)) if head else (_title(html) or "Объявление"),
+        "discipline": after("Дисциплина"),
+        "author": after("Автор объявления"),
+        "date": when.group(1).strip() if when else "",
+        "text": text_of(body)[:8000],
+    }
+
+
 def find_in(cookie: str, path: str, needle: str, around: int = 220) -> dict:
     """
     Куски разметки вокруг искомого слова.

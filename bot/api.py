@@ -262,6 +262,27 @@ def _orioks(path: str, method: str, body: dict, uid: int, me: dict):
         except orioks.OrioksError as e:
             return 200, {"ok": True, "linked": True, "error": str(e)}
 
+    if path == "/api/orioks/news":
+        # Объявления преподавателей — то, что студент и называет
+        # домашним заданием. Ходим под сессией того, кто спрашивает:
+        # чужие объявления недоступны никому, включая владельца.
+        cookie = orioks.cookie_of(uid)
+        if not cookie:
+            return 200, {"web": False, "news": []}
+        item = (body.get("item") or "").strip()
+        try:
+            if item:
+                return 200, {"web": True,
+                             "item": orioks_web.news_item(cookie, item)}
+            return 200, {"web": True, "news": orioks.announcements(uid)}
+        except orioks_web.SessionExpired:
+            orioks.drop_cookie(uid)
+            return 200, {"web": False, "news": [],
+                         "error": "Доступ к сайту ОРИОКС кончился — "
+                                  "подключи его заново"}
+        except orioks_web.WebError as e:
+            return 200, {"web": True, "news": [], "error": str(e)}
+
     if path == "/api/orioks/raw" and method == "GET":
         # Свои же данные в сыром виде: нужно, когда экран показывает
         # непонятное и надо увидеть, что на самом деле прислал ОРИОКС.
