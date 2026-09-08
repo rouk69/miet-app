@@ -207,11 +207,20 @@ def sign_in_cookie(login: str, password: str) -> str:
     return cookie
 
 
-def get_page(cookie: str, path: str) -> str:
+def get_page(cookie: str, path: str, ajax: bool = False) -> str:
     """Страница из-под сохранённой сессии."""
     url = path if path.startswith("http") else BASE + path
-    req = urllib.request.Request(url, headers={"User-Agent": UA,
-                                               "Cookie": cookie})
+    # Referer обязателен не всегда, но некоторые разделы ОРИОКС без него
+    # отвечают 403: он считает переход «не со своей страницы» чужим.
+    req = urllib.request.Request(url, headers={
+        "User-Agent": UA, "Cookie": cookie, "Referer": BASE + "/",
+        "Accept": "text/html,application/xhtml+xml,*/*;q=0.8",
+        "Accept-Language": "ru-RU,ru;q=0.9",
+        "X-Requested-With": "XMLHttpRequest" if ajax else "",
+    })
+    for name, value in list(req.headers.items()):
+        if not value:
+            del req.headers[name]
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
     try:
         with opener.open(req, timeout=TIMEOUT) as r:
