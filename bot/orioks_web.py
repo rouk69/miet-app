@@ -315,7 +315,34 @@ def study_report(data: dict) -> dict:
         "мероприятий": total,
         "заполнено": dict(sorted(filled.items(), key=lambda p: -p[1])),
         "примеры": samples,
+        "материалы": materials(data),
     }
+
+
+def materials(data: dict) -> list:
+    """
+    Файлы и ссылки, прикреплённые преподавателем к мероприятию.
+
+    Это и есть то немногое, что веб-версия знает сверх API: методички,
+    задания и условия лежат тут в поле irs. Текста задания в ОРИОКС
+    нет ни здесь, ни где-либо ещё — есть вложение, которое его несёт.
+    """
+    out = []
+    for dis in data.get("dises", []):
+        for seg in dis.get("segments", []):
+            for km in seg.get("allKms", []):
+                for ir in km.get("irs") or []:
+                    if not isinstance(ir, dict) or not ir.get("link"):
+                        continue
+                    out.append({
+                        "discipline": dis.get("name") or "",
+                        "event": (km.get("name") or km.get("sh") or "").strip(),
+                        "week": km.get("week"),
+                        "name": ir.get("name") or "Материал",
+                        "kind": ir.get("type") or "",
+                        "link": ir.get("link") or "",
+                    })
+    return out
 
 
 def _cut_json(html: str) -> str:
