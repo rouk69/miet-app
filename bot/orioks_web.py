@@ -18,6 +18,7 @@ type, week, max_grade. Ни текста задания, ни файлов, ни
 from __future__ import annotations
 
 import http.cookiejar
+import json
 import logging
 import re
 import urllib.error
@@ -263,6 +264,93 @@ def explore(cookie: str, limit: int = 8) -> dict:
         pages.append({"href": href, "label": label, "title": _title(html),
                       "text": text_of(html)[:1500]})
     return {"pages": pages}
+
+
+STUDY_PATH = "/student/student"
+
+
+def study_json(cookie: str) -> dict:
+    """
+    Данные учёбы из веб-версии — те же дисциплины, но целиком.
+
+    Страница отдаёт их одним куском JSON прямо в разметке: так её
+    рисует Angular. Полей там заметно больше, чем в студенческом API:
+    сроки сдачи (date_start, date_end), настройки мероприятия,
+    прикреплённые ресурсы (irs) и попытки сдачи. Ради них всё и
+    затевалось — API отдаёт голые названия.
+    """
+    html = get_page(cookie, STUDY_PATH)
+    raw = _cut_json(html)
+    if not raw:
+        raise WebError("Не нашёл данные учёбы — ОРИОКС изменил страницу")
+    try:
+        return json.loads(raw)
+    except ValueError as e:
+        raise WebError("Не разобрал данные учёбы (" + str(e) + ")")
+
+
+def study_report(data: dict) -> dict:
+    """
+    Что в данных учёбы реально заполнено.
+
+    Разведка по живому аккаунту: поле, которое всегда пустое, полагаться
+    на себя не даёт, сколько бы обещаний ни было в его названии.
+    """
+    filled, total, samples = {}, 0, {}
+    for dis in data.get("dises", []):
+        for seg in dis.get("segments", []):
+            for km in seg.get("allKms", []):
+                total += 1
+                for key, value in km.items():
+                    if value in (None, "", [], {}, 0):
+                        continue
+                    filled[key] = filled.get(key, 0) + 1
+                    if key in ("settings", "irs", "balls", "date_start",
+                               "date_end", "attempt") and key not in samples:
+                        samples[key] = {"дисциплина": dis.get("name"),
+                                        "мероприятие": km.get("name"),
+                                        "значение": value}
+    return {
+        "дисциплин": len(data.get("dises", [])),
+        "мероприятий": total,
+        "заполнено": dict(sorted(filled.items(), key=lambda p: -p[1])),
+        "примеры": samples,
+    }
+
+
+def _cut_json(html: str) -> str:
+    """
+    Кусок от «{"dises":» до парной закрывающей скобки.
+
+    Регулярным выражением такое не берётся — вложенность произвольная,
+    поэтому считаем скобки, пропуская их внутри строк.
+    """
+    text = html.replace("&quot;", '"').replace("&#34;", '"')
+    start = text.find('{"dises"')
+    if start < 0:
+        return ""
+    depth = 0
+    in_str = False
+    escaped = False
+    for i in range(start, len(text)):
+        ch = text[i]
+        if in_str:
+            if escaped:
+                escaped = False
+            elif ch == "\\":
+                escaped = True
+            elif ch == '"':
+                in_str = False
+            continue
+        if ch == '"':
+            in_str = True
+        elif ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                return text[start:i + 1]
+    return ""
 
 
 def _title(html: str) -> str:
