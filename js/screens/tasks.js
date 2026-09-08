@@ -55,6 +55,16 @@ function titleOf(t) {
   return { main: name || type || 'Задание', note: type === name ? '' : type };
 }
 
+// Виды работ для фильтра. Ключ — то, что ищем в типе мероприятия;
+// у ОРИОКС названия длинные («Большое домашнее задание»), поэтому
+// сравниваем по куску, а не целиком.
+const KINDS = [
+  { id: 'all', label: 'Всё', match: () => true },
+  { id: 'hw', label: 'Домашние', match: t => /домашн|индивидуал|расчет|расчёт|курсов|реферат/i.test(t) },
+  { id: 'lab', label: 'Лабы', match: t => /лаборатор/i.test(t) },
+  { id: 'test', label: 'Контрольные', match: t => /контрольн|тест|коллоквиум|самостоятельн/i.test(t) },
+];
+
 // Группы по срочности. Порядок здесь же задаёт порядок на экране.
 const BUCKETS = [
   { id: 'late', title: 'Просрочено', note: 'Срок уже прошёл' },
@@ -158,15 +168,13 @@ export default async function tasksScreen() {
   // «порядок НБС», семестровый план. Сдавать там нечего, а строк они
   // дают больше трети — из-за них список и был нечитаемым.
   const tasks = all.filter(t => t.task);
-  const formal = all.filter(t => !t.task);
+  const session = all.filter(t => t.session)
+    .sort((a, b) => (a.left ?? 9999) - (b.left ?? 9999));
+  const formal = all.filter(t => !t.task && !t.session);
 
   const pending = tasks.filter(t => !t.done)
     .sort((a, b) => (a.left ?? 9999) - (b.left ?? 9999));
   const done = tasks.filter(t => t.done);
-
-  const groups = BUCKETS
-    .map(b => ({ ...b, items: pending.filter(t => t.bucket === b.id) }))
-    .filter(b => b.items.length);
 
   const soon = pending.filter(t => t.left !== null && t.left <= 7).length;
 
@@ -187,11 +195,18 @@ export default async function tasksScreen() {
         </div>
       </div>
 
-      ${groups.length ? groups.map(g => `
-        <div class="section-head"><div class="section-title">${esc(g.title)}</div></div>
-        ${g.note ? `<p class="section-note">${esc(g.note)}</p>` : ''}
-        <div class="list-card">${g.items.map(taskRow).join('')}</div>
-      `).join('') : emptyState('Всё сдано — свободен', 'check')}
+      <div class="pill-row" id="kinds" style="margin:14px 0 4px">
+        ${KINDS.map(k => `
+          <button class="pill ${k.id === 'all' ? 'active' : ''}"
+                  data-kind="${k.id}">${esc(k.label)}</button>`).join('')}
+      </div>
+
+      <div id="task-list"></div>
+
+      ${session.length ? `
+        <div class="section-head"><div class="section-title">Сессия</div></div>
+        <p class="section-note">Экзамены и зачёты — ими семестр кончается.</p>
+        <div class="list-card">${session.map(taskRow).join('')}</div>` : ''}
 
       ${done.length ? `
         <div class="section-head">
@@ -250,6 +265,60 @@ export default async function tasksScreen() {
         Текста задания в ОРИОКС API нет — только что сдавать и к какому
         сроку. Подробности и файлы открываются в самом ОРИОКС.
       </div>`,
+  });
+
+  // Список перерисовывается на месте: фильтр по виду работы не должен
+  // перезагружать экран и терять прокрутку.
+  const listBox = node.querySelector('#task-list');
+  let kind = KINDS[0];
+  const unfolded = new Set();
+
+  const drawList = () => {
+    const items = pending.filter(t => kind.match(`${t.type} ${t.name}`));
+    const groups = BUCKETS
+      .map(b => ({ ...b, items: items.filter(t => t.bucket === b.id) }))
+      .filter(b => b.items.length);
+
+    if (!groups.length) {
+      listBox.innerHTML = emptyState(
+        kind.id === 'all' ? 'Всё сдано — свободен' : 'Таких работ нет', 'check');
+      return;
+    }
+    listBox.innerHTML = groups.map(g => {
+      // «Потом» у студента — полсотни записей: развёрнутым этот блок и
+      // превращал экран в простыню. Сворачиваем, оставляя счётчик.
+      const folded = g.id === 'later' && g.items.length > 6
+        && !unfolded.has(g.id);
+      return `
+        <div class="section-head">
+          <div class="section-title">${esc(g.title)}</div>
+          ${folded ? `<button class="section-link" data-unfold="${g.id}">
+            ${g.items.length}</button>` : ''}
+        </div>
+        ${g.note ? `<p class="section-note">${esc(g.note)}</p>` : ''}
+        <div class="list-card">
+          ${(folded ? g.items.slice(0, 3) : g.items).map(taskRow).join('')}
+        </div>`;
+    }).join('');
+  };
+  drawList();
+
+  node.querySelector('#kinds').addEventListener('click', e => {
+    const b = e.target.closest('[data-kind]');
+    if (!b) return;
+    kind = KINDS.find(k => k.id === b.dataset.kind);
+    node.querySelectorAll('#kinds .pill').forEach(p => p.classList.remove('active'));
+    b.classList.add('active');
+    drawList();
+  });
+
+  listBox.addEventListener('click', e => {
+    const more = e.target.closest('[data-unfold]');
+    if (!more) return;
+    // Перерисовываем список целиком вместо поиска соседних узлов: так
+    // разметка может меняться, не ломая обработчик.
+    unfolded.add(more.dataset.unfold);
+    drawList();
   });
 
   const toggler = (btnId, listId, count) =>

@@ -575,8 +575,10 @@ check("несданное без оценки",
 check("домашка распознана как задание", events[1]["homework"], events[1])
 check("экзамен заданием не считается", not events[2]["homework"], events[2])
 check("неделя сдачи сохранена", events[1]["week"] == 11, events[1])
+# Экзамен, посещаемость и «порядок» в счёт заданий не идут: в фикстуре
+# остаются два домашних задания, одно из них сдано.
 check("счётчики считают только задания",
-      tasks["total"] == 3 and tasks["done"] == 1, tasks)
+      tasks["total"] == 2 and tasks["done"] == 1, tasks)
 check("рабочий путь мероприятий найден и запомнен",
       orioks._events_path == "/student/disciplines/{id}/events",
       orioks._events_path)
@@ -593,7 +595,12 @@ check("лабораторная — задание",
       orioks.is_task({"type": "Лабораторная работа", "name": "ЛР.1",
                       "max_grade": 10.0}))
 check("формальности не попали в счёт заданий",
-      tasks["total"] == 3, tasks["total"])
+      tasks["total"] == 2, tasks["total"])
+check("экзамен помечен как сессия, а не задание",
+      events[2]["session"] and not events[2]["task"], events[2])
+check("зачёт тоже относится к сессии",
+      orioks.is_session({"type": "Зачёт"})
+      and not orioks.is_task({"type": "Зачёт", "max_grade": 20}))
 check("но в списке мероприятий они есть",
       len(events) == 5 and not events[3]["task"], events[3])
 

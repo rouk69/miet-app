@@ -220,12 +220,22 @@ def linked_count() -> int:
 # У живого студента таких записей оказалось больше трети из семидесяти
 # пяти, и именно они делали экран нечитаемым.
 NOT_A_TASK = ("посещаем", "активность", "порядок", "семестровый план",
-              "план работы", "рейтинг", "итог")
+              "план работы", "рейтинг", "итог", "общие ресурсы", "лекция")
+
+# Экзамен и зачёт — не работа, которую сдают в течение семестра, а то,
+# чем он заканчивается. В списке дел рядом с лабораторной они сбивают:
+# «сдать» экзамен нельзя заранее. Показываем их отдельно.
+SESSION_TYPES = ("экзамен", "зачёт", "зачет")
 
 
 def is_homework(event_type: str) -> bool:
     low = (event_type or "").lower()
     return any(mark in low for mark in HOMEWORK_TYPES)
+
+
+def is_session(event: dict) -> bool:
+    """Экзамен или зачёт — конец семестра, а не текущее дело."""
+    return any(m in (event.get("type") or "").lower() for m in SESSION_TYPES)
 
 
 def is_task(event: dict) -> bool:
@@ -237,6 +247,8 @@ def is_task(event: dict) -> bool:
     порядка, а не работа.
     """
     if not (event.get("max_grade") or 0) > 0:
+        return False
+    if is_session(event):
         return False
     text = f"{event.get('type') or ''} {event.get('name') or ''}".lower()
     return not any(mark in text for mark in NOT_A_TASK)
@@ -269,6 +281,7 @@ def tasks(token: str) -> dict:
                 # Формальности приходят вместе с заданиями, но считать и
                 # показывать их наравне нельзя.
                 "task": task,
+                "session": is_session(e),
             })
             if task:
                 total += 1
