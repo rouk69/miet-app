@@ -252,6 +252,14 @@ def _orioks(path: str, method: str, body: dict, uid: int, me: dict):
         except orioks.OrioksError as e:
             return 200, {"ok": True, "linked": True, "error": str(e)}
 
+    if path == "/api/orioks/raw" and method == "GET":
+        # Свои же данные в сыром виде: нужно, когда экран показывает
+        # непонятное и надо увидеть, что на самом деле прислал ОРИОКС.
+        token = orioks.token_of(uid)
+        if not token:
+            return 400, {"error": "ОРИОКС не подключён"}
+        return 200, orioks.raw_dump(token)
+
     if path == "/api/orioks/unlink" and method == "POST":
         token = orioks.token_of(uid)
         if token:
