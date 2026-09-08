@@ -31,6 +31,13 @@ log = logging.getLogger("miet.orioks")
 BASE = "https://orioks.miet.ru/api/v1"
 TIMEOUT = 20
 
+# Оба заголовка обязательны: без них ОРИОКС отвечает 400, не объясняя
+# причины. User-Agent документация требует в виде «имя/версия ОС».
+HEADERS = {
+    "Accept": "application/json",
+    "User-Agent": "miet_mini_app/1.0 (Telegram Mini App)",
+}
+
 # Типы мероприятий, которые студент воспринимает как «задание, которое
 # нужно сделать и сдать». Остальное (экзамен, зачёт) — это событие, а не
 # работа, и в списке дел ему не место.
@@ -43,19 +50,28 @@ class OrioksError(Exception):
     """Ошибка, которую можно показать человеку."""
 
 
-def _request(path: str, headers: dict) -> object:
+def _request(path: str, headers: dict, method: str = "GET") -> object:
     """
     Запрос к ОРИОКС. Прокси обходим явно: на машине автора системный
     прокси заворачивает такие адреса и отвечает 502.
     """
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
-    req = urllib.request.Request(BASE + path, headers=headers)
+    req = urllib.request.Request(BASE + path, headers={**HEADERS, **headers},
+                                 method=method)
     try:
         with opener.open(req, timeout=TIMEOUT) as r:
             return json.loads(r.read().decode("utf-8"))
     except urllib.error.HTTPError as e:
-        if e.code in (401, 403):
-            raise OrioksError("ОРИОКС не принял данные для входа")
+        if e.code == 401:
+            raise OrioksError("ОРИОКС не принял логин или пароль")
+        if e.code == 403:
+            # Восемь токенов на студента — предел самого ОРИОКС. Человеку
+            # надо объяснить, что делать, а не показывать номер ошибки.
+            raise OrioksError("В ОРИОКС уже восемь подключённых приложений — "
+                              "отзови лишние токены в самом ОРИОКС")
+        if e.code == 400:
+            raise OrioksError("ОРИОКС не понял запрос — напиши в поддержку "
+                              "приложения, это ошибка на нашей стороне")
         raise OrioksError(f"ОРИОКС ответил {e.code}")
     except urllib.error.URLError as e:
         # Отдельно от прочих ошибок: ОРИОКС рвёт TLS с внешних адресов,
@@ -78,8 +94,22 @@ def get_token(login: str, password: str) -> str:
     return str(token)
 
 
-def _with_token(path: str, token: str) -> object:
-    return _request(path, {"Authorization": "Bearer " + token})
+def _with_token(path: str, token: str, method: str = "GET") -> object:
+    return _request(path, {"Authorization": "Bearer " + token}, method)
+
+
+# Путь контрольных мероприятий в открытой документации не опубликован —
+# описан только раздел. Вместо того чтобы гадать одним вариантом и
+# получать пустой экран, перебираем известные формы и запоминаем ту, что
+# ответила: следующий запрос идёт сразу по ней.
+EVENT_PATHS = (
+    "/student/disciplines/{id}/control_events",
+    "/student/disciplines/{id}/control-events",
+    "/student/disciplines/{id}/controlevents",
+    "/student/disciplines/{id}/events",
+    "/student/control_events/{id}",
+)
+_events_path = None
 
 
 def student(token: str) -> dict:
@@ -93,15 +123,35 @@ def disciplines(token: str) -> list:
 
 
 def control_events(token: str, discipline_id: int) -> list:
-    out = _with_token(f"/student/disciplines/{discipline_id}/control_events",
-                      token)
-    return out if isinstance(out, list) else []
+    global _events_path
+    tries = ([_events_path] if _events_path else []) + [
+        p for p in EVENT_PATHS if p != _events_path]
+    last = None
+    for template in tries:
+        try:
+            out = _with_token(template.format(id=discipline_id), token)
+        except OrioksError as e:
+            last = e
+            continue
+        if _events_path != template:
+            _events_path = template
+            log.info("контрольные мероприятия отвечают по пути %s", template)
+        return out if isinstance(out, list) else []
+    if last:
+        raise last
+    return []
 
 
 def revoke(token: str) -> bool:
-    """Аннулирует токен на стороне ОРИОКС."""
+    """
+    Аннулирует токен на стороне ОРИОКС.
+
+    Путь и метод — из документации: DELETE /student/tokens/<токен>.
+    Сначала я предположил GET на выдуманный /revoke, и отзыв молча не
+    работал бы: токен остался бы жить после «Отключить».
+    """
     try:
-        _with_token("/student/tokens/revoke", token)
+        _with_token("/student/tokens/" + token, token, method="DELETE")
         return True
     except OrioksError as e:
         log.info("токен не аннулирован: %s", e)
@@ -192,7 +242,9 @@ def probe() -> dict:
         return {"reachable": True, "note": "ответил без авторизации"}
     except OrioksError as e:
         text = str(e)
-        # «Не принял данные для входа» означает, что запрос дошёл и был
-        # разобран, — а это и есть искомая доступность.
-        return {"reachable": "не принял" in text or "ответил 4" in text,
-                "note": text}
+        # Любой осмысленный ответ означает, что запрос дошёл и был
+        # разобран, — а это и есть искомая доступность. Недоступность
+        # выглядит иначе: обрыв TLS или таймаут.
+        reachable = "недоступен" not in text
+        return {"reachable": reachable, "note": text,
+                "events_path": _events_path or "ещё не выяснен"}

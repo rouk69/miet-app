@@ -242,7 +242,8 @@ function linkSheet() {
       <div class="field-group">
         <div class="field-label">Логин</div>
         <input class="field-input" id="olog" autocomplete="username"
-               autocapitalize="none" spellcheck="false">
+               autocapitalize="none" spellcheck="false"
+               placeholder="тот же, что при входе в ОРИОКС">
       </div>
       <div class="field-group">
         <div class="field-label">Пароль</div>

@@ -503,8 +503,8 @@ from . import orioks                                               # noqa: E402
 CALLS = []
 
 
-def fake_request(path, headers):
-    CALLS.append((path, headers))
+def fake_request(path, headers, method="GET"):
+    CALLS.append((path, headers, method))
     if path == "/auth":
         if headers.get("Authorization") == "Basic c3R1ZDpzZWNyZXQ=":
             return {"token": "T" * 32}
@@ -524,7 +524,8 @@ def fake_request(path, headers):
             {"alias": "ex.1", "name": "Экзамен", "type": "Экзамен",
              "week": 17, "max_grade": 30.0, "current_grade": -1.0},
         ]
-    if path == "/student/tokens/revoke":
+    # Отзыв — DELETE /student/tokens/<токен>, как в документации.
+    if path.startswith("/student/tokens/") and method == "DELETE":
         return {"ok": True}
     raise orioks.OrioksError("ОРИОКС ответил 404")
 
@@ -570,6 +571,9 @@ check("домашка распознана как задание", events[1]["ho
 check("экзамен заданием не считается", not events[2]["homework"], events[2])
 check("неделя сдачи сохранена", events[1]["week"] == 11, events[1])
 check("счётчики сошлись", tasks["total"] == 3 and tasks["done"] == 1, tasks)
+check("рабочий путь мероприятий найден и запомнен",
+      orioks._events_path == "/student/disciplines/{id}/control_events",
+      orioks._events_path)
 
 s, r = api.handle("GET", "/api/orioks", {}, {}, USER)
 check("после подключения задания отдаются", r["linked"] and r["tasks"], r)
@@ -585,7 +589,8 @@ s, r = api.handle("POST", "/api/orioks/unlink", {}, {}, USER)
 check("отключение сработало", s == 200 and not r["linked"], r)
 check("токен убран", orioks.token_of(42) == "", orioks.token_of(42))
 check("и аннулирован в ОРИОКС",
-      any(c[0] == "/student/tokens/revoke" for c in CALLS), CALLS[-3:])
+      any(c[0].startswith("/student/tokens/") and c[2] == "DELETE"
+          for c in CALLS), CALLS[-3:])
 s, r = api.handle("GET", "/api/orioks", {}, {}, USER)
 check("после отключения снова не подключено", r["linked"] is False, r)
 
