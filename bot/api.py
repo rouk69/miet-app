@@ -655,6 +655,23 @@ def _admin(path: str, method: str, query: dict, body: dict, uid: int, me: dict):
                                   "переподключи ОРИОКС в разделе заданий"}
         page = (query.get("page", [""])[0] or "").strip()
         try:
+            if query.get("try"):
+                # Проверка догадок разом: какой из адресов вообще
+                # отвечает под нашей сессией.
+                out = {}
+                for guess in (query.get("try", [""])[0] or "").split(","):
+                    guess = guess.strip()
+                    if not guess.startswith("/"):
+                        continue
+                    try:
+                        html = orioks_web.get_page(cookie, guess)
+                        out[guess] = {"ok": True,
+                                      "title": orioks_web._title(html),
+                                      "строк": len(orioks_web.re.findall(
+                                          r"(?i)<tr[\s>]", html))}
+                    except orioks_web.WebError as e:
+                        out[guess] = {"ok": False, "ошибка": str(e)}
+                return 200, out
             find = (query.get("find", [""])[0] or "").strip()
             if find:
                 return 200, orioks_web.find_in(
