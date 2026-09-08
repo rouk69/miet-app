@@ -245,8 +245,16 @@ def _orioks(path: str, method: str, body: dict, uid: int, me: dict):
             token = orioks.get_token(login, password)
         except orioks.OrioksError as e:
             return 400, {"error": str(e)}
-        # Пароль дальше этой строки не идёт: сохраняем только токен.
         orioks.save_token(uid, token)
+        # Второй вход — в веб-версию: текст домашнего задания есть только
+        # там, API отдаёт голое название. Не вышло — не беда, задания
+        # покажутся без текста, поэтому подключение из-за этого не рвём.
+        try:
+            orioks.save_cookie(uid, orioks_web.sign_in_cookie(login, password))
+        except orioks_web.WebError as e:
+            log.info("веб-версия ОРИОКС не пустила: %s", e)
+        # Пароль дальше этой строки не идёт: в базе только токен и cookie.
+        del password
         try:
             return 200, {"ok": True, "linked": True, "tasks": orioks.tasks(token)}
         except orioks.OrioksError as e:
@@ -609,6 +617,20 @@ def _admin(path: str, method: str, query: dict, body: dict, uid: int, me: dict):
         # отправки. Пароль для этого не нужен.
         try:
             return 200, orioks_web.login_form()
+        except orioks_web.WebError as e:
+            return 200, {"error": str(e)}
+
+    if path == "/api/admin/orioks-web-dump" and method == "GET":
+        # Что лежит в личном кабинете: нужно один раз, чтобы понять, на
+        # какой странице живёт текст задания. Ходим ТОЛЬКО под своей
+        # сессией — сессия владельца открывает кабинет владельца, чужие
+        # кабинеты сюда не попадают ни при каких правах.
+        cookie = orioks.cookie_of(me["id"])
+        if not cookie:
+            return 200, {"error": "Сессия веб-версии не сохранена — "
+                                  "переподключи ОРИОКС в разделе заданий"}
+        try:
+            return 200, orioks_web.explore(cookie)
         except orioks_web.WebError as e:
             return 200, {"error": str(e)}
 

@@ -496,7 +496,7 @@ check("дни человека собраны", card["days"] and card["active_da
 
 
 print("\n17. ОРИОКС: задания и приватность")
-from . import orioks                                               # noqa: E402
+from . import orioks, orioks_web                                  # noqa: E402
 
 # Сеть подменяем: ходить в настоящий ОРИОКС из проверок нельзя — нужен
 # чужой логин, а сервер вуза не должен получать запросы на каждый прогон.
@@ -536,6 +536,22 @@ def fake_request(path, headers, method="GET"):
 
 
 orioks._request = fake_request
+
+
+# Веб-версия в проверках не должна ходить в живой ОРИОКС: подменяем вход
+# так же, как API. Заодно видно, что пароль доходит только сюда.
+WEB_SEEN = {}
+
+
+def fake_sign_in(login, password):
+    WEB_SEEN["login"] = login
+    WEB_SEEN["password"] = password
+    if password != "secret":
+        raise orioks_web.WebError("ОРИОКС не принял логин или пароль")
+    return "PHPSESSID=web-session-abc"
+
+
+orioks_web.sign_in_cookie = fake_sign_in
 
 s, r = api.handle("GET", "/api/orioks", {}, {}, USER)
 check("без подключения так и сказано", s == 200 and r["linked"] is False, r)
@@ -652,6 +668,60 @@ check("вложенный текст ошибки тоже читается",
 check("пустое тело не роняет разбор",
       orioks._explain(FakeHTTPError(500, "")) == "ОРИОКС ответил 500",
       orioks._explain(FakeHTTPError(500, "")))
+
+
+
+# ── веб-версия ОРИОКС: сессия вместо пароля ──
+# Выше связь уже разрывали, поэтому подключаемся заново: нас интересует
+# именно то, что кладёт в базу успешный вход.
+api.handle("POST", "/api/orioks/link", {},
+           {"login": "stud", "password": "secret"}, USER)
+check("сессия сохранена при подключении",
+      orioks.cookie_of(42) == "PHPSESSID=web-session-abc", orioks.cookie_of(42))
+check("пароль дошёл только до входа", WEB_SEEN.get("password") == "secret")
+
+# Та же проверка всей базы, но теперь после сохранения сессии: cookie
+# лежит, пароль — нет.
+found2 = []
+for (table,) in db.conn().execute(
+        "SELECT name FROM sqlite_master WHERE type='table'"):
+    for col in [c[1] for c in db.conn().execute(f"PRAGMA table_info({table})")]:
+        if db.conn().execute(
+                f"SELECT COUNT(*) FROM {table} WHERE CAST({col} AS TEXT) LIKE ?",
+                ("%secret%",)).fetchone()[0]:
+            found2.append(f"{table}.{col}")
+check("пароля нет в базе и после входа в веб-версию", not found2, found2)
+
+orioks.drop_cookie(42)
+check("отключение стирает сессию сразу", orioks.cookie_of(42) == "")
+orioks.save_cookie(42, "PHPSESSID=web-session-abc")
+
+# Разведка кабинета — только своя. Чужую сессию не берёт никто, включая
+# владельца: смотрим по me["id"], а не по запрошенному пользователю.
+s_, r_ = api.handle("GET", "/api/admin/orioks-web-dump", {}, {}, USER)
+check("не админу разведка недоступна", s_ == 403, (s_, r_))
+
+orioks.forget(42)
+s_, r_ = api.handle("GET", "/api/admin/orioks-web-dump", {}, {}, ADMIN)
+check("без сессии владельцу сказано переподключиться",
+      s_ == 200 and "переподключи" in r_.get("error", ""), (s_, r_))
+
+# Разбор страницы кабинета: заголовок, ссылки, текст без разметки.
+page = ('<html><title> Журнал </title><body><script>x=1</script>'
+        '<h1>Домашнее задание 1</h1><p>Решить задачи 1-5</p>'
+        '<a href="/student/journal">Мой журнал</a>'
+        '<a href="/site/logout">Выход</a></body></html>')
+check("заголовок страницы читается", orioks_web._title(page) == "Журнал")
+check("текст очищен от разметки и скриптов",
+      "Решить задачи 1-5" in orioks_web.text_of(page)
+      and "x=1" not in orioks_web.text_of(page), orioks_web.text_of(page))
+check("ссылки кабинета собраны",
+      ("/student/journal", "Мой журнал") in orioks_web._links(page),
+      orioks_web._links(page))
+check("csrf вынимается из скрытого поля",
+      orioks_web._csrf_of('<input type="hidden" name="_csrf" value="Ab-9_z">')
+      == "Ab-9_z")
+check("без формы csrf пустой", orioks_web._csrf_of("<p>нет</p>") == "")
 
 
 print("\n" + "=" * 58)
