@@ -339,7 +339,19 @@ def _feed(path: str, method: str, query: dict, body: dict, uid: int, me: dict):
 
     # Видимость проверяется до всего остального: закрытый пост нельзя ни
     # прочитать, ни отметить реакцией, ни проголосовать в нём.
-    post = posts.one(post_id, uid, group, can_see_authors=deep, see_all=everything)
+    #
+    # Послабление только для уборки и закрепления: записи со статусом
+    # pending и rejected обычную проверку не проходят, и без этого мусор
+    # из очереди нельзя было даже удалить — отклонить можно, а
+    # отклонённое лежало в базе вечно. На чтение это не распространяется:
+    # иначе модератор получил бы доступ к адресным постам чужих групп,
+    # которых он видеть не должен.
+    keeper = (tail in ("/delete", "/pin")
+              and (analytics.can(me, "posts_moderate")
+                   or analytics.can(me, "posts_delete")
+                   or analytics.can(me, "posts_pin")))
+    post = posts.one(post_id, uid, group, can_see_authors=deep,
+                     see_all=everything, force=keeper)
     if not post:
         return 404, {"error": "Пост не найден"}
 

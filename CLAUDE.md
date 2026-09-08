@@ -364,7 +364,7 @@ python tools/update.py
 python -m bot.selftest      # логика, рендер, клавиатуры, лимиты — 50
 python -m bot.test_flows    # обработчики целиком, Telegram подменён — 127
 python -m bot.test_admin    # права, справочник, доска, разбор дней — 134
-python -m bot.test_posts    # лента, комментарии, режимы — 123
+python -m bot.test_posts    # лента, комментарии, режимы — 131
 ```
 
 `selftest` не падает, если `miet.ru` недоступен, — берёт последнее из кеша.
