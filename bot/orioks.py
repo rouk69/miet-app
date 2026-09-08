@@ -339,11 +339,34 @@ def raw_dump(token: str) -> dict:
         path = template.format(id=first)
         try:
             got = _with_token(path, token)
-            out["paths_tried"].append({"path": path, "ok": True,
-                                       "sample": str(got)[:400]})
+            # Полный первый элемент, а не обрезок: обрезанный ответ уже
+            # один раз скрыл от меня половину полей.
+            first_item = got[0] if isinstance(got, list) and got else got
+            out["paths_tried"].append({
+                "path": path, "ok": True,
+                "count": len(got) if isinstance(got, list) else None,
+                "keys": sorted(first_item.keys())
+                        if isinstance(first_item, dict) else None,
+                "first": first_item,
+            })
         except OrioksError as e:
             out["paths_tried"].append({"path": path, "ok": False,
                                        "error": str(e)})
+    # Что ещё ОРИОКС знает о дисциплине: вдруг описание заданий лежит
+    # в соседнем разделе, а не в самих мероприятиях.
+    for extra in ("/student/disciplines/{id}",
+                  "/student/disciplines/{id}/resources",
+                  "/student/disciplines/{id}/materials",
+                  "/student/disciplines/{id}/info",
+                  "/student/disciplines/{id}/events/{ev}"):
+        path = extra.format(id=first, ev=1)
+        try:
+            got = _with_token(path, token)
+            out.setdefault("extras", []).append(
+                {"path": path, "ok": True, "sample": str(got)[:500]})
+        except OrioksError as e:
+            out.setdefault("extras", []).append(
+                {"path": path, "ok": False, "error": str(e)})
     return out
 
 
