@@ -29,7 +29,8 @@ import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
-from . import analytics, appconf, auth, directory, help_board, notify, posts
+from . import analytics, appconf, auth, directory, help_board, notify
+from . import orioks, posts
 from . import render, storage
 from . import media as mediastore
 
@@ -542,6 +543,12 @@ def _admin(path: str, method: str, query: dict, body: dict, uid: int, me: dict):
             except KeyError:
                 return 400, {"error": "Неизвестная настройка"}
             return 200, {"ok": True, "flags": appconf.described()}
+
+    if path == "/api/admin/orioks-probe" and method == "GET":
+        # Видит ли наш сервер ОРИОКС вообще: с адресов вне России он
+        # рвёт TLS, и проверить это можно только оттуда, где живёт бот.
+        return 200, {"probe": orioks.probe(),
+                     "linked": orioks.linked_count()}
 
     if path == "/api/admin/days" and method == "GET":
         days = min(90, max(7, int(query.get("days", ["30"])[0] or 30)))

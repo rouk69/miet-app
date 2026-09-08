@@ -186,6 +186,14 @@ SCHEMA = [
     )""",
     "CREATE INDEX IF NOT EXISTS help_open ON help_offers(status, kind, id)",
     "CREATE INDEX IF NOT EXISTS help_author ON help_offers(user_id, status)",
+    # Связь с ОРИОКС. Здесь лежит ТОЛЬКО токен: пароль проходит через
+    # сервер один раз при подключении и нигде не остаётся. Токен студент
+    # может отозвать сам — и отсюда, и в любом другом клиенте ОРИОКС.
+    """CREATE TABLE IF NOT EXISTS orioks_links (
+        user_id   INTEGER PRIMARY KEY,
+        token     TEXT NOT NULL,
+        linked_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )""",
 ]
 
 # Столбцы, доросшие к таблицам позже. У баз, созданных раньше, их нет —
