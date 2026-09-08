@@ -395,6 +395,32 @@ def with_materials(user_id: int, data: dict) -> dict:
 def forget_materials(user_id: int) -> None:
     """При отключении память о вложениях уходит вместе с сессией."""
     _MATERIALS.pop(user_id, None)
+    _NEWS.pop(user_id, None)
+
+
+# Объявления обновляются чаще вложений — преподаватель пишет их к
+# занятию, — поэтому и живут в памяти меньше.
+_NEWS: dict = {}
+_NEWS_TTL = 10 * 60
+
+
+def announcements(user_id: int) -> list:
+    """
+    Объявления преподавателей этого студента.
+
+    Именно они и есть «домашнее задание к следующему занятию»: в
+    ведомости такого нет, преподаватель пишет это объявлением к
+    дисциплине.
+    """
+    cookie = cookie_of(user_id)
+    if not cookie:
+        return []
+    cached = _NEWS.get(user_id)
+    if cached and time.time() - cached[0] < _NEWS_TTL:
+        return cached[1]
+    items = orioks_web.announcements(cookie)
+    _NEWS[user_id] = (time.time(), items)
+    return items
 
 
 def _raw_code(path: str, headers: dict, method: str = "GET"):
