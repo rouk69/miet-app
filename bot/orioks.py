@@ -268,6 +268,41 @@ def _raw_code(path: str, headers: dict, method: str = "GET"):
         return 0, type(e).__name__
 
 
+def raw_dump(token: str) -> dict:
+    """
+    Сырой ответ ОРИОКС как есть — для разбора, когда экран показывает
+    ерунду. Отдаётся только своему владельцу токена и только про него:
+    это его же данные, но в том виде, в каком их прислал ОРИОКС.
+    """
+    out = {"paths_tried": [], "disciplines": None, "events": None}
+    try:
+        out["disciplines"] = _with_token("/student/disciplines", token)
+    except OrioksError as e:
+        out["disciplines_error"] = str(e)
+        return out
+
+    first = None
+    if isinstance(out["disciplines"], list) and out["disciplines"]:
+        first = out["disciplines"][0]
+        if isinstance(first, dict):
+            first = first.get("id")
+    if first is None:
+        return out
+
+    # Показываем ответ КАЖДОГО кандидата пути: так видно, какой из них
+    # отдаёт мероприятия, а какой — что-то постороннее, принятое за них.
+    for template in EVENT_PATHS:
+        path = template.format(id=first)
+        try:
+            got = _with_token(path, token)
+            out["paths_tried"].append({"path": path, "ok": True,
+                                       "sample": str(got)[:400]})
+        except OrioksError as e:
+            out["paths_tried"].append({"path": path, "ok": False,
+                                       "error": str(e)})
+    return out
+
+
 def probe() -> dict:
     """
     Разведка: как именно ОРИОКС отвечает нашему серверу.
