@@ -418,7 +418,16 @@ def announcements(user_id: int) -> list:
     cached = _NEWS.get(user_id)
     if cached and time.time() - cached[0] < _NEWS_TTL:
         return cached[1]
-    items = orioks_web.announcements(cookie)
+
+    # Два источника, и они не равнозначны. Объявления дисциплин —
+    # постоянный список: он не пустеет от того, что объявление
+    # прочитали. Страница уведомлений показывает только непрочитанное,
+    # зато приносит общие новости института, которых у дисциплин нет.
+    items = orioks_web.course_news(cookie)
+    seen = {n["href"] for n in items}
+    for extra in orioks_web.announcements(cookie):
+        if extra["href"] not in seen:
+            items.append(extra)
     _NEWS[user_id] = (time.time(), items)
     return items
 
