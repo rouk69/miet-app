@@ -129,10 +129,13 @@ def _with_token(path: str, token: str, method: str = "GET") -> object:
 # получать пустой экран, перебираем известные формы и запоминаем ту, что
 # ответила: следующий запрос идёт сразу по ней.
 EVENT_PATHS = (
+    # Первым — тот, что реально отвечает: проверено на живом аккаунте.
+    # Остальные оставлены на случай, если ОРИОКС поменяет адрес: без них
+    # переезд означал бы пустой экран без объяснения. Порядок важен —
+    # каждый лишний кандидат это 404 на каждую дисциплину, а их восемь.
+    "/student/disciplines/{id}/events",
     "/student/disciplines/{id}/control_events",
     "/student/disciplines/{id}/control-events",
-    "/student/disciplines/{id}/controlevents",
-    "/student/disciplines/{id}/events",
     "/student/control_events/{id}",
 )
 _events_path = None
@@ -211,9 +214,32 @@ def linked_count() -> int:
 
 # ─────────────────────────── сборка ───────────────────────────
 
+# Не работа, а формальность: посещаемость, активность, «порядок НБС»,
+# семестровый план. В ОРИОКС они лежат вперемешку с заданиями, но сдавать
+# там нечего — в списке дел им не место, иначе он превращается в шум.
+# У живого студента таких записей оказалось больше трети из семидесяти
+# пяти, и именно они делали экран нечитаемым.
+NOT_A_TASK = ("посещаем", "активность", "порядок", "семестровый план",
+              "план работы", "рейтинг", "итог")
+
+
 def is_homework(event_type: str) -> bool:
     low = (event_type or "").lower()
     return any(mark in low for mark in HOMEWORK_TYPES)
+
+
+def is_task(event: dict) -> bool:
+    """
+    Настоящее ли это задание.
+
+    Два признака: за него дают баллы и это не отметка о посещении.
+    Мероприятие на ноль баллов сдавать бессмысленно — это запись для
+    порядка, а не работа.
+    """
+    if not (event.get("max_grade") or 0) > 0:
+        return False
+    text = f"{event.get('type') or ''} {event.get('name') or ''}".lower()
+    return not any(mark in text for mark in NOT_A_TASK)
 
 
 def tasks(token: str) -> dict:
@@ -231,6 +257,7 @@ def tasks(token: str) -> dict:
         for e in control_events(token, d.get("id")):
             grade = e.get("current_grade")
             got = grade is not None and grade >= 0
+            task = is_task(e)
             events.append({
                 "name": e.get("name") or e.get("type") or "Задание",
                 "type": e.get("type") or "",
@@ -239,9 +266,13 @@ def tasks(token: str) -> dict:
                 "grade": grade if got else None,
                 "done": got,
                 "homework": is_homework(e.get("type")),
+                # Формальности приходят вместе с заданиями, но считать и
+                # показывать их наравне нельзя.
+                "task": task,
             })
-            total += 1
-            done += 1 if got else 0
+            if task:
+                total += 1
+                done += 1 if got else 0
         out.append({
             "id": d.get("id"),
             "name": d.get("name") or "Дисциплина",
