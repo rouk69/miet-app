@@ -406,7 +406,10 @@ function linkSheet() {
       </div>
       <div class="warn-note">
         ${icon('shield', 16)}
-        Пароль уходит в ОРИОКС за токеном и нигде не сохраняется.
+        Пароль уходит в ОРИОКС за доступом к твоему кабинету и нигде не
+        сохраняется — ни в боте, ни в телефоне. Доступ нужен, чтобы
+        показать текст заданий: в кратком виде ОРИОКС отдаёт только их
+        названия. Отключишь — доступ стирается сразу.
       </div>
       <button class="btn-primary" id="ogo" style="margin-top:12px">Войти</button>`,
     onMount(root, close) {
@@ -418,7 +421,7 @@ function linkSheet() {
         go.disabled = true;
         go.textContent = 'Подключаю…';
         try {
-          await post('/api/orioks/link', { login, password }, { timeout: 30000 });
+          await post('/api/orioks/link', { login, password }, { timeout: 45000 });
           account.orioks = true;
           hapticNotify('success');
           close();
