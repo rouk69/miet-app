@@ -634,6 +634,11 @@ def _admin(path: str, method: str, query: dict, body: dict, uid: int, me: dict):
                                   "переподключи ОРИОКС в разделе заданий"}
         page = (query.get("page", [""])[0] or "").strip()
         try:
+            if query.get("urls"):
+                # Куда ходит сам кабинет: адреса источников данных лежат
+                # в его скриптах, а не в разметке.
+                return 200, orioks_web.endpoints(
+                    cookie, page or orioks_web.STUDY_PATH)
             if query.get("study"):
                 # Сводка по данным учёбы: что из полей веб-версии
                 # заполнено на живом аккаунте, а что пустое всегда.

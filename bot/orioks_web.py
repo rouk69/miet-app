@@ -302,6 +302,53 @@ def study_json(cookie: str) -> dict:
         raise WebError("Не разобрал данные учёбы (" + str(e) + ")")
 
 
+def endpoints(cookie: str, path: str = STUDY_PATH, limit: int = 8) -> dict:
+    """
+    Какие адреса дёргает сам кабинет.
+
+    Страницы ОРИОКС рисует Angular, и настоящие источники данных лежат
+    не в разметке, а в подключённых скриптах. Перебирать адреса наугад
+    бессмысленно — дешевле прочитать, куда ходит сам сайт.
+    """
+    html = get_page(cookie, path)
+    scripts = re.findall(r"<script[^>]*src=[\"']([^\"']+)[\"']", html, re.I)
+    mine = [s for s in scripts
+            if s.startswith("/") or s.startswith(BASE)][:limit]
+
+    found, failed = set(), []
+    for src in [None] + mine:
+        try:
+            body = html if src is None else get_page(cookie, src)
+        except WebError as e:
+            failed.append({"src": src, "error": str(e)})
+            continue
+        for m in re.findall(r"[\"'](/[a-z][a-z0-9_\-/{}$.]{3,60})[\"']",
+                            body, re.I):
+            found.add(m)
+
+    return {
+        "страница": path,
+        "скриптов": len(mine),
+        "не открылись": failed,
+        "пути": sorted(p for p in found if _looks_useful(p)),
+        "всего путей": len(found),
+    }
+
+
+# Что нас интересует в найденных адресах: учебная часть, а не иконки,
+# шрифты и служебные адреса фреймворка.
+USEFUL = ("student", "home", "task", "lesson", "journal", "discip", "km",
+          "work", "file", "material", "attach", "event", "class")
+JUNK = (".css", ".png", ".jpg", ".svg", ".woff", ".ico", ".gif", ".map")
+
+
+def _looks_useful(path: str) -> bool:
+    low = path.lower()
+    if any(low.endswith(j) for j in JUNK):
+        return False
+    return any(w in low for w in USEFUL)
+
+
 def study_report(data: dict) -> dict:
     """
     Что в данных учёбы реально заполнено.
