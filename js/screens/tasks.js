@@ -14,7 +14,8 @@ import { icon } from '../icons.js';
 import { esc, emptyState, toast, sheet } from '../ui.js';
 import { get, post, account, canTalk } from '../api.js';
 import { settings } from '../store.js';
-import { fetchSchedule, semesterStart } from '../schedule.js';
+import { fetchSchedule, semesterStart, mondayOf, weekOfCycle }
+  from '../schedule.js';
 import { refresh } from '../router.js';
 import { hapticNotify, confirmDialog, openLink } from '../tg.js';
 import { screen } from './common.js';
@@ -24,12 +25,78 @@ const MONTHS = ['января', 'февраля', 'марта', 'апреля', 
 
 const WEEKDAYS = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'];
 
-/** Конец учебной недели N — до него задание и сдают. */
-function dueDate(start, week) {
+/**
+ * Понедельник учебной недели N.
+ *
+ * Считать от самой даты начала семестра нельзя: 1 сентября бывает
+ * вторником, и тогда вторая неделя съезжала на день вперёд — ОРИОКС
+ * показывал вторую, а приложение считало её концом четырнадцатое.
+ * Недели везде начинаются с понедельника, и здесь тоже.
+ */
+export function weekMonday(start, week) {
   if (!start || !week) return null;
-  const d = new Date(start.getTime());
-  d.setDate(d.getDate() + (week - 1) * 7 + 6);
+  const d = mondayOf(start);
+  d.setDate(d.getDate() + (week - 1) * 7);
   return d;
+}
+
+/** Конец учебной недели N — крайний срок, если пары найти не удалось. */
+function dueDate(start, week) {
+  const d = weekMonday(start, week);
+  if (d) d.setDate(d.getDate() + 6);
+  return d;
+}
+
+// Тип мероприятия ОРИОКС → тип пары в расписании. Лабораторную сдают
+// на лабораторной, контрольную пишут на практике: это не догадка, а
+// то, как устроено занятие.
+const KIND_TO_CLASS = [
+  [/лаборатор/i, 'lab'],
+  [/практич|контрольн|коллоквиум|тест|семинар|деловая игра|кейс/i, 'pr'],
+  [/лекц/i, 'lek'],
+];
+
+/** Слова названия, по которым предмет узнаётся в другом источнике. */
+export function subjectKey(name) {
+  return String(name || '').toLowerCase()
+    .replace(/[«»"'()]/g, ' ')
+    .split(/[\s.,;:—–-]+/)
+    .filter(w => w.length >= 5)
+    .slice(0, 2)
+    .join(' ');
+}
+
+/**
+ * День пары, на которой это мероприятие сдают.
+ *
+ * ОРИОКС знает только номер недели, а человек живёт днями: «лаба на
+ * второй неделе» и «лаба завтра» — про одно и то же, но понятно
+ * второе. Ищем в расписании пару нужного предмета и вида на этой
+ * неделе; если их несколько, берём последнюю — крайний срок.
+ */
+export function lessonDay(sched, start, event, discipline, shift) {
+  if (!sched || !start || !event.week) return null;
+  const monday = weekMonday(start, event.week);
+  if (!monday) return null;
+
+  const cycle = weekOfCycle(monday, sched.semestr, shift);
+  const want = (KIND_TO_CLASS.find(([re]) => re.test(event.type || '')) || [])[1];
+  const key = subjectKey(discipline);
+  if (!key) return null;
+
+  const sameWeek = (sched.lessons || []).filter(
+    l => l.week === cycle && subjectKey(l.subject) === key);
+  const exact = want ? sameWeek.filter(l => l.kindCls === want) : [];
+  // Копия перед сортировкой: pop() опустошал сам массив, и «нашли
+  // именно лабораторную» превращалось в «нашли хоть что-нибудь»
+  // ровно в тот момент, когда это проверялось.
+  const found = (exact.length ? exact : sameWeek).slice()
+    .sort((a, b) => a.day - b.day || a.pair - b.pair).pop();
+  if (!found) return null;
+
+  const d = new Date(monday.getTime());
+  d.setDate(d.getDate() + found.day - 1);
+  return { date: d, lesson: found, exact: exact.length > 0 };
 }
 
 const humanDate = d =>
@@ -110,6 +177,9 @@ const taskRow = t => `
       <div class="todo-left">
         ${esc(leftLabel(t.left))}${t.max_grade ? ` · ${t.max_grade} б.` : ''}
       </div>
+      ${t.lesson ? `<div class="todo-lesson">
+        ${esc(t.lesson.from || '')}${t.lesson.room ? ` · ${esc(t.lesson.room)}` : ''}
+      </div>` : ''}
     </div>
   </div>`;
 
@@ -222,8 +292,8 @@ const doneRow = t => `
 export default async function tasksScreen() {
   if (!canTalk) {
     return screen({
-      title: 'Задания',
-      body: emptyState('Раздел работает внутри Telegram', 'clipboard'),
+      title: 'Учёба',
+      body: emptyState('Раздел работает внутри Telegram', 'backpack'),
     });
   }
 
@@ -240,7 +310,7 @@ export default async function tasksScreen() {
     news = both[1].news || [];
   } catch (err) {
     return screen({
-      title: 'Задания',
+      title: 'Учёба',
       body: `<div class="card" style="padding:18px">
         <div class="row-subtitle">${esc(err.message)}</div></div>`,
     });
@@ -249,10 +319,13 @@ export default async function tasksScreen() {
   if (!data.linked) return notLinked();
   if (data.error) return linkedButBroken(data.error);
 
+  // Расписание нужно целиком, а не только ради начала семестра: по нему
+  // находится день пары, на которой задание и сдают.
   let start = null;
+  let sched = null;
   if (settings.group) {
     try {
-      const sched = await fetchSchedule(settings.group);
+      sched = await fetchSchedule(settings.group);
       start = semesterStart(sched.semestr);
     } catch { /* без дат покажем недели */ }
   }
@@ -261,11 +334,16 @@ export default async function tasksScreen() {
   // не заголовок блока, иначе задание нельзя понять в отрыве от него.
   const all = [];
   data.tasks.disciplines.forEach(d => d.events.forEach(e => {
-    const due = dueDate(start, e.week);
+    const at = lessonDay(sched, start, e, d.name, settings.weekShift);
+    const due = at ? at.date : dueDate(start, e.week);
     const left = daysLeft(due);
     all.push({
       ...e,
       idx: all.length,
+      // Пара, на которой сдают: по ней и показываем день вместо
+      // безликого «конца второй недели».
+      lesson: at ? at.lesson : null,
+      exactDay: !!(at && at.exact),
       subject: d.name,
       title: titleOf(e),
       due,
@@ -295,8 +373,8 @@ export default async function tasksScreen() {
     m => files.push({ ...m, subject: t.subject, event: t.title.main })));
 
   const node = screen({
-    title: 'Что сдать',
-    subtitle: start ? 'Сроки — по твоему расписанию'
+    title: 'Учёба',
+    subtitle: start ? 'Задания, сроки и файлы из ОРИОКС'
       : 'Выбери группу в профиле, чтобы видеть даты',
     actions: `<button class="icon-btn" data-action="orioks">${icon('external', 19)}</button>`,
     body: `
@@ -508,8 +586,8 @@ export default async function tasksScreen() {
 
 function notLinked() {
   const node = screen({
-    title: 'Что сдать',
-    subtitle: 'Задания и сроки из ОРИОКС',
+    title: 'Учёба',
+    subtitle: 'Что задали, что сдать и файлы из ОРИОКС',
     body: `
       <div class="card" style="padding:18px">
         <div class="row-title" style="margin-bottom:8px">Подключи ОРИОКС</div>
@@ -537,7 +615,7 @@ function notLinked() {
 
 function linkedButBroken(message) {
   const node = screen({
-    title: 'Что сдать',
+    title: 'Учёба',
     body: `
       <div class="card" style="padding:18px">
         <div class="row-title" style="margin-bottom:6px">ОРИОКС не ответил</div>

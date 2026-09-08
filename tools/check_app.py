@@ -229,6 +229,40 @@ CASES = [
      "fileLook('Ссылки на лекции', 'https://vk.com/x').label", "Ссылка"),
     ("незнакомое вложение без подписи",
      "fileLook('Материал', '/storage/d/1/abc').label", ""),
+
+    # 1 сентября 2026 — вторник. Вторая учебная неделя обязана начаться
+    # 7-го, как её считает сам ОРИОКС, а не 8-го: иначе лаба, которая
+    # завтра, показывалась сроком «14 сентября».
+    ("вторая неделя начинается с понедельника",
+     "weekMonday(new Date(2026, 8, 1), 2).getDate()", "7"),
+    ("первая неделя — понедельник до 1 сентября",
+     "weekMonday(new Date(2026, 8, 1), 1).getDate()", "31"),
+    ("без номера недели даты нет",
+     "String(weekMonday(new Date(2026, 8, 1), 0))", "null"),
+
+    ("предмет узнаётся по длинным словам",
+     "subjectKey('Физика. Механика. Термодинамика')", "физика механика"),
+    ("предмет ОРИОКС и расписания сходится",
+     "String(subjectKey('Линейная алгебра и аналитическая геометрия')"
+     " === subjectKey('Линейная алгебра, аналитическая геометрия'))", "true"),
+
+    # Лабораторную ищем среди лабораторных, а не среди любых пар этого
+    # предмета: лекция по физике в тот же день сроком сдачи не является.
+    ("день лабораторной берётся из расписания",
+     "lessonDay(SCHED, new Date(2026, 8, 1),"
+     " { week: 2, type: 'Лабораторная работа' }, 'Физика. Механика', 0)"
+     ".date.getDate()", "10"),
+    ("вид пары совпал с видом работы",
+     "String(lessonDay(SCHED, new Date(2026, 8, 1),"
+     " { week: 2, type: 'Лабораторная работа' }, 'Физика. Механика', 0)"
+     ".exact)", "true"),
+    ("без своей пары берём любую по предмету",
+     "lessonDay(SCHED, new Date(2026, 8, 1),"
+     " { week: 2, type: 'Реферат' }, 'Физика. Механика', 0).date.getDate()",
+     "11"),
+    ("чужого предмета в расписании нет",
+     "String(lessonDay(SCHED, new Date(2026, 8, 1),"
+     " { week: 2, type: 'Лабораторная работа' }, 'Философия', 0))", "null"),
 ]
 
 
@@ -236,7 +270,7 @@ CASES = [
 # таблицы экспортов и раскладываем по коротким именам.
 PRELUDE = ("var _t = __mod['js/screens/tasks.js'];"
            "var subjectLook = _t.subjectLook, newsDate = _t.newsDate,"
-           "    linkify = _t.linkify, NUMBERED = _t.NUMBERED,    fileLook = _t.fileLook;")
+           "    linkify = _t.linkify, NUMBERED = _t.NUMBERED,    fileLook = _t.fileLook, weekMonday = _t.weekMonday,    subjectKey = _t.subjectKey, lessonDay = _t.lessonDay;var SCHED = { semestr: 'Осенний семестр 2026/2027', lessons: [  { week: 1, day: 4, pair: 3, subject: 'Физика. Механика',    kindCls: 'lab', from: '12:00', room: '3229' },  { week: 1, day: 5, pair: 2, subject: 'Физика. Механика',    kindCls: 'lek', from: '10:30', room: '1201' }] };")
 
 
 def check_logic(bundle: str) -> int:
