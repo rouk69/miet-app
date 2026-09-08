@@ -50,6 +50,37 @@ class OrioksError(Exception):
     """Ошибка, которую можно показать человеку."""
 
 
+def _explain(e) -> str:
+    """
+    Переводит ответ ОРИОКС на человеческий.
+
+    Разбирать тело важнее, чем код: у ОРИОКС они расходятся с его же
+    документацией, и по одному коду сообщение получалось бы неверным —
+    человек с опечаткой в пароле читал бы про лимит приложений.
+    """
+    text = ""
+    try:
+        body = json.loads(e.read().decode("utf-8", "replace"))
+        err = body.get("error") if isinstance(body, dict) else None
+        text = err if isinstance(err, str) else (err or {}).get("text", "")
+    except Exception:                                   # noqa: BLE001
+        pass
+
+    low = (text or "").lower()
+    if "логин" in low or "парол" in low:
+        return "ОРИОКС не принял логин или пароль"
+    if "токен" in low and ("восем" in low or "больше" in low):
+        return ("В ОРИОКС уже восемь подключённых приложений — "
+                "отзови лишние токены в самом ОРИОКС")
+    if e.code == 401:
+        return "ОРИОКС не принял логин или пароль"
+    if e.code == 404:
+        return "ОРИОКС не нашёл такой раздел"
+    if text:
+        return f"ОРИОКС: {text}"
+    return f"ОРИОКС ответил {e.code}"
+
+
 def _request(path: str, headers: dict, method: str = "GET") -> object:
     """
     Запрос к ОРИОКС. Прокси обходим явно: на машине автора системный
@@ -62,17 +93,12 @@ def _request(path: str, headers: dict, method: str = "GET") -> object:
         with opener.open(req, timeout=TIMEOUT) as r:
             return json.loads(r.read().decode("utf-8"))
     except urllib.error.HTTPError as e:
-        if e.code == 401:
-            raise OrioksError("ОРИОКС не принял логин или пароль")
-        if e.code == 403:
-            # Восемь токенов на студента — предел самого ОРИОКС. Человеку
-            # надо объяснить, что делать, а не показывать номер ошибки.
-            raise OrioksError("В ОРИОКС уже восемь подключённых приложений — "
-                              "отзови лишние токены в самом ОРИОКС")
-        if e.code == 400:
-            raise OrioksError("ОРИОКС не понял запрос — напиши в поддержку "
-                              "приложения, это ошибка на нашей стороне")
-        raise OrioksError(f"ОРИОКС ответил {e.code}")
+        # Код ответа у ОРИОКС не совпадает с документацией: на неверный
+        # пароль приходит 403, хотя обещан 401, а 403 в документации
+        # отведён под «больше восьми токенов». Поэтому решает текст в
+        # теле ответа, а код — только запасной вариант.
+        raise OrioksError(_explain(e))
+
     except urllib.error.URLError as e:
         # Отдельно от прочих ошибок: ОРИОКС рвёт TLS с внешних адресов,
         # и понять это по тексту исключения иначе невозможно.
