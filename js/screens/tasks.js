@@ -154,9 +154,15 @@ export default async function tasksScreen() {
     });
   }));
 
-  const pending = all.filter(t => !t.done)
+  // ОРИОКС отдаёт вперемешку с заданиями формальности: посещаемость,
+  // «порядок НБС», семестровый план. Сдавать там нечего, а строк они
+  // дают больше трети — из-за них список и был нечитаемым.
+  const tasks = all.filter(t => t.task);
+  const formal = all.filter(t => !t.task);
+
+  const pending = tasks.filter(t => !t.done)
     .sort((a, b) => (a.left ?? 9999) - (b.left ?? 9999));
-  const done = all.filter(t => t.done);
+  const done = tasks.filter(t => t.done);
 
   const groups = BUCKETS
     .map(b => ({ ...b, items: pending.filter(t => t.bucket === b.id) }))
@@ -196,10 +202,31 @@ export default async function tasksScreen() {
           ${done.map(doneRow).join('')}
         </div>` : ''}
 
+      ${formal.length ? `
+        <div class="section-head">
+          <div class="section-title">Не задания</div>
+          <button class="section-link" id="toggle-formal">${formal.length}</button>
+        </div>
+        <p class="section-note">
+          Посещаемость, активность и записи для порядка — сдавать нечего.
+        </p>
+        <div class="list-card" id="formal-list" hidden>
+          ${formal.map(t => `
+            <div class="todo done">
+              <div class="todo-main">
+                <div class="todo-subject">${esc(t.subject)}</div>
+                <div class="todo-what">${esc(t.title.main)}</div>
+              </div>
+              <div class="todo-side">
+                <div class="todo-left">${t.max_grade ? `до ${t.max_grade} б.` : '—'}</div>
+              </div>
+            </div>`).join('')}
+        </div>` : ''}
+
       <div class="section-head"><div class="section-title">По предметам</div></div>
       <div class="list-card">
         ${data.tasks.disciplines.map(d => {
-      const left = d.events.filter(e => !e.done).length;
+      const left = d.events.filter(e => e.task && !e.done).length;
       return `
           <div class="list-row">
             <div class="list-row-body">
@@ -225,11 +252,14 @@ export default async function tasksScreen() {
       </div>`,
   });
 
-  node.querySelector('#toggle-done')?.addEventListener('click', e => {
-    const list = node.querySelector('#done-list');
-    list.hidden = !list.hidden;
-    e.target.textContent = list.hidden ? done.length : 'скрыть';
-  });
+  const toggler = (btnId, listId, count) =>
+    node.querySelector(btnId)?.addEventListener('click', e => {
+      const list = node.querySelector(listId);
+      list.hidden = !list.hidden;
+      e.target.textContent = list.hidden ? count : 'скрыть';
+    });
+  toggler('#toggle-done', '#done-list', done.length);
+  toggler('#toggle-formal', '#formal-list', formal.length);
   node.querySelector('[data-action="orioks"]').addEventListener('click',
     () => openLink('https://orioks.miet.ru/main/login'));
   node.querySelector('#unlink').addEventListener('click', async () => {

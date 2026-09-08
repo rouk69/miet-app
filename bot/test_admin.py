@@ -515,7 +515,7 @@ def fake_request(path, headers, method="GET"):
         return [{"id": 7, "name": "Матанализ", "teachers": ["Иванов И.И."],
                  "control_form": "Экзамен", "current_grade": 20.0,
                  "max_grade": 70.0, "exam_date": "2027-01-15"}]
-    if path == "/student/disciplines/7/control_events":
+    if path == "/student/disciplines/7/events":
         return [
             {"alias": "dz.1", "name": "Домашнее задание 1", "type": "Домашнее задание",
              "week": 4, "max_grade": 10.0, "current_grade": 8.0},
@@ -523,6 +523,11 @@ def fake_request(path, headers, method="GET"):
              "week": 11, "max_grade": 10.0, "current_grade": -1.0},
             {"alias": "ex.1", "name": "Экзамен", "type": "Экзамен",
              "week": 17, "max_grade": 30.0, "current_grade": -1.0},
+            # Так выглядят формальности в живом ОРИОКС: сдавать нечего.
+            {"alias": "А/П", "name": "А/П", "type": "Активность/Посещаемость",
+             "week": 8, "max_grade": 24.0},
+            {"alias": "Порядок НБС", "name": "Порядок НБС",
+             "type": "Активность", "week": 1, "max_grade": 0},
         ]
     # Отзыв — DELETE /student/tokens/<токен>, как в документации.
     if path.startswith("/student/tokens/") and method == "DELETE":
@@ -562,7 +567,7 @@ check("пароля нет нигде в базе", not found, found)
 tasks = r["tasks"]
 check("дисциплина получена", len(tasks["disciplines"]) == 1, tasks)
 events = tasks["disciplines"][0]["events"]
-check("мероприятия получены", len(events) == 3, events)
+check("мероприятия получены", len(events) == 5, events)
 check("сданное отмечено", events[0]["done"] and events[0]["grade"] == 8.0,
       events[0])
 check("несданное без оценки",
@@ -570,10 +575,27 @@ check("несданное без оценки",
 check("домашка распознана как задание", events[1]["homework"], events[1])
 check("экзамен заданием не считается", not events[2]["homework"], events[2])
 check("неделя сдачи сохранена", events[1]["week"] == 11, events[1])
-check("счётчики сошлись", tasks["total"] == 3 and tasks["done"] == 1, tasks)
+check("счётчики считают только задания",
+      tasks["total"] == 3 and tasks["done"] == 1, tasks)
 check("рабочий путь мероприятий найден и запомнен",
-      orioks._events_path == "/student/disciplines/{id}/control_events",
+      orioks._events_path == "/student/disciplines/{id}/events",
       orioks._events_path)
+# Живой ОРИОКС отдаёт вперемешку с заданиями посещаемость и записи «для
+# порядка»: у одного студента их оказалось больше трети из семидесяти
+# пяти, и именно они делали экран нечитаемым.
+check("посещаемость не считается заданием",
+      not orioks.is_task({"type": "Активность/Посещаемость", "name": "А/П",
+                          "max_grade": 24.0}))
+check("мероприятие на ноль баллов не задание",
+      not orioks.is_task({"type": "Активность", "name": "Порядок НБС",
+                          "max_grade": 0}))
+check("лабораторная — задание",
+      orioks.is_task({"type": "Лабораторная работа", "name": "ЛР.1",
+                      "max_grade": 10.0}))
+check("формальности не попали в счёт заданий",
+      tasks["total"] == 3, tasks["total"])
+check("но в списке мероприятий они есть",
+      len(events) == 5 and not events[3]["task"], events[3])
 
 s, r = api.handle("GET", "/api/orioks", {}, {}, USER)
 check("после подключения задания отдаются", r["linked"] and r["tasks"], r)
