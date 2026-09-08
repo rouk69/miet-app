@@ -113,6 +113,18 @@ const taskRow = t => `
     </div>
   </div>`;
 
+const newsRow = n => `
+  <div class="todo news-row" data-news="${esc(n.href)}">
+    <div class="todo-main">
+      <div class="todo-subject">${esc(n.title)}</div>
+      <div class="todo-what">
+        ${esc(n.discipline || (n.course ? 'Дисциплина' : 'Новость института'))}
+        ${n.date ? ` · ${esc(n.date)}` : ''}
+      </div>
+    </div>
+    <div class="todo-side">${icon('chevronRight', 16)}</div>
+  </div>`;
+
 const fileRow = f => `
   <div class="todo file-row" data-link="${esc(f.link)}">
     <div class="todo-main">
@@ -144,8 +156,16 @@ export default async function tasksScreen() {
   }
 
   let data;
+  let news = [];
   try {
-    data = await get('/api/orioks', { timeout: 25000 });
+    const both = await Promise.all([
+      get('/api/orioks', { timeout: 25000 }),
+      // Объявления не должны мешать заданиям: не пришли — экран
+      // работает дальше, просто без них.
+      get('/api/orioks/news', { timeout: 25000 }).catch(() => ({ news: [] })),
+    ]);
+    data = both[0];
+    news = both[1].news || [];
   } catch (err) {
     return screen({
       title: 'Задания',
@@ -218,6 +238,22 @@ export default async function tasksScreen() {
           <div class="kpi-label">На этой неделе</div>
         </div>
       </div>
+
+      ${news.length ? `
+        <div class="section-head">
+          <div class="section-title">Что задали</div>
+          ${news.length > 3 ? `<button class="section-link"
+            id="toggle-news">${news.length}</button>` : ''}
+        </div>
+        <p class="section-note">
+          Объявления преподавателей — то, что они пишут к занятию.
+        </p>
+        <div class="list-card">
+          ${news.slice(0, 3).map(newsRow).join('')}
+        </div>
+        <div class="list-card" id="news-rest" hidden>
+          ${news.slice(3).map(newsRow).join('')}
+        </div>` : ''}
 
       <div class="pill-row" id="kinds" style="margin:14px 0 4px">
         ${KINDS.map(k => `
@@ -369,6 +405,11 @@ export default async function tasksScreen() {
     });
   toggler('#toggle-done', '#done-list', done.length);
   toggler('#toggle-files', '#files-list', files.length);
+  toggler('#toggle-news', '#news-rest', news.length);
+  node.addEventListener('click', e => {
+    const row = e.target.closest('[data-news]');
+    if (row) newsSheet(row.dataset.news, news);
+  });
   node.querySelector('#files-list')?.addEventListener('click', e => {
     const row = e.target.closest('[data-link]');
     if (row) openLink(row.dataset.link);
@@ -516,6 +557,41 @@ function filesSheet(task) {
         const row = e.target.closest('[data-open]');
         if (row) openLink(items[+row.dataset.open].link);
       });
+    },
+  });
+}
+
+
+/**
+ * Объявление преподавателя целиком.
+ *
+ * Текст тянется отдельным запросом, а не вместе со списком: объявлений
+ * бывает два десятка, а читают обычно одно, и качать все ради этого —
+ * лишние секунды на каждом открытии экрана.
+ */
+async function newsSheet(href, list) {
+  const known = (list || []).find(n => n.href === href) || {};
+  sheet({
+    title: known.title || 'Объявление',
+    body: `<div class="news-body" id="news-body">Загружаю…</div>`,
+    onMount(root) {
+      const box = root.querySelector('#news-body');
+      post('/api/orioks/news', { item: href }, { timeout: 25000 })
+        .then(r => {
+          const it = r.item || {};
+          if (!it.text) {
+            box.textContent = r.error || 'ОРИОКС не отдал текст объявления';
+            return;
+          }
+          box.innerHTML = `
+            <div class="news-meta">
+              ${esc(it.discipline || '')}${it.author ? ` · ${esc(it.author)}` : ''}
+              ${it.date ? ` · ${esc(it.date)}` : ''}
+            </div>
+            ${it.text.split('\n').filter(Boolean)
+              .map(p => `<p>${esc(p)}</p>`).join('')}`;
+        })
+        .catch(err => { box.textContent = err.message; });
     },
   });
 }
