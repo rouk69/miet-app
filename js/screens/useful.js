@@ -24,6 +24,8 @@ const SECTIONS = [
     title: 'Учёба',
     note: 'То, что спрашивают чаще всего',
     tiles: [
+      { id: 'tasks', ico: 'clipboard', tone: 'blue', title: 'Задания',
+        sub: 'Что сдать и когда — из ОРИОКС' },
       { id: 'teachers', ico: 'teacher', tone: 'blue', title: 'Преподаватели',
         sub: 'Кто, где и когда ведёт' },
       { id: 'rooms', ico: 'door', tone: 'blue', title: 'Аудитории',

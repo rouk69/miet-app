@@ -495,6 +495,101 @@ check("дни человека собраны", card["days"] and card["active_da
       card.get("days"))
 
 
+print("\n17. ОРИОКС: задания и приватность")
+from . import orioks                                               # noqa: E402
+
+# Сеть подменяем: ходить в настоящий ОРИОКС из проверок нельзя — нужен
+# чужой логин, а сервер вуза не должен получать запросы на каждый прогон.
+CALLS = []
+
+
+def fake_request(path, headers):
+    CALLS.append((path, headers))
+    if path == "/auth":
+        if headers.get("Authorization") == "Basic c3R1ZDpzZWNyZXQ=":
+            return {"token": "T" * 32}
+        raise orioks.OrioksError("ОРИОКС не принял данные для входа")
+    if headers.get("Authorization") != "Bearer " + "T" * 32:
+        raise orioks.OrioksError("ОРИОКС не принял данные для входа")
+    if path == "/student/disciplines":
+        return [{"id": 7, "name": "Матанализ", "teachers": ["Иванов И.И."],
+                 "control_form": "Экзамен", "current_grade": 20.0,
+                 "max_grade": 70.0, "exam_date": "2027-01-15"}]
+    if path == "/student/disciplines/7/control_events":
+        return [
+            {"alias": "dz.1", "name": "Домашнее задание 1", "type": "Домашнее задание",
+             "week": 4, "max_grade": 10.0, "current_grade": 8.0},
+            {"alias": "dz.2", "name": "Домашнее задание 2", "type": "Домашнее задание",
+             "week": 11, "max_grade": 10.0, "current_grade": -1.0},
+            {"alias": "ex.1", "name": "Экзамен", "type": "Экзамен",
+             "week": 17, "max_grade": 30.0, "current_grade": -1.0},
+        ]
+    if path == "/student/tokens/revoke":
+        return {"ok": True}
+    raise orioks.OrioksError("ОРИОКС ответил 404")
+
+
+orioks._request = fake_request
+
+s, r = api.handle("GET", "/api/orioks", {}, {}, USER)
+check("без подключения так и сказано", s == 200 and r["linked"] is False, r)
+
+s, r = api.handle("POST", "/api/orioks/link", {},
+                  {"login": "stud", "password": "wrong"}, USER)
+check("неверный пароль отвергнут", s == 400, (s, r))
+s, _ = api.handle("POST", "/api/orioks/link", {}, {"login": "stud"}, USER)
+check("без пароля не пускает", s == 400, s)
+
+s, r = api.handle("POST", "/api/orioks/link", {},
+                  {"login": "stud", "password": "secret"}, USER)
+check("подключение прошло", s == 200 and r["linked"], (s, r))
+check("токен сохранён", orioks.token_of(42) == "T" * 32, orioks.token_of(42))
+
+# Главное: пароль не должен осесть нигде. Проверяем всю базу целиком.
+found = []
+for (table,) in db.conn().execute(
+        "SELECT name FROM sqlite_master WHERE type='table'"):
+    cols = [c[1] for c in db.conn().execute(f"PRAGMA table_info({table})")]
+    for col in cols:
+        hits = db.conn().execute(
+            f"SELECT COUNT(*) FROM {table} WHERE CAST({col} AS TEXT) LIKE ?",
+            ("%secret%",)).fetchone()[0]
+        if hits:
+            found.append(f"{table}.{col}")
+check("пароля нет нигде в базе", not found, found)
+
+tasks = r["tasks"]
+check("дисциплина получена", len(tasks["disciplines"]) == 1, tasks)
+events = tasks["disciplines"][0]["events"]
+check("мероприятия получены", len(events) == 3, events)
+check("сданное отмечено", events[0]["done"] and events[0]["grade"] == 8.0,
+      events[0])
+check("несданное без оценки",
+      not events[1]["done"] and events[1]["grade"] is None, events[1])
+check("домашка распознана как задание", events[1]["homework"], events[1])
+check("экзамен заданием не считается", not events[2]["homework"], events[2])
+check("неделя сдачи сохранена", events[1]["week"] == 11, events[1])
+check("счётчики сошлись", tasks["total"] == 3 and tasks["done"] == 1, tasks)
+
+s, r = api.handle("GET", "/api/orioks", {}, {}, USER)
+check("после подключения задания отдаются", r["linked"] and r["tasks"], r)
+s, me = api.handle("GET", "/api/me", {}, {}, USER)
+check("признак подключения виден клиенту", me["orioks"] is True, me)
+
+# Чужие задания недоступны никому, включая владельца: в ОРИОКС ходим
+# под токеном того, кто спрашивает, и ничьим больше.
+s, r = api.handle("GET", "/api/orioks", {}, {}, ADMIN)
+check("владелец не видит чужой ОРИОКС", r["linked"] is False, r)
+
+s, r = api.handle("POST", "/api/orioks/unlink", {}, {}, USER)
+check("отключение сработало", s == 200 and not r["linked"], r)
+check("токен убран", orioks.token_of(42) == "", orioks.token_of(42))
+check("и аннулирован в ОРИОКС",
+      any(c[0] == "/student/tokens/revoke" for c in CALLS), CALLS[-3:])
+s, r = api.handle("GET", "/api/orioks", {}, {}, USER)
+check("после отключения снова не подключено", r["linked"] is False, r)
+
+
 print("\n" + "=" * 58)
 print(f"пройдено {ok}, провалено {fail}")
 print("=" * 58)

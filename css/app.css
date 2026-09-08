@@ -1537,3 +1537,75 @@ textarea.field-input {
   color: var(--primary);
   flex-shrink: 0;
 }
+
+/* ---------- Задания из ОРИОКС ---------- */
+
+.task-subject {
+  padding: 12px 16px 8px;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+.task-subject-note {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.task {
+  display: flex;
+  gap: 10px;
+  padding: 10px 16px;
+  border-top: 1px solid var(--border);
+}
+
+.task-mark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 9px;
+  background: var(--surface-2);
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+/* Сданное гаснет: список нужен, чтобы видеть оставшееся, а не хвалиться
+   закрытым. Срочное и просроченное, наоборот, выделены. */
+.task.done { opacity: 0.55; }
+.task.done .task-mark { background: rgba(52, 199, 89, 0.16); color: var(--success); }
+.task.soon .task-mark { background: rgba(255, 159, 10, 0.16); color: var(--warning); }
+.task.late .task-mark { background: rgba(240, 68, 56, 0.14); color: var(--danger); }
+
+.task-name {
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.task-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  margin-top: 3px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.task-meta span { display: inline-flex; align-items: center; gap: 3px; }
+
+.task-grade { font-variant-numeric: tabular-nums; }
+.task-soon { color: var(--warning); font-weight: 700; }
+.task-late { color: var(--danger); font-weight: 700; }
+
+.task-empty {
+  padding: 12px 16px;
+  border-top: 1px solid var(--border);
+  font-size: 13px;
+  color: var(--text-tertiary);
+}
