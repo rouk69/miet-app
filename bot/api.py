@@ -30,7 +30,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
 from . import analytics, appconf, auth, directory, help_board, notify
-from . import orioks, posts
+from . import orioks, orioks_web, posts
 from . import render, storage
 from . import media as mediastore
 
@@ -603,6 +603,14 @@ def _admin(path: str, method: str, query: dict, body: dict, uid: int, me: dict):
             except KeyError:
                 return 400, {"error": "Неизвестная настройка"}
             return 200, {"ok": True, "flags": appconf.described()}
+
+    if path == "/api/admin/orioks-web" and method == "GET":
+        # Как устроена форма входа веб-версии: имена полей и адрес
+        # отправки. Пароль для этого не нужен.
+        try:
+            return 200, orioks_web.login_form()
+        except orioks_web.WebError as e:
+            return 200, {"error": str(e)}
 
     if path == "/api/admin/orioks-probe" and method == "GET":
         # Видит ли наш сервер ОРИОКС вообще: с адресов вне России он
