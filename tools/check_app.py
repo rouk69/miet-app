@@ -194,6 +194,60 @@ def main() -> int:
               + " — номер строки из сообщения указывает на него")
         return 1
     print(f"все {len(files)} модулей загрузились без ошибок")
+    return check_logic(code)
+
+
+# Чистые функции, которые ломаются молча: неверный значок или «6 дн.
+# назад» вместо «вчера» не роняют приложение, их видно только глазами —
+# а глаз тут ни у кого нет.
+CASES = [
+    ("значок физики", "subjectLook('Физика. Механика').glyph", "atom"),
+    ("значок матанализа", "subjectLook('Математический анализ').glyph", "sigma"),
+    ("значок истории", "subjectLook('История России').glyph", "landmark"),
+    ("значок языка", "subjectLook('Иностранный язык').glyph", "languages"),
+    ("значок информатики", "subjectLook('Информатика').glyph", "code"),
+    ("незнакомый предмет получает свой",
+     "subjectLook('Начерталка').glyph", "bookOpen"),
+    ("цвет предмета постоянный",
+     "String(subjectLook('Начерталка').tone === subjectLook('Начерталка').tone)",
+     "true"),
+    ("пустая дата не ломает разбор", "newsDate('').text", ""),
+    ("кривая дата отдаётся как есть", "newsDate('позавчера').text", "позавчера"),
+    ("пункт перечня распознан", "String(NUMBERED.test('1. Теории'))", "true"),
+    ("буквенный пункт распознан", "String(NUMBERED.test('А) Княжение'))", "true"),
+    ("обычный абзац не пункт",
+     "String(NUMBERED.test('Подготовить доклады'))", "false"),
+    ("ссылка становится ссылкой",
+     "String(linkify('см. https://a.ru/x').indexOf('data-url=') > 0)", "true"),
+    ("разметка в тексте экранирована",
+     "String(linkify('<b>тут</b>').indexOf('&lt;b&gt;') >= 0)", "true"),
+]
+
+
+# Модули в сборке завёрнуты, глобальных имён нет: достаём нужное из
+# таблицы экспортов и раскладываем по коротким именам.
+PRELUDE = ("var _t = __mod['js/screens/tasks.js'];"
+           "var subjectLook = _t.subjectLook, newsDate = _t.newsDate,"
+           "    linkify = _t.linkify, NUMBERED = _t.NUMBERED;")
+
+
+def check_logic(bundle: str) -> int:
+    """Гоняет функции экрана заданий на живом движке."""
+    bad = 0
+    for name, expr, want in CASES:
+        try:
+            got = dukpy.evaljs(bundle + PRELUDE + "\nString(" + expr + ");")
+        except Exception as e:                          # noqa: BLE001
+            print(f"  ✗ {name}: {str(e)[:200]}")
+            bad += 1
+            continue
+        if str(got) != want:
+            print(f"  ✗ {name}: получили {got!r}, ждали {want!r}")
+            bad += 1
+    if bad:
+        print(f"логика экрана заданий: провалено {bad} из {len(CASES)}")
+        return 1
+    print(f"логика экрана заданий: {len(CASES)} проверок сошлись")
     return 0
 
 

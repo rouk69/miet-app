@@ -113,19 +113,71 @@ const taskRow = t => `
     </div>
   </div>`;
 
-const newsRow = n => `
-  <div class="todo news-row" data-news="${esc(n.href)}">
-    <div class="todo-main">
-      <div class="todo-subject">${esc(n.title)}</div>
-      <div class="todo-what">
-        ${esc(n.discipline || (n.course ? 'Дисциплина' : 'Новость института'))}
-        ${n.date ? ` · ${esc(n.date)}` : ''}
-        ${n.author ? ` · ${esc(n.author)}` : ''}
+// Значок предмета. Читать название дисциплины целиком в списке никто
+// не будет — глаз цепляется за цвет и форму, и уже по ним объявление
+// находится среди других.
+const SUBJECT_ICONS = [
+  [/физик|механик|термодинам/i, 'atom', 4],
+  [/матем|анализ|алгебр|геометр/i, 'sigma', 0],
+  [/информат|программ|вычислит/i, 'code', 5],
+  [/истори|философ|культур|право/i, 'landmark', 3],
+  [/язык|английск|лингв/i, 'languages', 2],
+  [/физическ.*культур|спорт/i, 'medal', 1],
+  [/командн|коммуникац|психолог/i, 'users', 2],
+  [/хими|биолог/i, 'microscope', 1],
+  [/эконом|менеджмент|финанс/i, 'wallet', 3],
+];
+
+export function subjectLook(name) {
+  for (const [re, glyph, tone] of SUBJECT_ICONS) {
+    if (re.test(name || '')) return { glyph, tone };
+  }
+  // Незнакомый предмет получает свой постоянный цвет, а не случайный:
+  // при следующем открытии он должен выглядеть так же.
+  let sum = 0;
+  for (const ch of String(name || '')) sum = (sum + ch.charCodeAt(0)) % 997;
+  return { glyph: 'bookOpen', tone: sum % 6 };
+}
+
+/** Дата ОРИОКС «03.09.2026 15:05» — в то, как о ней говорят вслух. */
+export function newsDate(raw) {
+  const m = /^(\d{2})\.(\d{2})\.(\d{4})(?:\s+(\d{2}):(\d{2}))?/.exec(raw || '');
+  if (!m) return { text: raw || '', fresh: false };
+  const [, d, mo, y, hh, mm] = m;
+  const when = new Date(+y, +mo - 1, +d, +(hh || 0), +(mm || 0));
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const days = Math.round((today - new Date(+y, +mo - 1, +d)) / 86400000);
+  const clock = hh ? `${hh}:${mm}` : '';
+  if (days === 0) return { text: clock ? `сегодня, ${clock}` : 'сегодня', fresh: true };
+  if (days === 1) return { text: 'вчера', fresh: true };
+  if (days > 1 && days < 7) return { text: `${days} дн. назад`, fresh: days <= 2 };
+  return { text: `${+d} ${MONTHS[+mo - 1]}`, fresh: false, when };
+}
+
+const newsRow = n => {
+  const look = subjectLook(n.discipline);
+  const date = newsDate(n.date);
+  return `
+  <button class="news-card tone-${look.tone}" data-news="${esc(n.href)}">
+    <div class="news-badge">${icon(look.glyph, 20)}</div>
+    <div class="news-main">
+      <div class="news-top">
+        <span class="news-subject">
+          ${esc(n.discipline || (n.course ? 'Дисциплина' : 'Институт'))}
+        </span>
+        ${date.fresh ? '<span class="news-fresh">новое</span>' : ''}
+        <span class="news-date">${esc(date.text)}</span>
       </div>
+      <div class="news-title">${esc(n.title)}</div>
       ${n.preview ? `<div class="news-preview">${esc(n.preview)}</div>` : ''}
+      <div class="news-foot">
+        ${n.author ? `${icon('user', 13)}<span>${esc(n.author)}</span>` : ''}
+        <span class="news-open">Читать ${icon('chevronRight', 13)}</span>
+      </div>
     </div>
-    <div class="todo-side">${icon('chevronRight', 16)}</div>
-  </div>`;
+  </button>`;
+};
 
 const fileRow = f => `
   <div class="todo file-row" data-link="${esc(f.link)}">
@@ -243,17 +295,19 @@ export default async function tasksScreen() {
 
       ${news.length ? `
         <div class="section-head">
-          <div class="section-title">Что задали</div>
+          <div class="section-title with-icon">
+            ${icon('megaphone', 17)} Что задали
+          </div>
           ${news.length > 3 ? `<button class="section-link"
             id="toggle-news">${news.length}</button>` : ''}
         </div>
         <p class="section-note">
           Объявления преподавателей — то, что они пишут к занятию.
         </p>
-        <div class="list-card">
+        <div class="news-list">
           ${news.slice(0, 3).map(newsRow).join('')}
         </div>
-        <div class="list-card" id="news-rest" hidden>
+        <div class="news-list" id="news-rest" hidden>
           ${news.slice(3).map(newsRow).join('')}
         </div>` : ''}
 
@@ -573,27 +627,48 @@ function filesSheet(task) {
  */
 async function newsSheet(href, list) {
   const known = (list || []).find(n => n.href === href) || {};
+  const look = subjectLook(known.discipline);
+  const date = newsDate(known.date);
+
   sheet({
     title: known.title || 'Объявление',
-    body: `<div class="news-body" id="news-body">Загружаю…</div>`,
+    body: `
+      <div class="news-head tone-${look.tone}">
+        <div class="news-badge">${icon(look.glyph, 22)}</div>
+        <div class="news-head-text">
+          <div class="news-subject">
+            ${esc(known.discipline || 'Объявление')}
+          </div>
+          <div class="news-head-meta">
+            ${known.author ? `${icon('user', 13)}
+              <span>${esc(known.author)}</span>` : ''}
+            ${date.text ? `${icon('clock', 13)}
+              <span>${esc(date.text)}</span>` : ''}
+          </div>
+        </div>
+      </div>
+      <div class="news-body" id="news-body">
+        <div class="skeleton news-skeleton"></div>
+        <div class="skeleton news-skeleton"></div>
+        <div class="skeleton news-skeleton short"></div>
+      </div>`,
     onMount(root) {
       const box = root.querySelector('#news-body');
       post('/api/orioks/news', { item: href }, { timeout: 25000 })
         .then(r => {
           const it = r.item || {};
           if (!it.text) {
-            box.textContent = r.error || 'ОРИОКС не отдал текст объявления';
+            box.innerHTML = emptyState(
+              r.error || 'ОРИОКС не отдал текст объявления', 'info');
             return;
           }
-          box.innerHTML = `
-            <div class="news-meta">
-              ${esc(it.discipline || '')}${it.author ? ` · ${esc(it.author)}` : ''}
-              ${it.date ? ` · ${esc(it.date)}` : ''}
-            </div>
-            ${it.text.split('\n').filter(Boolean)
-              .map(p => `<p>${linkify(p)}</p>`).join('')}`;
+          box.innerHTML = it.text.split('\n').filter(Boolean)
+            .map(line => NUMBERED.test(line)
+              ? `<p class="news-item">${linkify(line)}</p>`
+              : `<p>${linkify(line)}</p>`).join('');
         })
-        .catch(err => { box.textContent = err.message; });
+        .catch(err => { box.innerHTML = emptyState(err.message, 'info'); });
+
       box.addEventListener('click', e => {
         const a = e.target.closest('a[data-url]');
         if (!a) return;
@@ -605,6 +680,7 @@ async function newsSheet(href, list) {
 }
 
 
+
 /**
  * Текст со ссылками: преподаватели дают в объявлениях литературу
  * ссылками, и оставлять их непрожимаемой строкой — значит заставлять
@@ -613,7 +689,7 @@ async function newsSheet(href, list) {
  * Экранируем по кускам, а не целиком: экранированный текст уже нельзя
  * разбирать регулярным выражением, не рискуя склеить разметку.
  */
-function linkify(text) {
+export function linkify(text) {
   const parts = String(text).split(/(https?:\/\/[^\s<>"']+)/g);
   return parts.map((part, i) => {
     if (i % 2 === 0) return esc(part);
@@ -621,3 +697,8 @@ function linkify(text) {
     return `<a href="#" data-url="${esc(part)}">${esc(shown)}</a>`;
   }).join('');
 }
+
+
+// Строка списка внутри объявления: «1.», «2)», «А)», «·». Преподаватели
+// пишут задания перечнем, и сплошным текстом он читается вдвое хуже.
+export const NUMBERED = /^\s*(?:[0-9]{1,2}\s*[.)]|[А-Яа-яA-Za-z]\s*\)|[·•\-–])\s+/;

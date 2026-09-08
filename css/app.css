@@ -1623,11 +1623,189 @@ textarea.field-input {
 .file-row .todo-side { color: var(--text-secondary); }
 .file-row:active { background: var(--primary-dim); }
 
-/* Объявление преподавателя — текст, а не строка данных: читается
-   абзацами, поэтому межстрочный интервал больше обычного. */
-.news-row { cursor: pointer; }
-.news-row .todo-subject { font-size: 14px; }
-.news-row:active { background: var(--primary-dim); }
+/* ---------- Объявления преподавателей ---------- */
+
+/* Карточка, а не строка списка: у объявления есть предмет, дата, автор
+   и текст — в одну строку это не укладывается, а разбирать столбцы
+   глазами дольше, чем прочитать. */
+.news-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.news-card {
+  display: flex;
+  gap: 12px;
+  width: 100%;
+  padding: 14px;
+  text-align: left;
+  border: none;
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+  font-family: inherit;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.news-card:active { transform: scale(0.985); }
+
+/* Значок предмета. Цвет постоянный у каждой дисциплины: по нему
+   объявление и находят, не вчитываясь в название. */
+.news-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 42px;
+  height: 42px;
+  border-radius: 13px;
+  background: var(--tone-bg);
+  color: var(--tone-fg);
+}
+
+.tone-0 { --tone-fg: #4C6EF5; --tone-bg: rgba(76, 110, 245, 0.14); }
+.tone-1 { --tone-fg: #12B886; --tone-bg: rgba(18, 184, 134, 0.14); }
+.tone-2 { --tone-fg: #7950F2; --tone-bg: rgba(121, 80, 242, 0.14); }
+.tone-3 { --tone-fg: #E8590C; --tone-bg: rgba(232, 89, 12, 0.14); }
+.tone-4 { --tone-fg: #E64980; --tone-bg: rgba(230, 73, 128, 0.14); }
+.tone-5 { --tone-fg: #0CA678; --tone-bg: rgba(12, 166, 120, 0.14); }
+
+/* В тёмной теме те же цвета читаются хуже фона — берём светлее, а
+   подложку гуще: иначе значок сливается с карточкой. */
+[data-theme="dark"] .tone-0 { --tone-fg: #7C93FF; --tone-bg: rgba(124, 147, 255, 0.18); }
+[data-theme="dark"] .tone-1 { --tone-fg: #38D9A9; --tone-bg: rgba(56, 217, 169, 0.18); }
+[data-theme="dark"] .tone-2 { --tone-fg: #A78BFA; --tone-bg: rgba(167, 139, 250, 0.18); }
+[data-theme="dark"] .tone-3 { --tone-fg: #FF922B; --tone-bg: rgba(255, 146, 43, 0.18); }
+[data-theme="dark"] .tone-4 { --tone-fg: #FF8FAB; --tone-bg: rgba(255, 143, 171, 0.18); }
+[data-theme="dark"] .tone-5 { --tone-fg: #3BC9A3; --tone-bg: rgba(59, 201, 163, 0.18); }
+
+.news-main { flex: 1; min-width: 0; }
+
+.news-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 3px;
+}
+
+.news-subject {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--tone-fg);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Метка новизны — единственное место, где на экране заданий уместен
+   акцент: объявление живёт до занятия, а не до конца семестра. */
+.news-fresh {
+  flex-shrink: 0;
+  padding: 2px 7px;
+  border-radius: var(--radius-pill);
+  background: var(--tone-bg);
+  color: var(--tone-fg);
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.news-date {
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+
+.news-title {
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.3;
+  color: var(--text);
+  letter-spacing: -0.01em;
+}
+
+.news-foot {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 9px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.news-foot svg { flex-shrink: 0; }
+
+.news-foot span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.news-open {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+  flex-shrink: 0;
+  font-weight: 700;
+  color: var(--primary);
+}
+
+/* Заголовок раздела со значком: «Что задали» открывает экран, и голая
+   строка в начале выглядела недоделанной. */
+.section-title.with-icon {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.section-title.with-icon svg { color: var(--primary); }
+
+/* Шапка листа с объявлением: тот же значок, что и в списке, — человек
+   должен видеть, что открыл именно то, на что нажал. */
+.news-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-bottom: 14px;
+  margin-bottom: 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.news-head-text { min-width: 0; }
+
+.news-head-meta {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 3px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.news-head-meta svg { flex-shrink: 0; }
+.news-head-meta span { margin-right: 6px; }
+
+/* Пока текст едет — три полосы вместо слова «Загружаю»: так видно, что
+   ожидается именно текст, а не пустой экран. */
+.news-skeleton { height: 14px; margin-bottom: 10px; }
+.news-skeleton.short { width: 55%; }
+
+/* Пункт перечня: преподаватели пишут задания списком, и сплошным
+   текстом он читается вдвое хуже. */
+.news-body .news-item {
+  padding-left: 10px;
+  border-left: 2px solid var(--border);
+  margin-bottom: 8px;
+}
 
 /* Выжимка объявления: три строки, дальше многоточие. Полный текст
    открывается по нажатию — в списке он занимал бы весь экран. */
