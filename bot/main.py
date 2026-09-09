@@ -38,6 +38,7 @@ from . import render
 from . import rich
 from . import schedule_api as api
 from . import storage
+from . import webapp as webapp_watch
 
 logging.basicConfig(
     level=logging.INFO,
@@ -970,7 +971,7 @@ def main() -> None:
     # держит её дольше, чем просит HTTP: человек жмёт «Приложение» и
     # видит прошлую выкладку. Ставим при каждом запуске, потому что
     # запуск и происходит после выкладки.
-    if WEBAPP_URL:
+    def point_menu_at_app(_version: str | None = None) -> None:
         link = kbs.webapp_link(WEBAPP_URL)
         try:
             bot.set_chat_menu_button(menu_button=types.MenuButtonWebApp(
@@ -979,6 +980,14 @@ def main() -> None:
             log.info("кнопка меню ведёт на %s", link)
         except ApiTelegramException as e:
             log.warning("не удалось обновить кнопку меню: %s", e)
+
+    if WEBAPP_URL:
+        point_menu_at_app()
+        # Клиент выкладывается отдельно от бота, и раньше ради новой
+        # метки приходилось перезапускать контейнер — то есть ронять
+        # бота на пару минут из-за правки цвета кнопки. Теперь он сам
+        # замечает выкладку и переставляет ссылку.
+        webapp_watch.run_in_background(WEBAPP_URL, point_menu_at_app)
 
     # HTTP-API для мини-приложения: приём событий и админка. Отдельным
     # потоком в том же процессе — база у них общая, и разносить их по

@@ -59,6 +59,8 @@ export function markRead(id) {
 
 // ─────────────── данные ───────────────
 
+// Справочные данные — новости, кружки, институты, кампус, список групп.
+// Расписание сюда не входит: оно живое, прямо с miet.ru.
 export const data = {
   university: null,
   news: [],
@@ -67,12 +69,50 @@ export const data = {
   campus: [],
   groups: [],
   meta: {},
+  stale: false,     // показываем вчерашнюю копию
+  missing: false,   // не показываем вовсе
 };
 
+// Копия справочника на случай, когда сеть подвела. Собранный файл
+// меняется раз в несколько недель, так что вчерашняя копия — это те же
+// данные, а не «что-то старое».
+const DATA_KEY = 'miet-data-cache';
+
+/**
+ * Тянет `data/app.json`.
+ *
+ * Раньше отказ этого запроса валил всё приложение: человек видел
+ * «Данные не загрузились» вместо расписания — хотя расписание с
+ * miet.ru к этому файлу отношения не имеет. А отказ бывает на ровном
+ * месте: GitHub Pages пересобирается после выкладки и минуту отвечает
+ * 404, метро проезжает тоннель, телефон переключается с Wi-Fi на LTE.
+ *
+ * Поэтому: не вышло — берём копию из хранилища, нет копии — работаем
+ * без справочника. Приложение обязано открыться в любом случае.
+ */
 export async function loadData() {
-  const res = await fetch('data/app.json', { cache: 'no-cache' });
-  if (!res.ok) throw new Error(`Не удалось загрузить данные (${res.status})`);
-  Object.assign(data, await res.json());
+  try {
+    const res = await fetch('data/app.json', { cache: 'no-cache' });
+    if (!res.ok) throw new Error(`сервер ответил ${res.status}`);
+    const fresh = await res.json();
+    Object.assign(data, fresh, { stale: false, missing: false });
+    try {
+      localStorage.setItem(DATA_KEY, JSON.stringify(fresh));
+    } catch { /* хранилище переполнено — переживём, просто без копии */ }
+    return data;
+  } catch (err) {
+    console.warn('справочные данные не загрузились:', err.message);
+  }
+
+  try {
+    const saved = JSON.parse(localStorage.getItem(DATA_KEY) || 'null');
+    if (saved) {
+      Object.assign(data, saved, { stale: true, missing: false });
+      return data;
+    }
+  } catch { /* копия побилась — считаем, что её нет */ }
+
+  data.missing = true;
   return data;
 }
 

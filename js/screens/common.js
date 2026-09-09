@@ -2,6 +2,7 @@
 
 import { icon } from '../icons.js';
 import { esc, el, sheet, listRow, listCard, emptyState } from '../ui.js';
+import { artState } from '../art.js';
 import { data, settings, save } from '../store.js';
 import { haptic } from '../tg.js';
 import { syncGroup } from '../api.js';
@@ -51,7 +52,13 @@ export function pickGroup(onPick) {
           ? groups.filter(g => g.toLowerCase().replace(/\s+/g, '').includes(needle))
           : groups;
         if (!found.length) {
-          list.innerHTML = emptyState('Такой группы нет', 'search');
+          // Пустой список без запроса — это не «нет такой группы», а
+          // «справочник не приехал»: 346 групп лежат в data/app.json, и
+          // без него искать просто негде.
+          list.innerHTML = groups.length
+            ? emptyState('Такой группы нет', 'search')
+            : artState('offline', 'Список групп не загрузился',
+              'Закрой и открой приложение — он лежит рядом с ним и обычно приезжает сразу');
           return;
         }
         list.innerHTML = listCard(found.slice(0, 120).map(g => listRow({

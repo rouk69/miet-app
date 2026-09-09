@@ -264,6 +264,22 @@ CASES = [
      "String(lessonDay(SCHED, new Date(2026, 8, 1),"
      " { week: 2, type: 'Лабораторная работа' }, 'Философия', 0))", "null"),
 
+    # День без пар — обычное дело: у ИКТ-12 такой четверг всегда. Он
+    # обязан выглядеть свободным днём, а не отказом загрузки.
+    ("пустой день отдаёт пустой список",
+     "slotsOf(NO_THURSDAY, 0, 4).length", "0"),
+    ("день с парами отдаёт пары", "slotsOf(NO_THURSDAY, 0, 1).length", "1"),
+    ("счётчик дней знает про пустой четверг",
+     "String(dayCounts(NO_THURSDAY, 0)[4] || 0)", "0"),
+    ("счётчик дней знает про занятый понедельник",
+     "String(dayCounts(NO_THURSDAY, 0)[1])", "1"),
+    ("в пустой день ничего не идёт и не падает",
+     "String(nowState(NO_THURSDAY, 0, new Date(2026, 8, 10, 12, 0)).current)",
+     "null"),
+    ("и следующей пары в нём тоже нет",
+     "String(nowState(NO_THURSDAY, 0, new Date(2026, 8, 10, 12, 0)).next)",
+     "null"),
+
     # Картинка поста занимает место по своим пропорциям: единое
     # соотношение резало пополам скриншоты расписания.
     ("размеры читаются из имени",
@@ -318,6 +334,18 @@ var _a = __mod['js/art.js'];
 var art = _a.art, artState = _a.artState;
 var _f = __mod['js/screens/feed.js'];
 var mediaSize = _f.mediaSize, mediaTag = _f.mediaTag;
+
+var _sc = __mod['js/schedule.js'];
+var slotsOf = _sc.slotsOf, dayCounts = _sc.dayCounts, nowState = _sc.nowState;
+
+// Расписание группы, у которой в четверг пар нет вовсе (так живёт
+// ИКТ-12): пустой день обязан оставаться пустым днём, а не поломкой.
+var NO_THURSDAY = { semestr: 'Осенний семестр 2026/2027', times: [], lessons: [
+  { week: 0, day: 1, pair: 1, from: '09:00', to: '10:20',
+    subject: 'Физика', kind: 'Лекция', kindCls: 'lek', flags: [], room: '1201' },
+  { week: 0, day: 5, pair: 2, from: '10:30', to: '11:50',
+    subject: 'Физика', kind: 'Лабораторная', kindCls: 'lab', flags: [], room: '3229' }
+] };
 
 var SCHED = { semestr: 'Осенний семестр 2026/2027', lessons: [
   { week: 1, day: 4, pair: 3, subject: 'Физика. Механика',
