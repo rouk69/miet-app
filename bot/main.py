@@ -29,6 +29,7 @@ from . import api as web          # HTTP-API мини-приложения; sche
 from . import keyboards as kbs
 from . import directory
 from . import news_feed
+from . import media as mediastore
 from . import notify
 from . import orioks_watch
 from . import posts as feed
@@ -998,6 +999,14 @@ def main() -> None:
     # Справочник преподавателей и аудиторий: обход всех групп раз в сутки.
     # Стартует с задержкой — сначала должен подняться опрос Telegram.
     directory.run_in_background()
+
+    # Картинки, сохранённые до того, как размеры стали частью имени:
+    # без них лента прыгает на подгрузке, а это как раз старые записи,
+    # которые листают каждый день.
+    try:
+        mediastore.backfill()
+    except Exception:                                   # noqa: BLE001
+        log.exception("размеры картинок не дописались")
 
     # Объявления преподавателей в ОРИОКС: единственное место, где лежит
     # текст домашнего задания. Экран «Учёба» показывает их тому, кто

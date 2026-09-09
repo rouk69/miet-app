@@ -264,6 +264,23 @@ CASES = [
      "String(lessonDay(SCHED, new Date(2026, 8, 1),"
      " { week: 2, type: 'Лабораторная работа' }, 'Философия', 0))", "null"),
 
+    # Картинка поста занимает место по своим пропорциям: единое
+    # соотношение резало пополам скриншоты расписания.
+    ("размеры читаются из имени",
+     "mediaSize('abc-1200x800.jpg').w", "1200"),
+    ("у старого имени размеров нет",
+     "String(mediaSize('abc.jpg'))", "null"),
+    ("пропорции попадают в разметку",
+     "String(mediaTag('abc-1200x800.jpg').indexOf('aspect-ratio:1200/800') > 0)",
+     "true"),
+    ("высокой картинке отводится своё место",
+     "String(mediaTag('abc-800x1600.jpg').indexOf('aspect-ratio:4/5') > 0)",
+     "true"),
+    ("высокая вписывается целиком",
+     "String(mediaTag('abc-800x1600.jpg').indexOf('tall') > 0)", "true"),
+    ("без размеров картинка помечена",
+     "String(mediaTag('abc.jpg').indexOf('unsized') > 0)", "true"),
+
     # Иллюстрации: сцена обязана быть настоящим svg, а незнакомое имя —
     # не пустотой на пол-экрана, а хоть чем-то.
     ("сцена рисуется", "String(art('free').indexOf('<svg') === 0)", "true"),
@@ -299,6 +316,8 @@ var subjectLook = _t.subjectLook, newsDate = _t.newsDate,
     lessonDay = _t.lessonDay, flatten = _t.flatten, pendingOf = _t.pendingOf;
 var _a = __mod['js/art.js'];
 var art = _a.art, artState = _a.artState;
+var _f = __mod['js/screens/feed.js'];
+var mediaSize = _f.mediaSize, mediaTag = _f.mediaTag;
 
 var SCHED = { semestr: 'Осенний семестр 2026/2027', lessons: [
   { week: 1, day: 4, pair: 3, subject: 'Физика. Механика',

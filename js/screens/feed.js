@@ -17,6 +17,44 @@ import { screen, pickGroup } from './common.js';
 
 const mediaUrl = name => `${API_BASE}/media/${encodeURIComponent(name)}`;
 
+/**
+ * Размеры картинки — из её же имени: сервер дописывает их при
+ * сохранении («<хеш>-1200x800.jpg»). Старые файлы без хвоста
+ * возвращают null, и тогда место под картинку занять нечем.
+ */
+export function mediaSize(name) {
+  const m = /-(\d{1,5})x(\d{1,5})\.[a-z]+$/i.exec(String(name || ''));
+  if (!m) return null;
+  const w = +m[1];
+  const h = +m[2];
+  return w > 0 && h > 0 ? { w, h } : null;
+}
+
+/**
+ * Картинка поста своими пропорциями.
+ *
+ * Единое соотношение для всех резало скриншоты расписания пополам, а
+ * их в студенческой ленте больше, чем фотографий. Поэтому место
+ * занимается по настоящим сторонам картинки — лента не прыгает и не
+ * обрезает.
+ *
+ * Исключение — очень высокие: снимок экрана телефона занял бы собой всю
+ * ленту. Им отводится место высотой в четыре пятых ширины, а сама
+ * картинка вписывается целиком, с полями по бокам: лучше поля, чем
+ * срезанная половина расписания.
+ */
+export function mediaTag(name, cls = 'post-media', full = true) {
+  const url = mediaUrl(name);
+  const size = mediaSize(name);
+  const tall = size && size.h / size.w > 1.25;
+  const ratio = !size ? '' : tall
+    ? 'style="aspect-ratio:4/5"'
+    : `style="aspect-ratio:${size.w}/${size.h}"`;
+  return `<img class="${cls}${tall ? ' tall' : ''}${size ? '' : ' unsized'}"
+    src="${url}" alt="" ${ratio}
+    ${full ? `data-full="${url}"` : ''} loading="lazy" decoding="async">`;
+}
+
 // Последняя удачно полученная лента. Нужна ровно на случай, когда сервер
 // не ответил: пустой экран выглядит как поломка приложения, а вчерашние
 // записи — как то, чем они и являются.
@@ -120,8 +158,7 @@ export function postCard(p, reactions, expanded = false) {
   return `
     <article class="card post" data-post="${p.id}">
       ${p.pinned ? `<div class="post-flag">${icon('flag', 14)} Закреплено</div>` : ''}
-      ${p.media ? `<img class="post-media" src="${mediaUrl(p.media)}" alt=""
-                        data-full="${mediaUrl(p.media)}" loading="lazy" decoding="async">` : ''}
+      ${p.media ? mediaTag(p.media) : ''}
       <div class="post-body">
         ${p.title ? `<div class="post-title">${esc(p.title)}</div>` : ''}
         <div class="post-text ${folded ? 'folded' : ''}">${paragraphs(p.text)}</div>
@@ -683,7 +720,7 @@ export async function moderationScreen() {
     subtitle: 'Анонимные посты ждут разрешения',
     body: queue.posts.length ? `<div class="stack">${queue.posts.map(p => `
       <div class="card post" data-post="${p.id}">
-        ${p.media ? `<img class="post-media" src="${mediaUrl(p.media)}" alt="" decoding="async">` : ''}
+        ${p.media ? mediaTag(p.media, 'post-media', false) : ''}
         <div class="post-body">
           <div class="post-text">${paragraphs(p.text)}</div>
           <div class="post-foot">
