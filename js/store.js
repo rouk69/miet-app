@@ -5,7 +5,7 @@ const KEY = 'miet-app-v1';
 
 const DEFAULTS = {
   group: null,        // выбранная учебная группа
-  theme: 'light',     // light | dark — выбирается вручную, за темой Telegram не следует
+  theme: 'auto',      // auto | light | dark — «авто» повторяет тему Telegram
   weekShift: 0,       // поправка к вычисленной неделе цикла, если разошлась с деканатом
   favorites: [],      // id избранных кружков
   seenNews: [],       // id прочитанных новостей
@@ -76,7 +76,26 @@ export async function loadData() {
   return data;
 }
 
+/**
+ * Во что превращается выбор темы.
+ *
+ * «Авто» — это тема Telegram, а вне его системная: человек, у которого
+ * весь мессенджер тёмный, не должен получать в лицо белый экран только
+ * потому, что приложение открыто впервые. Выбранная руками тема
+ * сильнее: её меняли осознанно.
+ */
+export function resolveTheme(theme = settings.theme) {
+  if (theme === 'light' || theme === 'dark') return theme;
+  const tg = window.Telegram?.WebApp?.colorScheme;
+  if (tg === 'dark' || tg === 'light') return tg;
+  try {
+    return matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  } catch {
+    return 'light';
+  }
+}
+
 /** Применяет тему к <html>; компоненты про тему не знают — только про токены. */
-export function applyTheme(theme) {
-  document.documentElement.dataset.theme = theme === 'dark' ? 'dark' : 'light';
+export function applyTheme(theme = settings.theme) {
+  document.documentElement.dataset.theme = resolveTheme(theme);
 }

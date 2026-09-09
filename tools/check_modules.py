@@ -65,15 +65,37 @@ for f, s in src.items():
         if name not in known:
             problems.append(f"{os.path.relpath(f, ROOT)}: нет иконки «{name}»")
 
-# Классы, которые рисует админка, должны быть в CSS.
+# Каждый класс из разметки должен быть в CSS. Проверяем все модули, а
+# не избранные: опечатка в классе не роняет ничего — просто блок теряет
+# вид, и увидеть это можно только глазами, которых в этой среде нет.
 css = "".join(io.open(os.path.join(ROOT, "css", n), encoding="utf-8").read()
               for n in ("tokens.css", "app.css"))
-for name in ("admin.js", "admin-days.js", "feed.js", "home.js", "useful.js", "teachers.js", "tools.js", "guide.js", "community.js", "help.js"):
-    js = src[os.path.normpath(os.path.join(ROOT, "js", "screens", name))]
+for f, js in sorted(src.items()):
+    short = os.path.relpath(f, os.path.join(ROOT, "js"))
     for cls in sorted(set(re.findall(r'class="([^"$]+)"', js))):
         for one in cls.split():
             if one and "." + one not in css:
-                problems.append(f"{name}: класс «{one}» не описан в CSS")
+                problems.append(f"{short}: класс «{one}» не описан в CSS")
+
+# Один класс — одно место. Два блока с одинаковым селектором означают,
+# что второй молча перекрывает первый: так карточка объявления ОРИОКС
+# однажды переопределила карточку новости, и лента новостей поехала —
+# ничего не сломав и ничего не сообщив.
+#
+# Селектор берётся целиком, вместе с перенесёнными строками: «.a img,
+# .a-stub» и «.a-stub» — разные правила, и общий кусок в них законен.
+SELECTOR = re.compile(r"(?ms)^([.#][^{@}]+?)\s*\{")
+seen = {}
+for name in ("tokens.css", "app.css"):
+    text = io.open(os.path.join(ROOT, "css", name), encoding="utf-8").read()
+    for m in SELECTOR.finditer(text):
+        sel = re.sub(r"\s+", " ", m.group(1).strip())
+        where = f"{name}:{text[:m.start()].count(chr(10)) + 1}"
+        if sel in seen:
+            problems.append(
+                f"css: «{sel}» описан дважды — {seen[sel]} и {where}")
+        else:
+            seen[sel] = where
 
 SHARED = {
     "esc", "el", "icon", "listCard", "listRow", "emptyState", "toast", "sheet",

@@ -2,7 +2,7 @@
 
 import { icon } from '../icons.js';
 import { esc, listCard, listRow, toast, sheet, emptyState } from '../ui.js';
-import { data, settings, save, applyTheme } from '../store.js';
+import { data, settings, save, applyTheme, resolveTheme } from '../store.js';
 import { fetchSchedule, weekOfCycle } from '../schedule.js';
 import { go, refresh } from '../router.js';
 import { tgUser, openLink, syncChrome, haptic, confirmDialog } from '../tg.js';
@@ -27,7 +27,7 @@ export default async function profileScreen() {
     body: `
       <div class="profile-head">
         ${user?.photo_url
-        ? `<img class="avatar-lg" src="${esc(user.photo_url)}" alt="">`
+        ? `<img class="avatar-lg" src="${esc(user.photo_url)}" alt="" decoding="async">`
         : `<div class="avatar-lg">${esc(initials)}</div>`}
         <div style="min-width:0">
           <div style="font-size:22px;font-weight:800;letter-spacing:-.02em">${esc(name)}</div>
@@ -59,8 +59,10 @@ export default async function profileScreen() {
       <div class="card" style="padding:14px 16px">
         <div class="field-label" style="margin-bottom:9px">Тема</div>
         <div class="segmented" id="theme">
-          <button class="segmented-item ${settings.theme === 'light' ? 'active' : ''}" data-theme="light">Светлая</button>
-          <button class="segmented-item ${settings.theme === 'dark' ? 'active' : ''}" data-theme="dark">Тёмная</button>
+          ${[['auto', 'Как в Telegram'], ['light', 'Светлая'], ['dark', 'Тёмная']]
+      .map(([id, label]) => `<button class="segmented-item
+        ${settings.theme === id ? 'active' : ''}" data-theme="${id}">${label}</button>`)
+      .join('')}
         </div>
       </div>
 
@@ -92,7 +94,7 @@ export default async function profileScreen() {
     const theme = b.dataset.theme;
     save({ theme });
     applyTheme(theme);
-    syncChrome(theme);
+    syncChrome(resolveTheme(theme));
     haptic('light');
     node.querySelectorAll('#theme .segmented-item').forEach(x => x.classList.remove('active'));
     b.classList.add('active');

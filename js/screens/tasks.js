@@ -229,21 +229,21 @@ const newsRow = n => {
   const look = subjectLook(n.discipline);
   const date = newsDate(n.date);
   return `
-  <button class="news-card tone-${look.tone}" data-news="${esc(n.href)}">
-    <div class="news-badge">${icon(look.glyph, 20)}</div>
-    <div class="news-main">
-      <div class="news-top">
-        <span class="news-subject">
+  <button class="notice-card tone-${look.tone}" data-news="${esc(n.href)}">
+    <div class="notice-badge">${icon(look.glyph, 20)}</div>
+    <div class="notice-main">
+      <div class="notice-top">
+        <span class="notice-subject">
           ${esc(n.discipline || (n.course ? 'Дисциплина' : 'Институт'))}
         </span>
-        ${date.fresh ? '<span class="news-fresh">новое</span>' : ''}
-        <span class="news-date">${esc(date.text)}</span>
+        ${date.fresh ? '<span class="notice-fresh">новое</span>' : ''}
+        <span class="notice-date">${esc(date.text)}</span>
       </div>
-      <div class="news-title">${esc(n.title)}</div>
-      ${n.preview ? `<div class="news-preview">${esc(n.preview)}</div>` : ''}
-      <div class="news-foot">
+      <div class="notice-title">${esc(n.title)}</div>
+      ${n.preview ? `<div class="notice-preview">${esc(n.preview)}</div>` : ''}
+      <div class="notice-foot">
         ${n.author ? `${icon('user', 13)}<span>${esc(n.author)}</span>` : ''}
-        <span class="news-open">Читать ${icon('chevronRight', 13)}</span>
+        <span class="notice-open">Читать ${icon('chevronRight', 13)}</span>
       </div>
     </div>
   </button>`;
@@ -265,14 +265,14 @@ export function fileLook(name, link) {
 const fileRow = f => {
   const look = fileLook(f.name, f.link);
   return `
-  <button class="news-card file-card" data-link="${esc(f.link)}">
-    <div class="news-badge">${icon(look.glyph, 19)}</div>
-    <div class="news-main">
-      <div class="news-title">${esc(f.name)}</div>
-      <div class="news-foot">
+  <button class="notice-card file-card" data-link="${esc(f.link)}">
+    <div class="notice-badge">${icon(look.glyph, 19)}</div>
+    <div class="notice-main">
+      <div class="notice-title">${esc(f.name)}</div>
+      <div class="notice-foot">
         <span>${esc(f.subject)}</span>
         ${look.label ? `<span class="file-kind">${esc(look.label)}</span>` : ''}
-        <span class="news-open">Открыть ${icon('external', 13)}</span>
+        <span class="notice-open">Открыть ${icon('external', 13)}</span>
       </div>
     </div>
   </button>`;
@@ -428,10 +428,10 @@ export default async function tasksScreen() {
         <p class="section-note">
           Объявления преподавателей — то, что они пишут к занятию.
         </p>
-        <div class="news-list">
+        <div class="notice-list">
           ${news.slice(0, 3).map(newsRow).join('')}
         </div>
-        <div class="news-list" id="news-rest" hidden>
+        <div class="notice-list" id="news-rest" hidden>
           ${news.slice(3).map(newsRow).join('')}
         </div>` : ''}
 
@@ -480,7 +480,7 @@ export default async function tasksScreen() {
           Методички, условия и бланки. Это всё, что ОРИОКС знает о
           заданиях сверх их названий.
         </p>
-        <div class="news-list" id="files-list" hidden>
+        <div class="notice-list" id="files-list" hidden>
           ${files.map(fileRow).join('')}
         </div>` : ''}
 
@@ -744,31 +744,31 @@ function filesSheet(task) {
   sheet({
     title: task.title.main,
     body: `
-      <div class="news-head tone-${subjectLook(task.subject).tone}">
-        <div class="news-badge">
+      <div class="notice-head tone-${subjectLook(task.subject).tone}">
+        <div class="notice-badge">
           ${icon(subjectLook(task.subject).glyph, 22)}
         </div>
-        <div class="news-head-text">
-          <div class="news-subject">${esc(task.subject)}</div>
-          <div class="news-head-meta">
+        <div class="notice-head-text">
+          <div class="notice-subject">${esc(task.subject)}</div>
+          <div class="notice-head-meta">
             ${icon('clipboard', 13)}
             <span>${esc(task.title.main)}</span>
           </div>
         </div>
       </div>
-      <div class="news-list">
+      <div class="notice-list">
         ${items.map((m, i) => {
           const look = fileLook(m.name, m.link);
           return `
-          <button class="news-card file-card" data-open="${i}">
-            <div class="news-badge">${icon(look.glyph, 19)}</div>
-            <div class="news-main">
-              <div class="news-title">${esc(m.name)}</div>
-              <div class="news-foot">
+          <button class="notice-card file-card" data-open="${i}">
+            <div class="notice-badge">${icon(look.glyph, 19)}</div>
+            <div class="notice-main">
+              <div class="notice-title">${esc(m.name)}</div>
+              <div class="notice-foot">
                 ${m.kind ? `<span>${esc(m.kind)}</span>` : ''}
                 ${look.label
                   ? `<span class="file-kind">${esc(look.label)}</span>` : ''}
-                <span class="news-open">Открыть ${icon('external', 13)}</span>
+                <span class="notice-open">Открыть ${icon('external', 13)}</span>
               </div>
             </div>
           </button>`;
@@ -803,13 +803,13 @@ async function newsSheet(href, list) {
   sheet({
     title: known.title || 'Объявление',
     body: `
-      <div class="news-head tone-${look.tone}">
-        <div class="news-badge">${icon(look.glyph, 22)}</div>
-        <div class="news-head-text">
-          <div class="news-subject">
+      <div class="notice-head tone-${look.tone}">
+        <div class="notice-badge">${icon(look.glyph, 22)}</div>
+        <div class="notice-head-text">
+          <div class="notice-subject">
             ${esc(known.discipline || 'Объявление')}
           </div>
-          <div class="news-head-meta">
+          <div class="notice-head-meta">
             ${known.author ? `${icon('user', 13)}
               <span>${esc(known.author)}</span>` : ''}
             ${date.text ? `${icon('clock', 13)}
@@ -817,13 +817,13 @@ async function newsSheet(href, list) {
           </div>
         </div>
       </div>
-      <div class="news-body" id="news-body">
-        <div class="skeleton news-skeleton"></div>
-        <div class="skeleton news-skeleton"></div>
-        <div class="skeleton news-skeleton short"></div>
+      <div class="notice-body" id="notice-body">
+        <div class="skeleton notice-skeleton"></div>
+        <div class="skeleton notice-skeleton"></div>
+        <div class="skeleton notice-skeleton short"></div>
       </div>`,
     onMount(root) {
-      const box = root.querySelector('#news-body');
+      const box = root.querySelector('#notice-body');
       post('/api/orioks/news', { item: href }, { timeout: 25000 })
         .then(r => {
           const it = r.item || {};
@@ -834,7 +834,7 @@ async function newsSheet(href, list) {
           }
           box.innerHTML = it.text.split('\n').filter(Boolean)
             .map(line => NUMBERED.test(line)
-              ? `<p class="news-item">${linkify(line)}</p>`
+              ? `<p class="notice-item">${linkify(line)}</p>`
               : `<p>${linkify(line)}</p>`).join('');
         })
         .catch(err => { box.innerHTML = emptyState(err.message, 'info'); });

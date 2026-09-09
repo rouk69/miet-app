@@ -121,7 +121,7 @@ export function postCard(p, reactions, expanded = false) {
     <article class="card post" data-post="${p.id}">
       ${p.pinned ? `<div class="post-flag">${icon('flag', 14)} Закреплено</div>` : ''}
       ${p.media ? `<img class="post-media" src="${mediaUrl(p.media)}" alt=""
-                        data-full="${mediaUrl(p.media)}" loading="lazy">` : ''}
+                        data-full="${mediaUrl(p.media)}" loading="lazy" decoding="async">` : ''}
       <div class="post-body">
         ${p.title ? `<div class="post-title">${esc(p.title)}</div>` : ''}
         <div class="post-text ${folded ? 'folded' : ''}">${paragraphs(p.text)}</div>
@@ -160,7 +160,7 @@ export function postCard(p, reactions, expanded = false) {
 export const feedRow = p => `
   <div class="feed-row" data-feed="${p.id}">
     ${p.media
-    ? `<img src="${mediaUrl(p.media)}" alt="" loading="lazy">`
+    ? `<img src="${mediaUrl(p.media)}" alt="" loading="lazy" decoding="async">`
     : `<div class="icon-tile" style="width:56px;height:56px;border-radius:14px">
          ${icon(p.kind === 'news' ? 'news' : 'megaphone', 22)}</div>`}
     <div style="flex:1;min-width:0">
@@ -683,7 +683,7 @@ export async function moderationScreen() {
     subtitle: 'Анонимные посты ждут разрешения',
     body: queue.posts.length ? `<div class="stack">${queue.posts.map(p => `
       <div class="card post" data-post="${p.id}">
-        ${p.media ? `<img class="post-media" src="${mediaUrl(p.media)}" alt="">` : ''}
+        ${p.media ? `<img class="post-media" src="${mediaUrl(p.media)}" alt="" decoding="async">` : ''}
         <div class="post-body">
           <div class="post-text">${paragraphs(p.text)}</div>
           <div class="post-foot">

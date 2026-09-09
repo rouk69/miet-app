@@ -16,7 +16,7 @@ export default async function institutesScreen() {
     body: `<div class="stack">
       ${items.map(i => `
         <div class="tile" data-inst="${esc(i.id)}">
-          ${i.photo ? `<img class="tile-cover" src="img/${esc(i.photo)}" alt="" loading="lazy">` : ''}
+          ${i.photo ? `<img class="tile-cover" src="img/${esc(i.photo)}" alt="" loading="lazy" decoding="async">` : ''}
           <div class="tile-body">
             <div class="tile-head">
               <span class="tile-title">${esc(i.name)}</span>
@@ -46,7 +46,7 @@ export async function instituteScreen({ id }) {
   const node = screen({
     body: `
       ${i.photo ? `<div class="hero">
-        <img src="img/${esc(i.photo)}" alt="">
+        <img src="img/${esc(i.photo)}" alt="" decoding="async">
         <div class="hero-fade"></div>
       </div>` : ''}
       <div class="screen-top">

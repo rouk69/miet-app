@@ -91,7 +91,7 @@ const tile = t => `
   <button class="tile-card tone-${t.tone}" data-open="${t.id}">
     <span class="tile-ico">${icon(t.ico, 20)}</span>
     <span class="tile-name">${esc(t.title)}</span>
-    <span class="tile-sub">${esc(typeof t.sub === 'function' ? t.sub(data) : t.sub)}</span>
+    <span class="tile-note">${esc(typeof t.sub === 'function' ? t.sub(data) : t.sub)}</span>
   </button>`;
 
 export default async function usefulScreen() {
@@ -109,7 +109,7 @@ export default async function usefulScreen() {
         <button class="tile-card tone-blue" data-open="admin">
           <span class="tile-ico">${icon('shield', 20)}</span>
           <span class="tile-name">Админка</span>
-          <span class="tile-sub">Статистика и юзеры</span>
+          <span class="tile-note">Статистика и юзеры</span>
         </button>
       </div>` : ''),
   });

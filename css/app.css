@@ -68,7 +68,6 @@
 }
 
 .stack { display: flex; flex-direction: column; gap: 10px; }
-.stack-lg { display: flex; flex-direction: column; gap: 16px; }
 .muted { color: var(--text-secondary); }
 .tnum { font-variant-numeric: tabular-nums; }
 
@@ -222,13 +221,24 @@
 
 .news-row:last-child { border-bottom: none; }
 
-.news-row img {
+/* Миниатюра и заглушка на её месте — один размер и один радиус: раньше
+   заглушка повторяла их прямо в разметке, и правка здесь её не
+   касалась. */
+.news-row img,
+.news-row-stub {
   width: 62px;
   height: 62px;
   border-radius: 14px;
   object-fit: cover;
   flex-shrink: 0;
   background: var(--surface-2);
+}
+
+.news-row-stub {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-tertiary);
 }
 
 .news-row-title {
@@ -379,7 +389,7 @@
 
 .lesson-to {
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
   color: var(--text-tertiary);
 }
 
@@ -556,22 +566,6 @@
 
 .search-box input::placeholder { color: var(--text-tertiary); }
 
-.search-clear {
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  background: var(--text-tertiary);
-  color: var(--surface);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-
-/* ─────────────── Мелочи ─────────────── */
-
-.info-grid { display: flex; flex-direction: column; gap: 1px; }
-
 .avatar-lg {
   width: 68px;
   height: 68px;
@@ -608,8 +602,6 @@
 
 .sheet-list { max-height: 58vh; overflow-y: auto; }
 
-.divider { height: 1px; background: var(--border); margin: 2px 0; }
-
 .skeleton {
   background: linear-gradient(90deg, var(--surface-2) 25%, var(--border) 50%, var(--surface-2) 75%);
   background-size: 200% 100%;
@@ -620,8 +612,6 @@
 @keyframes shimmer { to { background-position: -200% 0; } }
 
 .link { color: var(--primary); font-weight: 600; }
-
-.center { text-align: center; }
 
 .fab-note {
   font-size: 12px;
@@ -1073,15 +1063,7 @@ textarea.field-input {
 /* ---------- Комментарии ---------- */
 
 .post-talk,
-.post-reads {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-variant-numeric: tabular-nums;
-}
-
 .post-talk { color: var(--text-secondary); }
-.post-reads { margin-left: auto; }
 
 .comment {
   padding: 12px 14px;
@@ -1260,7 +1242,10 @@ textarea.field-input {
   color: var(--text);
 }
 
-.tile-sub {
+/* Подпись плитки «Полезного» — своё имя, а не общее с карточками
+   кружков: там подпись крупнее и с отступом, и одно имя на два размера
+   означало, что побеждает тот блок, который написан ниже. */
+.tile-note {
   font-size: 12px;
   line-height: 1.35;
   color: var(--text-secondary);
@@ -1636,9 +1621,9 @@ textarea.field-input {
   padding: 12px 14px;
 }
 
-.file-card .news-title { font-size: 14px; font-weight: 600; }
-.file-card .news-badge { width: 36px; height: 36px; border-radius: 11px; }
-.file-card .news-foot { margin-top: 6px; }
+.file-card .notice-title { font-size: 14px; font-weight: 600; }
+.file-card .notice-badge { width: 36px; height: 36px; border-radius: 11px; }
+.file-card .notice-foot { margin-top: 6px; }
 
 .file-kind {
   flex-shrink: 0;
@@ -1746,13 +1731,13 @@ textarea.field-input {
 /* Карточка, а не строка списка: у объявления есть предмет, дата, автор
    и текст — в одну строку это не укладывается, а разбирать столбцы
    глазами дольше, чем прочитать. */
-.news-list {
+.notice-list {
   display: flex;
   flex-direction: column;
   gap: 10px;
 }
 
-.news-card {
+.notice-card {
   display: flex;
   gap: 12px;
   width: 100%;
@@ -1767,11 +1752,11 @@ textarea.field-input {
   -webkit-tap-highlight-color: transparent;
 }
 
-.news-card:active { transform: scale(0.985); }
+.notice-card:active { transform: scale(0.985); }
 
 /* Значок предмета. Цвет постоянный у каждой дисциплины: по нему
    объявление и находят, не вчитываясь в название. */
-.news-badge {
+.notice-badge {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1799,16 +1784,16 @@ textarea.field-input {
 [data-theme="dark"] .tone-4 { --tone-fg: #FF8FAB; --tone-bg: rgba(255, 143, 171, 0.18); }
 [data-theme="dark"] .tone-5 { --tone-fg: #3BC9A3; --tone-bg: rgba(59, 201, 163, 0.18); }
 
-.news-main { flex: 1; min-width: 0; }
+.notice-main { flex: 1; min-width: 0; }
 
-.news-top {
+.notice-top {
   display: flex;
   align-items: center;
   gap: 6px;
   margin-bottom: 3px;
 }
 
-.news-subject {
+.notice-subject {
   flex: 1;
   min-width: 0;
   font-size: 12px;
@@ -1823,7 +1808,7 @@ textarea.field-input {
 
 /* Метка новизны — единственное место, где на экране заданий уместен
    акцент: объявление живёт до занятия, а не до конца семестра. */
-.news-fresh {
+.notice-fresh {
   flex-shrink: 0;
   padding: 2px 7px;
   border-radius: var(--radius-pill);
@@ -1835,14 +1820,14 @@ textarea.field-input {
   letter-spacing: 0.04em;
 }
 
-.news-date {
+.notice-date {
   flex-shrink: 0;
   font-size: 12px;
   color: var(--text-tertiary);
   white-space: nowrap;
 }
 
-.news-title {
+.notice-title {
   font-size: 15px;
   font-weight: 700;
   line-height: 1.3;
@@ -1850,7 +1835,7 @@ textarea.field-input {
   letter-spacing: -0.01em;
 }
 
-.news-foot {
+.notice-foot {
   display: flex;
   align-items: center;
   gap: 5px;
@@ -1859,15 +1844,15 @@ textarea.field-input {
   color: var(--text-secondary);
 }
 
-.news-foot svg { flex-shrink: 0; }
+.notice-foot svg { flex-shrink: 0; }
 
-.news-foot span {
+.notice-foot span {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.news-open {
+.notice-open {
   display: inline-flex;
   align-items: center;
   gap: 2px;
@@ -1889,7 +1874,7 @@ textarea.field-input {
 
 /* Шапка листа с объявлением: тот же значок, что и в списке, — человек
    должен видеть, что открыл именно то, на что нажал. */
-.news-head {
+.notice-head {
   display: flex;
   align-items: center;
   gap: 12px;
@@ -1898,9 +1883,9 @@ textarea.field-input {
   border-bottom: 1px solid var(--border);
 }
 
-.news-head-text { min-width: 0; }
+.notice-head-text { min-width: 0; }
 
-.news-head-meta {
+.notice-head-meta {
   display: flex;
   align-items: center;
   gap: 5px;
@@ -1909,17 +1894,17 @@ textarea.field-input {
   color: var(--text-secondary);
 }
 
-.news-head-meta svg { flex-shrink: 0; }
-.news-head-meta span { margin-right: 6px; }
+.notice-head-meta svg { flex-shrink: 0; }
+.notice-head-meta span { margin-right: 6px; }
 
 /* Пока текст едет — три полосы вместо слова «Загружаю»: так видно, что
    ожидается именно текст, а не пустой экран. */
-.news-skeleton { height: 14px; margin-bottom: 10px; }
-.news-skeleton.short { width: 55%; }
+.notice-skeleton { height: 14px; margin-bottom: 10px; }
+.notice-skeleton.short { width: 55%; }
 
 /* Пункт перечня: преподаватели пишут задания списком, и сплошным
    текстом он читается вдвое хуже. */
-.news-body .news-item {
+.notice-body .notice-item {
   padding-left: 10px;
   border-left: 2px solid var(--border);
   margin-bottom: 8px;
@@ -1927,7 +1912,7 @@ textarea.field-input {
 
 /* Выжимка объявления: три строки, дальше многоточие. Полный текст
    открывается по нажатию — в списке он занимал бы весь экран. */
-.news-preview {
+.notice-preview {
   margin-top: 6px;
   font-size: 13px;
   line-height: 1.4;
@@ -1938,22 +1923,16 @@ textarea.field-input {
   overflow: hidden;
 }
 
-.news-body { font-size: 15px; line-height: 1.55; color: var(--text); }
-.news-body p { margin: 0 0 10px; }
-.news-body p:last-child { margin-bottom: 0; }
+.notice-body { font-size: 15px; line-height: 1.55; color: var(--text); }
+.notice-body p { margin: 0 0 10px; }
+.notice-body p:last-child { margin-bottom: 0; }
 
 /* Длинный адрес переносим по символам: иначе одна ссылка на PDF
    растягивает лист шире экрана. */
-.news-body a {
+.notice-body a {
   color: var(--primary);
   text-decoration: none;
   word-break: break-all;
-}
-
-.news-meta {
-  margin-bottom: 12px;
-  font-size: 13px;
-  color: var(--text-secondary);
 }
 
 .todo-grade {
