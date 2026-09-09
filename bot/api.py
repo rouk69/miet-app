@@ -721,6 +721,26 @@ def _admin(path: str, method: str, query: dict, body: dict, uid: int, me: dict):
         except orioks_web.WebError as e:
             return 200, {"error": str(e)}
 
+    if path == "/api/admin/orioks-watch" and method == "GET":
+        # Сторож объявлений вживую: что он видит и что бы отправил.
+        # Нужно потому, что иначе проверить его можно только подождав
+        # полтора часа и понадеявшись, что преподаватель как раз написал.
+        # Ходим ТОЛЬКО под своей сессией — как и вся разведка ОРИОКС.
+        send = bool(query.get("send"))
+        known = len(orioks_watch.seen_ids(me["id"]))
+        fresh = orioks_watch.check_user(me["id"], send=send)
+        return 200, {
+            "known_before": known,
+            "notify": orioks_watch.notify_on(me["id"]),
+            "daytime": orioks_watch.daytime(),
+            "watchers": len(orioks_watch.watchers()),
+            "sent": send and bool(fresh),
+            "fresh": [{"discipline": n.get("discipline"),
+                       "title": n.get("title"),
+                       "date": n.get("date")} for n in fresh],
+            "preview": orioks_watch.message(fresh) if fresh else "",
+        }
+
     if path == "/api/admin/orioks-probe" and method == "GET":
         # Видит ли наш сервер ОРИОКС вообще: с адресов вне России он
         # рвёт TLS, и проверить это можно только оттуда, где живёт бот.
