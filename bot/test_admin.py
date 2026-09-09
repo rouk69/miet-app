@@ -876,6 +876,20 @@ def fake_news(cookie, data=None):
 orioks_web.course_news = fake_news
 
 
+# Вторая половина источника — страница уведомлений. Она бонусная, и
+# ходить в неё из проверок тоже нельзя.
+NOTIFY_FAIL = {"how": None}
+
+
+def fake_notify_page(cookie, limit=40):
+    if NOTIFY_FAIL["how"] == "down":
+        raise orioks_web.WebError("ОРИОКС недоступен (TimeoutError)")
+    return []
+
+
+orioks_web.announcements = fake_notify_page
+
+
 def news(num, title, discipline="Физика", preview="", author=""):
     return {"id": str(num), "href": f"/student/news/view?id={num}",
             "title": title, "discipline": discipline, "preview": preview,
@@ -999,6 +1013,34 @@ check("без подключения подписку не включить",
       api.handle("POST", "/api/orioks/notify", {}, {"on": True}, USER)[0] == 400)
 check("отключившийся в обход не попадает", 42 not in orioks_watch.watchers(),
       orioks_watch.watchers())
+
+# Заминка на странице уведомлений не должна уносить объявления
+# дисциплин: они разные источники, и первый — главный.
+NOTIFY_FAIL["how"] = "down"
+orioks.forget_materials(42)
+api.handle("POST", "/api/orioks/link", {},
+           {"login": "stud", "password": "secret"}, USER)
+FEED["items"] = [news(41, "Задание к семинару")]
+s_, r_ = api.handle("GET", "/api/orioks/news", {}, {}, USER)
+check("объявления переживают отказ страницы уведомлений",
+      s_ == 200 and len(r_.get("news") or []) == 1, (s_, r_))
+NOTIFY_FAIL["how"] = None
+
+# Показ «как это выглядит» отправляет сообщение, но память не трогает:
+# иначе демонстрация обернулась бы пропущенной настоящей рассылкой.
+orioks.save_token(777, "T" * 32)
+orioks.save_cookie(777, "PHPSESSID=web-session-abc")
+orioks.forget_materials(777)
+FEED["items"] = [news(31, "Как это выглядит")]
+orioks_watch.forget(777)
+SENT.clear()
+s_, r_ = api.handle("GET", "/api/admin/orioks-watch", {"demo": ["1"]}, {}, ADMIN)
+check("показ отправляет сообщение",
+      s_ == 200 and r_["sent"] and len(SENT) == 1, (s_, r_, SENT))
+check("показ памяти не трогает", orioks_watch.seen_ids(777) == set(),
+      orioks_watch.seen_ids(777))
+orioks.forget(777)
+SENT.clear()
 
 # Разведка сторожа — только владельцу и только про него самого:
 # чужие объявления не сторожит никто, и посмотреть на них тоже нельзя.
