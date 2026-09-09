@@ -494,7 +494,7 @@ python tools/update.py
 ```bash
 python -m bot.selftest      # логика, рендер, клавиатуры, лимиты — 50
 python -m bot.test_flows    # обработчики целиком, Telegram подменён — 127
-python -m bot.test_admin    # права, справочник, доска, ОРИОКС — 227
+python -m bot.test_admin    # права, справочник, доска, ОРИОКС — 229
 python -m bot.test_posts    # лента, комментарии, режимы — 131
 ```
 

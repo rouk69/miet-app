@@ -892,8 +892,26 @@ orioks_watch.forget(42)
 FEED["items"] = [news(1, "Подготовка к ЛР №1"), news(2, "Задание к семинару")]
 first = orioks_watch.check_user(42)
 check("первый заход молчит", not first and not SENT, (first, SENT))
-check("но всё запомнил", orioks_watch.seen_ids(42) == {"1", "2"},
+check("но всё запомнил", orioks_watch.seen_ids(42) == {"-", "1", "2"},
       orioks_watch.seen_ids(42))
+
+# Пустой ОРИОКС — тоже обойдённый. Иначе у студента, у которого
+# объявлений ещё нет, первое молча ушло бы в память вместо лички.
+FEED["items"] = []
+orioks_watch.forget(43)
+orioks.save_token(43, "T" * 32)
+orioks.save_cookie(43, "PHPSESSID=web-session-abc")
+orioks_watch.check_user(43)
+check("пустой список тоже считается обходом",
+      orioks_watch.seen_ids(43) == {"-"}, orioks_watch.seen_ids(43))
+SENT.clear()
+FEED["items"] = [news(99, "Первое объявление")]
+check("и первое объявление уже доходит",
+      len(orioks_watch.check_user(43)) == 1 and len(SENT) == 1, SENT)
+orioks.forget(43)
+orioks_watch.forget(43)
+SENT.clear()
+FEED["items"] = [news(1, "Подготовка к ЛР №1"), news(2, "Задание к семинару")]
 
 # Появилось новое — вот теперь сообщение.
 FEED["items"] = [news(3, "Лабораторная №2", "Физика",
