@@ -425,7 +425,18 @@ def announcements(user_id: int) -> list:
     # зато приносит общие новости института, которых у дисциплин нет.
     items = orioks_web.course_news(cookie)
     seen = {n["href"] for n in items}
-    for extra in orioks_web.announcements(cookie):
+    try:
+        extras = orioks_web.announcements(cookie)
+    except orioks_web.SessionExpired:
+        # Сессия кончилась — это решает вызывающий: он стирает cookie.
+        raise
+    except orioks_web.WebError as e:
+        # Уведомления — добавка, а не источник. Их заминка не должна
+        # уносить объявления дисциплин, которые уже забрались: иначе
+        # раздел «Что задали» пустеет из-за соседней страницы.
+        log.info("страница уведомлений не забралась: %s", e)
+        extras = []
+    for extra in extras:
         if extra["href"] not in seen:
             items.append(extra)
     _NEWS[user_id] = (time.time(), items)

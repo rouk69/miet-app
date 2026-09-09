@@ -726,6 +726,16 @@ def _admin(path: str, method: str, query: dict, body: dict, uid: int, me: dict):
         # Нужно потому, что иначе проверить его можно только подождав
         # полтора часа и понадеявшись, что преподаватель как раз написал.
         # Ходим ТОЛЬКО под своей сессией — как и вся разведка ОРИОКС.
+        if query.get("demo"):
+            # «Покажи, как это выглядит»: собираем сообщение из того, что
+            # уже известно, и отправляем. Память при этом не трогаем —
+            # иначе показ обернулся бы повтором настоящей рассылки.
+            shown = orioks.announcements(me["id"])[:1]
+            body = orioks_watch.message(shown) if shown else ""
+            if body:
+                notify.to_user(me["id"], body)
+            return 200, {"demo": True, "sent": bool(body), "preview": body}
+
         send = bool(query.get("send"))
         known = len(orioks_watch.seen_ids(me["id"]))
         fresh = orioks_watch.check_user(me["id"], send=send)
