@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+import logging
 import os
 import re
 import threading
@@ -17,6 +18,8 @@ from typing import Any
 import requests
 
 from . import paths
+
+log = logging.getLogger("miet.schedule")
 
 API = "https://miet.ru/schedule/data"
 GROUPS_API = "https://miet.ru/schedule/groups"
@@ -67,12 +70,21 @@ def _cache_path(key: str) -> str:
     return os.path.join(CACHE_DIR, f"v{CACHE_VERSION}_{safe}.json")
 
 
-def _cache_get(key: str, ttl: int):
+def _cache_get(key: str, ttl: int | None):
+    """
+    Сохранённое расписание. `ttl=None` — «любой давности».
+
+    Без срока копия нужна ровно в одном случае: сайт института не
+    ответил. Расписание меняется раз в семестр, поэтому вчерашнее — это
+    то же самое расписание, а «недоступно» человеку, который спросил про
+    ближайшую пару, не помогает ничем.
+    """
     hit = _mem.get(key)
-    if hit and time.time() - hit[0] < ttl:
+    if hit and (ttl is None or time.time() - hit[0] < ttl):
         return hit[1]
     p = _cache_path(key)
-    if os.path.exists(p) and time.time() - os.path.getmtime(p) < ttl:
+    if os.path.exists(p) and (ttl is None
+                              or time.time() - os.path.getmtime(p) < ttl):
         try:
             data = json.load(open(p, encoding="utf-8"))
             _mem[key] = (os.path.getmtime(p), data)
@@ -217,11 +229,22 @@ def fetch_schedule(group: str, force: bool = False) -> dict:
             hit = _cache_get(key, TTL)
             if hit:
                 return hit
-        r = _session.get(API, params={"group": group}, timeout=20)
-        r.encoding = "utf-8"
-        if r.status_code != 200:
-            raise RuntimeError(f"Расписание недоступно ({r.status_code})")
-        data = _normalize(r.json())
+        try:
+            r = _session.get(API, params={"group": group}, timeout=20)
+            r.encoding = "utf-8"
+            if r.status_code != 200:
+                raise RuntimeError(f"Расписание недоступно ({r.status_code})")
+            data = _normalize(r.json())
+        except Exception as e:                          # noqa: BLE001
+            # Сайт института падает и чинится сам, а расписание меняется
+            # раз в семестр: отдать вчерашнюю копию честнее, чем сказать
+            # «недоступно» человеку, который спросил, где ему быть через
+            # десять минут.
+            old_copy = _cache_get(key, ttl=None)
+            if old_copy:
+                log.info("miet.ru молчит (%s) — отдаю сохранённое", e)
+                return old_copy
+            raise
         _cache_put(key, data)
     return data
 
