@@ -31,7 +31,7 @@ from urllib.parse import parse_qs, urlparse
 
 from . import analytics, appconf, auth, directory, help_board, notify
 from . import orioks, orioks_watch, orioks_web, posts
-from . import render, storage
+from . import paths, render, storage
 from . import media as mediastore
 
 log = logging.getLogger("miet.api")
@@ -89,7 +89,10 @@ def handle(method: str, path: str, query: dict, body: dict, init_data: str):
     Возвращает (код ответа, объект для JSON).
     """
     if path == "/api/health":
-        return 200, {"ok": True}
+        # Заодно версия клиента, которую знает бот: по ней видно, дошла
+        # ли выкладка до контейнера, — иначе это выясняется только по
+        # адресу кнопки меню, то есть через Telegram.
+        return 200, {"ok": True, "webapp": paths.webapp_version()}
 
     who = _actor(init_data)
     if not who:
