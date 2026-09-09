@@ -209,7 +209,16 @@ input, textarea, select {
 
 /* ---------- Layout ---------- */
 
+/* Экран появляется, а не возникает: восемнадцать сотых секунды и шесть
+   пикселей снизу — этого хватает, чтобы переход читался как движение, и
+   мало, чтобы его пришлось пережидать. Кому системно выключили
+   анимации, тот получает экран сразу — правило выше. */
+@keyframes screen-in {
+  from { opacity: 0; transform: translateY(6px); }
+}
+
 .screen {
+  animation: screen-in 0.18s ease both;
   min-height: 100%;
   padding: calc(var(--safe-top) + 20px) 18px calc(96px + var(--safe-bottom));
   max-width: var(--content-max);

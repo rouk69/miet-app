@@ -65,6 +65,11 @@
   font-weight: 700;
   color: var(--primary);
   flex-shrink: 0;
+  /* Строчка «Все» высотой в четырнадцать пикселей — цель для пальца
+     некудышная. Отрицательный отступ возвращает её на место в вёрстке,
+     а нажимается она теперь всей площадью вокруг. */
+  padding: 8px 6px;
+  margin: -8px -6px;
 }
 
 .stack { display: flex; flex-direction: column; gap: 10px; }
