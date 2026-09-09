@@ -67,6 +67,12 @@ def daytime(now: dt.datetime | None = None) -> bool:
 
 # ─────────────────────────── память ───────────────────────────
 
+# Отметка «этого человека уже обходили». Без неё студент, у которого
+# объявлений ещё нет вовсе, каждый раз выглядел бы новичком — и первое
+# в его жизни объявление молча ушло бы в память вместо лички.
+PRIMED = "-"
+
+
 def seen_ids(user_id: int) -> set:
     return {row[0] for row in conn().execute(
         "SELECT news_id FROM orioks_seen WHERE user_id=?", (user_id,))}
@@ -112,7 +118,9 @@ SITE = "https://orioks.miet.ru"
 
 
 def _link(href: str) -> str:
-    href = str(href or "")
+    # Кавычку в адресе экранируем сами: esc() из render её не трогает
+    # (quote=False), а адрес попадает внутрь атрибута href.
+    href = str(href or "").replace('"', "%22")
     if href.startswith("http"):
         return href
     return SITE + (href if href.startswith("/") else "/" + href)
@@ -189,7 +197,7 @@ def check_user(user_id: int, send: bool = True) -> list:
 
     # Первый заход: помечаем всё известным и молчим.
     if not known:
-        remember(user_id, [it.get("id") for it in items])
+        remember(user_id, [PRIMED] + [it.get("id") for it in items])
         log.info("сторож ОРИОКС начал следить за %s (%d объявлений)",
                  user_id, len(items))
         return []
