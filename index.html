@@ -8,7 +8,7 @@
 
   <link rel="stylesheet" href="css/fonts.css?v=257a7fa0">
   <link rel="stylesheet" href="css/tokens.css?v=adccc554">
-  <link rel="stylesheet" href="css/app.css?v=4f692bda">
+  <link rel="stylesheet" href="css/app.css?v=c1c2adac">
 
   <link rel="preload" href="fonts/manrope-700-cyrillic.woff2" as="font"
         type="font/woff2" crossorigin>
@@ -39,37 +39,38 @@
   <script type="importmap">
   {
     "imports": {
-      "./js/api.js": "./js/api.js?v=13e91f7a",
-      "./js/app.js": "./js/app.js?v=13e91f7a",
-      "./js/config.js": "./js/config.js?v=13e91f7a",
-      "./js/icons.js": "./js/icons.js?v=13e91f7a",
-      "./js/router.js": "./js/router.js?v=13e91f7a",
-      "./js/schedule.js": "./js/schedule.js?v=13e91f7a",
-      "./js/screens/about.js": "./js/screens/about.js?v=13e91f7a",
-      "./js/screens/admin-days.js": "./js/screens/admin-days.js?v=13e91f7a",
-      "./js/screens/admin.js": "./js/screens/admin.js?v=13e91f7a",
-      "./js/screens/campus.js": "./js/screens/campus.js?v=13e91f7a",
-      "./js/screens/clubs.js": "./js/screens/clubs.js?v=13e91f7a",
-      "./js/screens/common.js": "./js/screens/common.js?v=13e91f7a",
-      "./js/screens/community.js": "./js/screens/community.js?v=13e91f7a",
-      "./js/screens/feed.js": "./js/screens/feed.js?v=13e91f7a",
-      "./js/screens/guide.js": "./js/screens/guide.js?v=13e91f7a",
-      "./js/screens/help.js": "./js/screens/help.js?v=13e91f7a",
-      "./js/screens/home.js": "./js/screens/home.js?v=13e91f7a",
-      "./js/screens/institutes.js": "./js/screens/institutes.js?v=13e91f7a",
-      "./js/screens/links.js": "./js/screens/links.js?v=13e91f7a",
-      "./js/screens/news.js": "./js/screens/news.js?v=13e91f7a",
-      "./js/screens/profile.js": "./js/screens/profile.js?v=13e91f7a",
-      "./js/screens/schedule.js": "./js/screens/schedule.js?v=13e91f7a",
-      "./js/screens/search.js": "./js/screens/search.js?v=13e91f7a",
-      "./js/screens/support.js": "./js/screens/support.js?v=13e91f7a",
-      "./js/screens/tasks.js": "./js/screens/tasks.js?v=13e91f7a",
-      "./js/screens/teachers.js": "./js/screens/teachers.js?v=13e91f7a",
-      "./js/screens/tools.js": "./js/screens/tools.js?v=13e91f7a",
-      "./js/screens/useful.js": "./js/screens/useful.js?v=13e91f7a",
-      "./js/store.js": "./js/store.js?v=13e91f7a",
-      "./js/tg.js": "./js/tg.js?v=13e91f7a",
-      "./js/ui.js": "./js/ui.js?v=13e91f7a"
+      "./js/api.js": "./js/api.js?v=6ff16c10",
+      "./js/app.js": "./js/app.js?v=6ff16c10",
+      "./js/art.js": "./js/art.js?v=6ff16c10",
+      "./js/config.js": "./js/config.js?v=6ff16c10",
+      "./js/icons.js": "./js/icons.js?v=6ff16c10",
+      "./js/router.js": "./js/router.js?v=6ff16c10",
+      "./js/schedule.js": "./js/schedule.js?v=6ff16c10",
+      "./js/screens/about.js": "./js/screens/about.js?v=6ff16c10",
+      "./js/screens/admin-days.js": "./js/screens/admin-days.js?v=6ff16c10",
+      "./js/screens/admin.js": "./js/screens/admin.js?v=6ff16c10",
+      "./js/screens/campus.js": "./js/screens/campus.js?v=6ff16c10",
+      "./js/screens/clubs.js": "./js/screens/clubs.js?v=6ff16c10",
+      "./js/screens/common.js": "./js/screens/common.js?v=6ff16c10",
+      "./js/screens/community.js": "./js/screens/community.js?v=6ff16c10",
+      "./js/screens/feed.js": "./js/screens/feed.js?v=6ff16c10",
+      "./js/screens/guide.js": "./js/screens/guide.js?v=6ff16c10",
+      "./js/screens/help.js": "./js/screens/help.js?v=6ff16c10",
+      "./js/screens/home.js": "./js/screens/home.js?v=6ff16c10",
+      "./js/screens/institutes.js": "./js/screens/institutes.js?v=6ff16c10",
+      "./js/screens/links.js": "./js/screens/links.js?v=6ff16c10",
+      "./js/screens/news.js": "./js/screens/news.js?v=6ff16c10",
+      "./js/screens/profile.js": "./js/screens/profile.js?v=6ff16c10",
+      "./js/screens/schedule.js": "./js/screens/schedule.js?v=6ff16c10",
+      "./js/screens/search.js": "./js/screens/search.js?v=6ff16c10",
+      "./js/screens/support.js": "./js/screens/support.js?v=6ff16c10",
+      "./js/screens/tasks.js": "./js/screens/tasks.js?v=6ff16c10",
+      "./js/screens/teachers.js": "./js/screens/teachers.js?v=6ff16c10",
+      "./js/screens/tools.js": "./js/screens/tools.js?v=6ff16c10",
+      "./js/screens/useful.js": "./js/screens/useful.js?v=6ff16c10",
+      "./js/store.js": "./js/store.js?v=6ff16c10",
+      "./js/tg.js": "./js/tg.js?v=6ff16c10",
+      "./js/ui.js": "./js/ui.js?v=6ff16c10"
     }
   }
   </script>
@@ -77,19 +78,19 @@
   <!-- Модули без сборки грузятся каскадом: app.js → экраны → ui и
        icons, и каждая ступень стоит целого круга по сети.
        Предзагрузка ставит весь горячий путь в одну волну. -->
-  <link rel="modulepreload" href="js/app.js?v=13e91f7a">
-  <link rel="modulepreload" href="js/router.js?v=13e91f7a">
-  <link rel="modulepreload" href="js/store.js?v=13e91f7a">
-  <link rel="modulepreload" href="js/ui.js?v=13e91f7a">
-  <link rel="modulepreload" href="js/icons.js?v=13e91f7a">
-  <link rel="modulepreload" href="js/tg.js?v=13e91f7a">
-  <link rel="modulepreload" href="js/api.js?v=13e91f7a">
-  <link rel="modulepreload" href="js/config.js?v=13e91f7a">
-  <link rel="modulepreload" href="js/schedule.js?v=13e91f7a">
-  <link rel="modulepreload" href="js/screens/common.js?v=13e91f7a">
-  <link rel="modulepreload" href="js/screens/home.js?v=13e91f7a">
-  <link rel="modulepreload" href="js/screens/schedule.js?v=13e91f7a">
-  <link rel="modulepreload" href="js/screens/feed.js?v=13e91f7a">
+  <link rel="modulepreload" href="js/app.js?v=6ff16c10">
+  <link rel="modulepreload" href="js/router.js?v=6ff16c10">
+  <link rel="modulepreload" href="js/store.js?v=6ff16c10">
+  <link rel="modulepreload" href="js/ui.js?v=6ff16c10">
+  <link rel="modulepreload" href="js/icons.js?v=6ff16c10">
+  <link rel="modulepreload" href="js/tg.js?v=6ff16c10">
+  <link rel="modulepreload" href="js/api.js?v=6ff16c10">
+  <link rel="modulepreload" href="js/config.js?v=6ff16c10">
+  <link rel="modulepreload" href="js/schedule.js?v=6ff16c10">
+  <link rel="modulepreload" href="js/screens/common.js?v=6ff16c10">
+  <link rel="modulepreload" href="js/screens/home.js?v=6ff16c10">
+  <link rel="modulepreload" href="js/screens/schedule.js?v=6ff16c10">
+  <link rel="modulepreload" href="js/screens/feed.js?v=6ff16c10">
   <!-- /карта модулей -->
 </head>
 <body>

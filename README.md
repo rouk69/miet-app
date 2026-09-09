@@ -63,7 +63,7 @@ python -m bot.setup_bot
 нужна. В inline-сообщениях Telegram запрещает кнопки `web_app`, поэтому
 кнопка приложения там не показывается — только в личке.
 
-**Проверка без Telegram** — четыре сюиты, 547 проверок и 32 проверки клиента:
+**Проверка без Telegram** — четыре сюиты, 547 проверок и 37 проверок клиента:
 
 ```bash
 python tools/check_modules.py  # клиент: импорты, имена, иконки, классы
@@ -357,6 +357,7 @@ js/screens/community.js чаты, сообщества, кураторы
 js/screens/help.js    доска взаимопомощи
 js/screens/tasks.js   задания из ОРИОКС
 css/fonts.css         @font-face для Manrope из fonts/
+js/art.js             SVG-сцены для пустых экранов
 js/screens/admin-days.js разбор статистики по дням
 js/ui.js              списки, пилюли, шторки, тосты, лайтбокс
 js/icons.js           90 SVG-иконок в стиле Lucide — эмодзи в интерфейсе нет

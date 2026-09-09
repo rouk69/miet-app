@@ -1,7 +1,8 @@
 // Расписание: неделя цикла → день → пары. Данные тянутся с miet.ru живьём.
 
 import { icon } from '../icons.js';
-import { esc, emptyState, toast } from '../ui.js';
+import { esc, toast } from '../ui.js';
+import { art, artState } from '../art.js';
 import { settings, save } from '../store.js';
 import {
   fetchSchedule, weekOfCycle, slotsOf, dayCounts, mondayOf, shortSemestr,
@@ -22,6 +23,11 @@ const whereLine = e => `
  * Карточка пары. Принимает слот из slotsOf, но переживает и одиночную
  * запись — на главной и в поиске приходит именно она.
  */
+// Какой значок какому виду занятия. Лекция — доска, лабораторная —
+// колба, практика и семинар — карандаш: это не украшение, а второй
+// признак рядом с цветом, потому что цвет различают не все.
+const KIND_ICONS = { lek: 'board', lab: 'flask', pr: 'pencil' };
+
 export function lessonRow(l, now = null, showState = true) {
   const entries = l.entries || [l];
   const sameSubject = l.sameSubject ?? true;
@@ -54,7 +60,9 @@ export function lessonRow(l, now = null, showState = true) {
       <div class="lesson-body">
         ${body}
         <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
-          ${kind ? `<span class="kind ${kindCls}">${esc(kind)}</span>` : ''}
+          ${kind ? `<span class="kind ${kindCls}">
+            ${icon(KIND_ICONS[kindCls] || 'clipboard', 12)}${esc(kind)}
+          </span>` : ''}
           ${flags.map(f => `<span class="kind oth">${esc(f)}</span>`).join('')}
           ${entries.length > 1 ? '<span class="kind oth">подгруппы</span>' : ''}
           ${state === 'live' ? '<span class="live-badge"><i></i>идёт сейчас</span>' : ''}
@@ -68,11 +76,12 @@ export default async function scheduleScreen(params = {}) {
     const node = screen({
       title: 'Расписание',
       subtitle: 'Сначала выбери группу',
-      body: `<div class="card" style="padding:20px">
-          <div class="row-subtitle" style="margin-bottom:16px">
+      body: `<div class="card has-art" style="padding:20px">
+          <div class="row-subtitle" style="margin-bottom:16px;max-width:220px">
             Расписание берётся напрямую с miet.ru и обновляется автоматически.
           </div>
           <button class="btn-primary" id="pick">Выбрать группу</button>
+          ${art('group', 92, 'art-aside')}
         </div>`,
     });
     node.querySelector('#pick').addEventListener('click', () => pickGroup(() => refresh()));
@@ -87,7 +96,9 @@ export default async function scheduleScreen(params = {}) {
     const node = screen({
       title: 'Расписание',
       subtitle: settings.group,
-      body: emptyState(`Не удалось загрузить: ${err.message}`, 'refresh'),
+      body: `<div class="card">
+        ${artState('offline', 'Расписание не загрузилось', err.message)}
+      </div>`,
     });
     return node;
   }
@@ -145,7 +156,10 @@ export default async function scheduleScreen(params = {}) {
       </div>
       ${items.length
         ? items.map(l => lessonRow(l, isToday ? now : null)).join('')
-        : emptyState('В этот день пар нет', 'clock')}
+        : `<div class="card">${day === 6
+          ? artState('rest', 'Суббота свободна', 'Пар в этот день нет')
+          : artState('free', 'В этот день пар нет',
+            'Свободно — можно закрыть хвосты или выдохнуть')}</div>`}
       ${items.length ? `<div class="fab-note">
           ${items.length} ${plural(items.length, 'пара', 'пары', 'пар')} ·
           источник: miet.ru${sched.cached ? ' · из кеша' : ''}

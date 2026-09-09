@@ -1,7 +1,7 @@
 // Главная: что сейчас, расписание на сегодня, быстрые разделы, свежие новости.
 
 import { icon } from '../icons.js';
-import { esc, listCard, listRow, emptyState } from '../ui.js';
+import { esc, listCard, listRow } from '../ui.js';
 import { data, settings } from '../store.js';
 import { fetchSchedule, weekOfCycle, nowState, slotsOf, semesterStart, DAY_NAMES }
   from '../schedule.js';
@@ -12,6 +12,7 @@ import { screen, pickGroup, newsRow, humanDate, iconBtn } from './common.js';
 import { lessonRow } from './schedule.js';
 import { feedRow } from './feed.js';
 import { flatten, pendingOf, subjectLook } from './tasks.js';
+import { art, artState } from '../art.js';
 
 // ОРИОКС и личный кабинет — внешние сервисы, но студенту они нужнее
 // всего, поэтому стоят прямо на главной.
@@ -270,13 +271,14 @@ async function renderFresh(slot) {
 async function renderNow(slot, now) {
   if (!settings.group) {
     slot.innerHTML = `
-      <div class="card" style="padding:20px">
+      <div class="card has-art" style="padding:20px">
         <div class="now-kicker" style="color:var(--text-secondary)">Расписание</div>
         <div style="font-size:19px;font-weight:800;margin:8px 0 4px">Выбери свою группу</div>
-        <div class="row-subtitle" style="margin-bottom:16px">
+        <div class="row-subtitle" style="margin-bottom:16px;max-width:210px">
           Покажу пары на сегодня, ближайшую и всю неделю
         </div>
         <button class="btn-primary" id="pick">Выбрать группу</button>
+        ${art('group', 92, 'art-aside')}
       </div>`;
     slot.querySelector('#pick').addEventListener('click', () =>
       pickGroup(() => location.reload()));
@@ -288,9 +290,8 @@ async function renderNow(slot, now) {
   try {
     sched = await fetchSchedule(settings.group);
   } catch (err) {
-    slot.innerHTML = `<div class="card" style="padding:18px">
-        <div class="row-title">Расписание не загрузилось</div>
-        <div class="row-subtitle" style="margin-top:4px">${esc(err.message)}</div>
+    slot.innerHTML = `<div class="card">
+        ${artState('offline', 'Расписание не загрузилось', err.message)}
       </div>`;
     return;
   }
@@ -320,12 +321,13 @@ async function renderNow(slot, now) {
              ${next.teacherShort ? `<span>${icon('teacher', 15)} ${esc(next.teacherShort)}</span>` : ''}
            </div>
          </div>`
-      : `<div class="now-card rest">
+      : `<div class="now-card rest has-art">
            <div class="now-kicker">${day > 6 ? 'Воскресенье' : 'На сегодня всё'}</div>
            <div class="now-title">Пар больше нет</div>
            <div class="now-meta muted">
              <span>${esc(settings.group)}</span><span>${week + 1}-я неделя цикла</span>
            </div>
+           ${art(day > 6 ? 'rest' : 'done', 86, 'art-aside')}
          </div>`;
 
   slot.innerHTML = `
@@ -336,5 +338,9 @@ async function renderNow(slot, now) {
     </div>
     ${today.length
       ? `<div class="stack">${today.map(l => lessonRow(l, now)).join('')}</div>`
-      : emptyState(day > 6 ? 'Воскресенье — выходной' : 'В этот день пар нет', 'clock')}`;
+      : `<div class="card">${day > 6
+        ? artState('rest', 'Воскресенье — выходной',
+          'Расписание всей недели цикла — на своей вкладке')
+        : artState('free', 'В этот день пар нет',
+          'Свободно: можно закрыть хвосты или выдохнуть')}</div>`}`;
 }

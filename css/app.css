@@ -421,7 +421,8 @@
 .kind {
   display: inline-flex;
   align-items: center;
-  padding: 3px 9px;
+  gap: 4px;
+  padding: 3px 9px 3px 7px;
   border-radius: var(--radius-pill);
   font-size: 11px;
   font-weight: 700;
@@ -431,7 +432,17 @@
 .kind.lek { background: var(--primary-dim); color: var(--primary); }
 .kind.pr  { background: #E6F9ED; color: #1F9D4D; }
 .kind.lab { background: #FFF1DC; color: #C77A0A; }
-.kind.oth { background: var(--surface-2); color: var(--text-secondary); }
+/* Плашка без значка — флаги и «подгруппы» — держит прежний отступ:
+   слева у неё ничего не стоит. */
+.kind.oth {
+  background: var(--surface-2);
+  color: var(--text-secondary);
+  padding-left: 9px;
+}
+
+/* Значок вида занятия рядом с подписью, а не вместо неё: мельче текста
+   и плашку не растягивает. */
+.kind svg { flex-shrink: 0; opacity: 0.9; }
 
 :root[data-theme="dark"] .kind.pr  { background: #17301F; color: #4ADE80; }
 :root[data-theme="dark"] .kind.lab { background: #33240D; color: #FBBF24; }
@@ -1692,6 +1703,64 @@ textarea.field-input {
   font-size: 11px;
   font-weight: 700;
   color: var(--text-tertiary);
+}
+
+/* ---------- Иллюстрации ---------- */
+
+/* Два цвета на всю сцену: линия и мягкая заливка. Оба — токены, поэтому
+   картинка меняется вместе с темой, а не живёт в двух копиях. Линия
+   приглушена: иллюстрация объясняет пустоту, а не спорит с заголовком. */
+.art {
+  --tone-soft: var(--primary-dim);
+  --tone-ink: var(--primary);
+  color: var(--text-tertiary);
+  display: block;
+  flex-shrink: 0;
+}
+
+.art-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 6px;
+  padding: 26px 20px 22px;
+}
+
+.art-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.art-note {
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text-secondary);
+  max-width: 260px;
+}
+
+/* В карточке сцена стоит сбоку и внимание на себя не тянет: там уже
+   есть и заголовок, и кнопка. */
+.art-aside {
+  position: absolute;
+  right: 10px;
+  bottom: 6px;
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+/* Карточка с иллюстрацией сбоку: текст не должен заезжать под неё. */
+.has-art {
+  position: relative;
+  overflow: hidden;
+}
+
+.has-art > *:not(.art) { position: relative; }
+
+@media (max-width: 360px) {
+  /* На узком экране сцена сбоку съедает строку заголовка — прячем. */
+  .art-aside { display: none; }
 }
 
 /* ---------- Ближайшие дела на главной ---------- */

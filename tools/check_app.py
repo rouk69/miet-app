@@ -264,6 +264,18 @@ CASES = [
      "String(lessonDay(SCHED, new Date(2026, 8, 1),"
      " { week: 2, type: 'Лабораторная работа' }, 'Философия', 0))", "null"),
 
+    # Иллюстрации: сцена обязана быть настоящим svg, а незнакомое имя —
+    # не пустотой на пол-экрана, а хоть чем-то.
+    ("сцена рисуется", "String(art('free').indexOf('<svg') === 0)", "true"),
+    ("сцена знает свой размер",
+     "String(art('rest', 64).indexOf('width=\"64\"') > 0)", "true"),
+    ("незнакомая сцена не оставляет дыру",
+     "String(art('такой-нет').length > 100)", "true"),
+    ("пустое состояние подписано",
+     "String(artState('free', 'Пар нет').indexOf('Пар нет') > 0)", "true"),
+    ("подпись экранирована",
+     "String(artState('free', '<b>x</b>').indexOf('&lt;b&gt;') > 0)", "true"),
+
     # Разбор ведомости общий у экрана заданий и главной: если он начнёт
     # считать делами посещаемость, это увидят оба сразу.
     ("ведомость разворачивается целиком", "PLAN.length", "4"),
@@ -285,6 +297,8 @@ var subjectLook = _t.subjectLook, newsDate = _t.newsDate,
     linkify = _t.linkify, NUMBERED = _t.NUMBERED, fileLook = _t.fileLook,
     weekMonday = _t.weekMonday, subjectKey = _t.subjectKey,
     lessonDay = _t.lessonDay, flatten = _t.flatten, pendingOf = _t.pendingOf;
+var _a = __mod['js/art.js'];
+var art = _a.art, artState = _a.artState;
 
 var SCHED = { semestr: 'Осенний семестр 2026/2027', lessons: [
   { week: 1, day: 4, pair: 3, subject: 'Физика. Механика',
