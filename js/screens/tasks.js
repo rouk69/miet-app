@@ -11,13 +11,13 @@
 // Сданное убрано вниз и свёрнуто — оно уже не дело.
 
 import { icon } from '../icons.js';
-import { esc, emptyState, toast, sheet } from '../ui.js';
+import { esc, emptyState, toast, sheet, toggle } from '../ui.js';
 import { get, post, account, canTalk } from '../api.js';
 import { settings } from '../store.js';
 import { fetchSchedule, semesterStart, mondayOf, weekOfCycle }
   from '../schedule.js';
 import { refresh } from '../router.js';
-import { hapticNotify, confirmDialog, openLink } from '../tg.js';
+import { hapticNotify, haptic, confirmDialog, openLink } from '../tg.js';
 import { screen } from './common.js';
 
 const MONTHS = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня',
@@ -299,6 +299,10 @@ export default async function tasksScreen() {
 
   let data;
   let news = [];
+  // Доступ к сайту ОРИОКС — это не то же самое, что подключение: токен
+  // может быть жив, а сессия сайта кончиться. Объявления и подписка на
+  // них есть только при живой сессии.
+  let web = false;
   try {
     const both = await Promise.all([
       get('/api/orioks', { timeout: 25000 }),
@@ -308,6 +312,7 @@ export default async function tasksScreen() {
     ]);
     data = both[0];
     news = both[1].news || [];
+    web = both[1].web === true;
   } catch (err) {
     return screen({
       title: 'Учёба',
@@ -405,6 +410,20 @@ export default async function tasksScreen() {
         </div>
         <div class="news-list" id="news-rest" hidden>
           ${news.slice(3).map(newsRow).join('')}
+        </div>` : ''}
+
+      ${web ? `
+        <div class="list-card watch-card">
+          <div class="list-row">
+            <div class="list-row-body">
+              <div class="row-title">Сообщать о новом</div>
+              <div class="row-subtitle">
+                Бот напишет в личку, когда преподаватель выложит
+                объявление. Проверяет днём, раз в полтора часа.
+              </div>
+            </div>
+            ${toggle(data.notify !== false, 'watch')}
+          </div>
         </div>` : ''}
 
       <div class="pill-row" id="kinds" style="margin:14px 0 4px">
@@ -567,6 +586,21 @@ export default async function tasksScreen() {
     if (row) openLink(row.dataset.link);
   });
   toggler('#toggle-formal', '#formal-list', formal.length);
+  node.querySelector('[data-toggle="watch"]')?.addEventListener('click', async e => {
+    const t = e.currentTarget;
+    const on = !t.classList.contains('on');
+    // Переключаем сразу, а откатываем при отказе: подписка — мелочь, и
+    // ждать ответа сервера, глядя на неподвижный тумблер, незачем.
+    t.classList.toggle('on', on);
+    haptic('light');
+    try {
+      await post('/api/orioks/notify', { on });
+      data.notify = on;
+    } catch (err) {
+      toast(err.message);
+      t.classList.toggle('on', !on);
+    }
+  });
   node.querySelector('[data-action="orioks"]').addEventListener('click',
     () => openLink('https://orioks.miet.ru/main/login'));
   node.querySelector('#unlink').addEventListener('click', async () => {

@@ -30,6 +30,7 @@ from . import keyboards as kbs
 from . import directory
 from . import news_feed
 from . import notify
+from . import orioks_watch
 from . import posts as feed
 from . import publish
 from . import render
@@ -982,6 +983,11 @@ def main() -> None:
     # Справочник преподавателей и аудиторий: обход всех групп раз в сутки.
     # Стартует с задержкой — сначала должен подняться опрос Telegram.
     directory.run_in_background()
+
+    # Объявления преподавателей в ОРИОКС: единственное место, где лежит
+    # текст домашнего задания. Экран «Учёба» показывает их тому, кто
+    # зашёл, а сторож — говорит сам, когда преподаватель что-то написал.
+    orioks_watch.run_in_background()
 
     log.info("Бот @%s запущен", BOT_USERNAME)
     if WEBAPP_URL:
