@@ -76,6 +76,16 @@ for f, s in src.items():
         if name not in scenes:
             problems.append(f"{os.path.relpath(f, ROOT)}: нет иллюстрации «{name}»")
 
+# И сама сцена должна быть целой разметкой: незакрытый тег браузер
+# починит по-своему, и картинка поедет молча.
+import xml.etree.ElementTree as ET                                  # noqa: E402
+
+for name, svg in re.findall(r"^  ([a-zA-Z]+): `(.*?)`,", art_src, re.S | re.M):
+    try:
+        ET.fromstring("<svg>" + svg + "</svg>")
+    except ET.ParseError as e:
+        problems.append(f"js/art.js: сцена «{name}» — битая разметка ({e})")
+
 # Каждый класс из разметки должен быть в CSS. Проверяем все модули, а
 # не избранные: опечатка в классе не роняет ничего — просто блок теряет
 # вид, и увидеть это можно только глазами, которых в этой среде нет.
