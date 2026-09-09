@@ -13,6 +13,7 @@ from urllib.parse import quote
 from telebot import types
 
 from . import schedule_api as api
+from .paths import webapp_version
 
 SEP = "|"
 
@@ -46,11 +47,24 @@ def share_link(bot_username: str, group: str) -> str:
 
 
 def webapp_link(url: str | None, group: str | None = None) -> str | None:
-    """Подставляет группу в адрес мини-приложения, чтобы оно открылось
-    сразу на нужном расписании, а не просило выбрать группу заново."""
+    """
+    Адрес мини-приложения: с группой и с меткой выкладки.
+
+    Группа — чтобы оно открылось сразу на нужном расписании, а не
+    просило выбрать её заново. Метка — чтобы открылось сегодняшнее:
+    Telegram кеширует страницу по адресу и держит её дольше, чем просит
+    HTTP, так что без метки человек видит прошлую выкладку.
+    """
     if not url:
         return None
-    return f"{url.rstrip('/')}/?group={quote(group)}" if group else url
+    parts = []
+    if group:
+        parts.append("group=" + quote(group))
+    version = webapp_version()
+    if version:
+        parts.append("v=" + version)
+    base = url.rstrip("/") + "/"
+    return base + ("?" + "&".join(parts) if parts else "")
 
 
 def cb(*parts) -> str:

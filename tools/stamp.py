@@ -122,11 +122,28 @@ def main() -> int:
     html = MAP_BLOCK.sub(block, html)
     html = BOOT_BLOCK.sub(boot, html)
 
+    # Метка всей выкладки — она уходит в адрес кнопки мини-приложения.
+    # Telegram кеширует страницу по адресу и держит её дольше, чем просит
+    # HTTP: без другого адреса человек открывает вчерашний вид, и правка
+    # выглядит несделанной. Считается по стилям и модулям разом — вид
+    # правится чаще логики, а обновиться должно и то и другое.
+    css = [os.path.join(ROOT, "css", n)
+           for n in sorted(os.listdir(os.path.join(ROOT, "css")))
+           if n.endswith(".css")]
+    whole = digest_of(css + [full for full, _ in mods])
+    stamp_file = os.path.join(ROOT, "webapp.version")
+    was = ""
+    if os.path.exists(stamp_file):
+        was = io.open(stamp_file, encoding="utf-8").read().strip()
+    if was != whole:
+        io.open(stamp_file, "w", encoding="utf-8").write(whole + chr(10))
+        print(f"версия выкладки: {was or '(не было)'} → {whole}")
+
     if html == before:
-        print("метки на месте — статика не менялась")
+        print("метки в index.html на месте")
         return 0
     io.open(INDEX, "w", encoding="utf-8").write(html)
-    print(f"метки обновлены: модулей {len(mods)}, версия {version}")
+    print(f"метки обновлены: модулей {len(mods)}, версия модулей {version}")
     return 0
 
 

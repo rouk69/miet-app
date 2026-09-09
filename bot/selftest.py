@@ -16,6 +16,7 @@ sys.stdout.reconfigure(encoding="utf-8")
 os.environ.setdefault("BOT_TOKEN", "0:TEST")   # main.py без токена не импортируется
 
 from . import keyboards as kbs      # noqa: E402
+from . import paths                # noqa: E402
 from . import render                # noqa: E402
 from . import rich                  # noqa: E402
 from . import schedule_api as api   # noqa: E402
@@ -154,6 +155,20 @@ check("6 кнопок дней", sum(1 for r in rows for b in r
                            if b.callback_data and b.callback_data.startswith("d|")) == 6 + 2)
 buttons = [b for r in rows for b in r]
 check("есть кнопка мини-приложения", any(b.web_app for b in buttons))
+
+# Адрес мини-приложения несёт метку выкладки: без неё Telegram
+# открывает страницу из своего кеша, и человек видит прошлую версию.
+link = kbs.webapp_link("https://example.com/app")
+with_group = kbs.webapp_link("https://example.com/app", "ПИН-31")
+version = paths.webapp_version()
+check("метка выкладки прочитана", bool(version), version)
+check("метка попала в адрес", f"v={version}" in link, link)
+check("группа и метка не подрались",
+      with_group.endswith(f"&v={version}") and "?group=" in with_group,
+      with_group)
+check("без метки адрес всё равно рабочий",
+      kbs.webapp_link("https://example.com/app") is not None
+      and kbs.webapp_link(None) is None)
 
 longest = max(groups, key=lambda g: len(g.encode()))
 try:
