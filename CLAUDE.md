@@ -65,6 +65,7 @@ tools/               сбор данных с miet.ru → data/app.json
   check_links.py     проверяет ссылки, вшитые в экраны приложения
   check_app.py       выполняет все модули приложения в движке JS
   check_modules.py   сверяет импорты, имена, иконки и классы CSS
+  check_contrast.py  считает контраст палитры к подложкам по WCAG
 
 main.py              точка входа для облака
 amvera.yml           конфигурация Amvera
@@ -526,6 +527,7 @@ python -m bot.test_posts    # лента, комментарии, режимы �
 
     python tools/check_modules.py   # импорты, забытые имена, иконки, классы
     python tools/check_app.py       # выполняет модули в движке (нужен dukpy)
+    python tools/check_contrast.py  # читаемость палитры по WCAG
 
 `check_app.py` появился после того, как приложение легло из-за двух
 объявлений одного имени: `dayLabel` импортировали в модуль, где он уже

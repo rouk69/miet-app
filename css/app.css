@@ -701,7 +701,7 @@
 }
 
 .danger-btn {
-  color: var(--danger);
+  color: var(--danger-text);
 }
 
 /* ---------- График по дням ---------- */
@@ -1230,8 +1230,8 @@ textarea.field-input {
    деньги и жильё тёплые, инструменты фиолетовые, своё серое. Одинаковые
    плитки не различались бы, пёстрые превратили бы экран в ёлку. */
 .tone-blue .tile-ico { background: var(--primary-dim); color: var(--primary); }
-.tone-green .tile-ico { background: rgba(52, 199, 89, 0.14); color: var(--success); }
-.tone-warm .tile-ico { background: rgba(255, 159, 10, 0.16); color: var(--warning); }
+.tone-green .tile-ico { background: rgba(52, 199, 89, 0.14); color: var(--success-text); }
+.tone-warm .tile-ico { background: rgba(255, 159, 10, 0.16); color: var(--warning-text); }
 .tone-violet .tile-ico { background: rgba(124, 92, 255, 0.14); color: #7C5CFF; }
 .tone-grey .tile-ico { background: var(--surface-2); color: var(--text-secondary); }
 
@@ -1340,7 +1340,7 @@ textarea.field-input {
 }
 
 .offer-kind.need { background: var(--primary-dim); color: var(--primary); }
-.offer-kind.offer { background: rgba(52, 199, 89, 0.16); color: var(--success); }
+.offer-kind.offer { background: rgba(52, 199, 89, 0.16); color: var(--success-text); }
 
 .offer-subject {
   font-size: 17px;
@@ -1392,7 +1392,7 @@ textarea.field-input {
   color: var(--text);
 }
 
-.warn-note svg { flex-shrink: 0; color: var(--warning); }
+.warn-note svg { flex-shrink: 0; color: var(--warning-text); }
 
 /* ---------- Разбор по дням ---------- */
 
@@ -1575,10 +1575,10 @@ textarea.field-input {
 
 /* Цветом помечены только крайние состояния: просрочено и «горит на
    этой неделе». Раскрашивать всё значило бы не выделить ничего. */
-.todo.late .todo-when { color: var(--danger); }
-.todo.late .todo-left { color: var(--danger); font-weight: 600; }
-.todo.now .todo-when { color: var(--warning); }
-.todo.now .todo-left { color: var(--warning); font-weight: 600; }
+.todo.late .todo-when { color: var(--danger-text); }
+.todo.late .todo-left { color: var(--danger-text); font-weight: 600; }
+.todo.now .todo-when { color: var(--warning-text); }
+.todo.now .todo-left { color: var(--warning-text); font-weight: 600; }
 
 /* Время и аудитория пары под сроком: если задание сдают на занятии,
    человеку нужно знать, куда идти, а не только когда. */
@@ -1717,10 +1717,10 @@ textarea.field-input {
 
 /* Срок красит только сам срок: подсвечивать строку целиком означало бы
    три тревожных плашки подряд у любого, кто заглянул в конце недели. */
-.study-row.late .study-day { color: var(--danger); }
-.study-row.late .study-left { color: var(--danger); font-weight: 600; }
-.study-row.now .study-day { color: var(--warning); }
-.study-row.now .study-left { color: var(--warning); font-weight: 600; }
+.study-row.late .study-day { color: var(--danger-text); }
+.study-row.late .study-left { color: var(--danger-text); font-weight: 600; }
+.study-row.now .study-day { color: var(--warning-text); }
+.study-row.now .study-left { color: var(--warning-text); font-weight: 600; }
 
 /* ---------- Объявления преподавателей ---------- */
 
@@ -1938,7 +1938,7 @@ textarea.field-input {
 .todo-grade {
   font-size: 13px;
   font-weight: 700;
-  color: var(--success);
+  color: var(--success-text);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
