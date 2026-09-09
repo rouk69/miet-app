@@ -65,6 +65,17 @@ for f, s in src.items():
         if name not in known:
             problems.append(f"{os.path.relpath(f, ROOT)}: нет иконки «{name}»")
 
+# То же для иллюстраций: опечатка в имени сцены рисует стопку книг
+# вместо кружки — молча и на самом видном месте, на пустом экране.
+art_src = src[os.path.normpath(os.path.join(ROOT, "js", "art.js"))]
+scenes = set(re.findall(r"^  ([a-zA-Z][\w$]*):", art_src, re.M))
+for f, s in src.items():
+    if f.endswith("art.js"):
+        continue
+    for name in re.findall(r"art(?:State)?\(\s*'([a-zA-Z][\w$]*)'", s):
+        if name not in scenes:
+            problems.append(f"{os.path.relpath(f, ROOT)}: нет иллюстрации «{name}»")
+
 # Каждый класс из разметки должен быть в CSS. Проверяем все модули, а
 # не избранные: опечатка в классе не роняет ничего — просто блок теряет
 # вид, и увидеть это можно только глазами, которых в этой среде нет.
