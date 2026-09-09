@@ -21,7 +21,7 @@ import { screen, iconBtn } from './common.js';
  */
 const SECTIONS = [
   {
-    title: 'Мой семестр',
+    title: 'Учёба',
     note: 'То, что спрашивают чаще всего',
     tiles: [
       { id: 'tasks', ico: 'backpack', tone: 'blue', title: 'Задания',
