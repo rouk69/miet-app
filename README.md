@@ -355,6 +355,7 @@ js/screens/guide.js   словарь, контакты, ключевые дат�
 js/screens/community.js чаты, сообщества, кураторы
 js/screens/help.js    доска взаимопомощи
 js/screens/tasks.js   задания из ОРИОКС
+css/fonts.css         @font-face для Manrope из fonts/
 js/screens/admin-days.js разбор статистики по дням
 js/ui.js              списки, пилюли, шторки, тосты, лайтбокс
 js/icons.js           90 SVG-иконок в стиле Lucide — эмодзи в интерфейсе нет
