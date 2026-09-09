@@ -850,6 +850,140 @@ check("чужой адрес не открыть", outside)
 
 orioks_web.get_page = _real_page
 
+
+print("\n18. Сторож объявлений: бот сам говорит, что задали")
+import datetime as dt                                             # noqa: E402
+from . import notify, orioks_watch                                # noqa: E402
+
+# Обход не должен ждать по две секунды на человека: пауза нужна живому
+# ОРИОКС, а не проверке.
+orioks_watch.BETWEEN = 0
+
+SENT = []
+notify.bind(lambda uid, text: SENT.append((uid, text)))
+
+FEED = {"items": [], "how": None}
+
+
+def fake_news(cookie, data=None):
+    if FEED["how"] == "expired":
+        raise orioks_web.SessionExpired("Сессия ОРИОКС кончилась")
+    if FEED["how"] == "down":
+        raise orioks_web.WebError("ОРИОКС недоступен (TimeoutError)")
+    return FEED["items"]
+
+
+orioks_web.course_news = fake_news
+
+
+def news(num, title, discipline="Физика", preview="", author=""):
+    return {"id": str(num), "href": f"/student/news/view?id={num}",
+            "title": title, "discipline": discipline, "preview": preview,
+            "author": author, "date": "08.09.2026 22:53", "course": True}
+
+
+# Подключаемся заново: выше сессию намеренно роняли.
+api.handle("POST", "/api/orioks/link", {},
+           {"login": "stud", "password": "secret"}, USER)
+orioks_watch.forget(42)
+
+# Первый заход молчит. Иначе подключение ОРИОКС в середине семестра
+# оборачивалось бы десятком сообщений подряд ни о чём.
+FEED["items"] = [news(1, "Подготовка к ЛР №1"), news(2, "Задание к семинару")]
+first = orioks_watch.check_user(42)
+check("первый заход молчит", not first and not SENT, (first, SENT))
+check("но всё запомнил", orioks_watch.seen_ids(42) == {"1", "2"},
+      orioks_watch.seen_ids(42))
+
+# Появилось новое — вот теперь сообщение.
+FEED["items"] = [news(3, "Лабораторная №2", "Физика",
+                      "Оформить отчёт к среде", "Королева Е.Н.")] + FEED["items"]
+fresh = orioks_watch.check_user(42)
+check("новое объявление замечено", len(fresh) == 1 and fresh[0]["id"] == "3",
+      fresh)
+check("сообщение ушло человеку", len(SENT) == 1 and SENT[0][0] == 42, SENT)
+told = SENT[0][1] if SENT else ""
+check("в сообщении предмет и заголовок",
+      "Физика" in told and "Лабораторная №2" in told, told)
+check("выжимка приложена", "Оформить отчёт к среде" in told, told)
+# Ссылка должна вести на сайт целиком: относительный адрес в Telegram
+# не откроется никак.
+check("ссылка абсолютная",
+      'href="https://orioks.miet.ru/student/news/view?id=3"' in told, told)
+
+# Второй обход по тому же списку обязан молчать: повтор каждые полтора
+# часа — самая быстрая причина выключить уведомления навсегда.
+SENT.clear()
+again = orioks_watch.check_user(42)
+check("прочитанное не повторяется", not again and not SENT, (again, SENT))
+
+# Пять новых разом: показываем часть, про остальное говорим числом.
+FEED["items"] = [news(i, f"Объявление {i}") for i in range(10, 15)] + FEED["items"]
+many = orioks_watch.check_user(42)
+check("все новые сосчитаны", len(many) == 5, len(many))
+check("в сообщении показаны не все", "И ещё 2" in SENT[-1][1], SENT[-1][1])
+
+# Молчание института не стоит человеку пароля — это уже ломалось раз.
+SENT.clear()
+FEED["how"] = "down"
+check("при недоступности ОРИОКС ничего не шлём",
+      not orioks_watch.check_user(42) and not SENT, SENT)
+check("и доступ остаётся", orioks.cookie_of(42) != "", orioks.cookie_of(42))
+
+# А прямой отказ — стирает сессию и объясняет это один раз.
+FEED["how"] = "expired"
+orioks_watch.check_user(42)
+check("кончившаяся сессия убрана сторожем", orioks.cookie_of(42) == "")
+check("человеку сказано, что надо войти заново",
+      len(SENT) == 1 and "войти заново" in SENT[0][1], SENT)
+check("без сессии обход этого человека пропускает",
+      42 not in orioks_watch.watchers(), orioks_watch.watchers())
+FEED["how"] = None
+
+# Подписка: по умолчанию включена, выключается своим маршрутом.
+api.handle("POST", "/api/orioks/link", {},
+           {"login": "stud", "password": "secret"}, USER)
+check("подписка включена по умолчанию", orioks_watch.notify_on(42))
+check("подписчик виден обходу", 42 in orioks_watch.watchers(),
+      orioks_watch.watchers())
+s_, r_ = api.handle("POST", "/api/orioks/notify", {}, {"on": False}, USER)
+check("подписка выключается", s_ == 200 and r_["notify"] is False, (s_, r_))
+check("выключивший выпал из обхода", 42 not in orioks_watch.watchers(),
+      orioks_watch.watchers())
+s_, r_ = api.handle("GET", "/api/orioks", {}, {}, USER)
+check("состояние подписки видно клиенту", r_.get("notify") is False, r_)
+api.handle("POST", "/api/orioks/notify", {}, {"on": True}, USER)
+check("и включается обратно", orioks_watch.notify_on(42))
+
+# Ночью не пишем: задание в час ночи ничего не меняет, кроме сна.
+check("днём обход идёт",
+      orioks_watch.daytime(dt.datetime(2026, 9, 9, 13, 0)))
+check("ночью — нет",
+      not orioks_watch.daytime(dt.datetime(2026, 9, 9, 3, 0))
+      and not orioks_watch.daytime(dt.datetime(2026, 9, 9, 23, 30)))
+
+# Обход целиком: он же проверяет, что подписанный получает сообщение
+# не в одиночной проверке, а тем самым кругом, что крутится в боте.
+SENT.clear()
+FEED["items"] = [news(21, "Новая тема", "Физика", "Прочитать главу 3")]
+orioks_watch.forget(42)
+orioks_watch.round_once()
+FEED["items"] = [news(22, "Ещё одно")] + FEED["items"]
+check("круг обхода доносит новое", orioks_watch.round_once() == 1
+      and len(SENT) == 1, SENT)
+
+# Отключение ОРИОКС уносит память об объявлениях: иначе повторное
+# подключение молча съело бы первую рассылку.
+api.handle("POST", "/api/orioks/unlink", {}, {}, USER)
+check("память об объявлениях ушла с доступом",
+      orioks_watch.seen_ids(42) == set(), orioks_watch.seen_ids(42))
+check("без подключения подписку не включить",
+      api.handle("POST", "/api/orioks/notify", {}, {"on": True}, USER)[0] == 400)
+check("отключившийся в обход не попадает", 42 not in orioks_watch.watchers(),
+      orioks_watch.watchers())
+
+notify.bind(None)
+
 print("\n" + "=" * 58)
 print(f"пройдено {ok}, провалено {fail}")
 print("=" * 58)

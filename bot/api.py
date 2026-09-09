@@ -30,7 +30,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
 from . import analytics, appconf, auth, directory, help_board, notify
-from . import orioks, orioks_web, posts
+from . import orioks, orioks_watch, orioks_web, posts
 from . import render, storage
 from . import media as mediastore
 
@@ -229,13 +229,14 @@ def _orioks(path: str, method: str, body: dict, uid: int, me: dict):
         token = orioks.token_of(uid)
         if not token:
             return 200, {"linked": False}
+        watch = orioks_watch.notify_on(uid)
         try:
-            return 200, {"linked": True,
+            return 200, {"linked": True, "notify": watch,
                          "tasks": orioks.with_materials(uid, orioks.tasks(token))}
         except orioks.OrioksError as e:
             # Токен мог протухнуть или быть отозван — тогда честнее
             # предложить подключиться заново, чем показывать ошибку.
-            return 200, {"linked": True, "error": str(e)}
+            return 200, {"linked": True, "notify": watch, "error": str(e)}
 
     if path == "/api/orioks/link" and method == "POST":
         login = (body.get("login") or "").strip()
@@ -283,6 +284,16 @@ def _orioks(path: str, method: str, body: dict, uid: int, me: dict):
         except orioks_web.WebError as e:
             return 200, {"web": True, "news": [], "error": str(e)}
 
+    if path == "/api/orioks/notify" and method == "POST":
+        # Подписка на объявления преподавателей. Отдельным маршрутом, а
+        # не полем настроек: она про чужой сервис и живёт рядом с
+        # доступом к нему — отключил ОРИОКС, и подписка ушла с ним.
+        if not orioks.token_of(uid):
+            return 400, {"error": "ОРИОКС не подключён"}
+        on = bool(body.get("on"))
+        orioks_watch.set_notify(uid, on)
+        return 200, {"ok": True, "notify": on}
+
     if path == "/api/orioks/raw" and method == "GET":
         # Свои же данные в сыром виде: нужно, когда экран показывает
         # непонятное и надо увидеть, что на самом деле прислал ОРИОКС.
@@ -297,6 +308,10 @@ def _orioks(path: str, method: str, body: dict, uid: int, me: dict):
             orioks.revoke(token)
         orioks.forget(uid)
         orioks.forget_materials(uid)
+        # Память о показанных объявлениях уходит вместе с доступом:
+        # держать её после отключения не за чем, а при следующем
+        # подключении она бы молча съела первую рассылку.
+        orioks_watch.forget(uid)
         return 200, {"ok": True, "linked": False}
 
     return 404, {"error": "Нет такого маршрута"}

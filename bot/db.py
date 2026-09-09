@@ -194,6 +194,16 @@ SCHEMA = [
         token     TEXT NOT NULL,
         linked_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     )""",
+    # Какие объявления преподавателей человеку уже показывали. Память
+    # нужна в базе, а не в счётчике «последнего id»: объявления приходят
+    # по разным дисциплинам вперемешку, и «всё, что новее» о них сказать
+    # нельзя. Хранится один номер — ни заголовка, ни текста.
+    """CREATE TABLE IF NOT EXISTS orioks_seen (
+        user_id INTEGER NOT NULL,
+        news_id TEXT NOT NULL,
+        seen_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (user_id, news_id)
+    )""",
 ]
 
 # Столбцы, доросшие к таблицам позже. У баз, созданных раньше, их нет —
@@ -226,6 +236,10 @@ ADDED_COLUMNS = {
     "orioks_links": [
         ("web_cookie", "TEXT"),
         ("web_at", "TEXT"),
+        # Сообщать ли о новых объявлениях преподавателей. По умолчанию
+        # да: подключают ОРИОКС ровно за этим, а выключить можно одним
+        # переключателем в разделе «Учёба».
+        ("notify", "INTEGER DEFAULT 1"),
     ],
 }
 
