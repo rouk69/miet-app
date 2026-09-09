@@ -2,7 +2,7 @@
 
 import { initTelegram, syncChrome } from './tg.js';
 import { loadData, settings, save, applyTheme, resolveTheme } from './store.js';
-import { register, init as initRouter, switchTab } from './router.js';
+import { register, init as initRouter, switchTab, refresh } from './router.js';
 import { loadMe, account, track, syncGroup } from './api.js';
 
 import home from './screens/home.js';
@@ -101,16 +101,39 @@ function syncSettings() {
   else if (account.group) save({ group: account.group });
 }
 
-Promise.all([loadData(), loadMe()])
+// Сервер спрашиваем сразу, но первый экран его не ждёт.
+const whoAmI = loadMe();
+
+/**
+ * Запуск.
+ *
+ * Раньше приложение ждало и свои данные, и ответ сервера бота. Данные
+ * лежат рядом и приходят быстро, а сервер — на бесплатном тарифе, и
+ * после выкладки он полминуты поднимается: всё это время человек
+ * смотрел на спиннер ради прав, которые на первом экране не нужны.
+ *
+ * Теперь ждём только `data/app.json`, а сервер догоняет: он приносит
+ * права, группу из бота и признак блокировки — всё, чему можно
+ * появиться секундой позже.
+ */
+loadData()
+  .then(() => {
+    initRouter(app, nav);
+    switchTab('home');
+    return whoAmI;
+  })
   .then(() => {
     if (account.blocked) {
       app.innerHTML = blockedScreen();
+      nav.hidden = true;
       return;
     }
-    syncSettings();
     track('open');
-    initRouter(app, nav);
-    switchTab('home');
+    // Группа могла приехать из бота, пока рисовалась главная: без неё
+    // экран показывает «выбери группу», и оставлять его так нельзя.
+    const had = settings.group;
+    syncSettings();
+    if (!had && settings.group) refresh();
   })
   .catch(err => {
     console.error(err);
