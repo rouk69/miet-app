@@ -1,6 +1,6 @@
 // Точка входа: тема → Telegram → данные → роутер.
 
-import { initTelegram, syncChrome } from './tg.js';
+import { initTelegram, syncChrome, guardTaps } from './tg.js';
 import { loadData, settings, save, applyTheme, resolveTheme } from './store.js';
 import { register, init as initRouter, switchTab, refresh } from './router.js';
 import { loadMe, account, track, syncGroup } from './api.js';
@@ -30,6 +30,11 @@ import tasks from './screens/tasks.js';
 // Тему уже поставил маленький скрипт в index.html — до первой отрисовки,
 // чтобы тёмный Telegram не мигал белым. Здесь она применяется ещё раз:
 // разметку рисует уже этот код, и расходиться им нельзя.
+// Прокрутка пальцем не должна считаться нажатием: без этого палец,
+// ведущий главную вверх, «сам собой» открывал ленту — под ним там
+// карточка, а WebView прощает смещение и всё равно шлёт click.
+guardTaps();
+
 const theme = resolveTheme();
 applyTheme();
 syncChrome(theme);

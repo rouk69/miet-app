@@ -203,8 +203,34 @@ check("пост с картинкой создан", s == 200 and r["post"]["med
 name = r["post"]["media"]
 blob, mime = media.read(name)
 check("файл сохранён и читается", blob == PNG and mime == "image/png", mime)
-check("имя файла — хеш содержимого", name.endswith(".png") and len(name) == 36, name)
+check("имя файла — хеш содержимого и размеры",
+      name.endswith("-1x1.png") and len(name.split("-")[0]) == 32, name)
 check("тот же файл не дублируется", media.store(PNG) == name)
+
+# Размеры нужны клиенту: зная стороны, он занимает место под картинку
+# заранее — иначе лента прыгает, а единое соотношение режет пополам
+# скриншоты расписания.
+check("размеры png разобраны", media.probe(PNG) == (1, 1), media.probe(PNG))
+check("размеры gif разобраны",
+      media.probe(b"GIF89a" + bytes([64, 0, 32, 0])) == (64, 32))
+check("не картинка — без размеров", media.probe(b"<html>") == (0, 0))
+check("обрезанный файл не роняет разбор",
+      media.probe(bytes([0xFF, 0xD8, 0xFF])) == (0, 0))
+check("имя с размерами проходит проверку", media._safe(name))
+check("подделка размеров не проходит",
+      not media._safe("a" * 32 + "-1x1x1.png"))
+
+# Картинки, сохранённые до этой затеи, дописываются на старте бота.
+old_name = "b" * 32 + ".png"
+open(media.paths.path("media", old_name), "wb").write(PNG)
+posts.conn().execute("UPDATE posts SET media=? WHERE media=?", (old_name, name))
+check("дозаполнение нашло старую картинку", media.backfill() == 1)
+row = posts.conn().execute(
+    "SELECT media FROM posts WHERE media LIKE ?", ("b" * 32 + "%",)).fetchone()
+check("имя в записи обновилось", row and row[0] == "b" * 32 + "-1x1.png", row)
+check("файл переехал под новое имя",
+      media.read("b" * 32 + "-1x1.png")[0] == PNG)
+check("второй проход уже нечего чинить", media.backfill() == 0)
 s, _ = api.handle("POST", "/api/posts", {},
                   {"text": "Не картинка",
                    "image": base64.b64encode(

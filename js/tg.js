@@ -128,3 +128,53 @@ export function alertDialog(message) {
 export function tgUser() {
   return tg?.initDataUnsafe?.user || null;
 }
+
+
+// ─────────────── тап или всё-таки прокрутка ───────────────
+
+// Палец, ведущий страницу вверх, обязан оставаться прокруткой, даже
+// если начался на карточке. WebView Telegram думает иначе: небольшое
+// смещение он прощает и всё равно шлёт click — а на главной под пальцем
+// почти всегда карточка, и человека «само собой» выбрасывало в ленту.
+//
+// Поэтому смотрим, двигался ли палец между началом касания и щелчком.
+// Двигался — гасим click на фазе захвата, до того как до него доберётся
+// экран. Порог в десять пикселей: меньше — это дрожь руки, а не жест.
+const SLIP = 10;
+
+// Щелчок приходит следом за касанием; всё, что позже, — уже мышь или
+// клавиатура, и запрещать им ничего нельзя.
+const AFTER_TOUCH = 700;
+
+let startX = 0;
+let startY = 0;
+let slipped = false;
+let endedAt = 0;
+
+export function guardTaps(target = document) {
+  const opts = { passive: true, capture: true };
+
+  target.addEventListener('touchstart', e => {
+    const t = e.touches[0];
+    if (!t) return;
+    startX = t.clientX;
+    startY = t.clientY;
+    slipped = false;
+  }, opts);
+
+  target.addEventListener('touchmove', e => {
+    const t = e.touches[0];
+    if (!t) return;
+    if (Math.abs(t.clientX - startX) > SLIP
+      || Math.abs(t.clientY - startY) > SLIP) slipped = true;
+  }, opts);
+
+  target.addEventListener('touchend', () => { endedAt = Date.now(); }, opts);
+
+  target.addEventListener('click', e => {
+    if (!slipped || Date.now() - endedAt > AFTER_TOUCH) return;
+    slipped = false;
+    e.stopPropagation();
+    e.preventDefault();
+  }, true);
+}
