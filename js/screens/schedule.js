@@ -77,11 +77,13 @@ export default async function scheduleScreen(params = {}) {
       title: 'Расписание',
       subtitle: 'Сначала выбери группу',
       body: `<div class="card has-art" style="padding:20px">
-          <div class="row-subtitle" style="margin-bottom:16px;max-width:220px">
-            Расписание берётся напрямую с miet.ru и обновляется автоматически.
+          <div class="has-art-body">
+            <div class="row-subtitle" style="margin-bottom:16px">
+              Расписание берётся напрямую с miet.ru и обновляется автоматически.
+            </div>
+            <button class="btn-primary" id="pick">Выбрать группу</button>
           </div>
-          <button class="btn-primary" id="pick">Выбрать группу</button>
-          ${art('group', 92, 'art-aside')}
+          ${art('group', 84, 'art-aside')}
         </div>`,
     });
     node.querySelector('#pick').addEventListener('click', () => pickGroup(() => refresh()));

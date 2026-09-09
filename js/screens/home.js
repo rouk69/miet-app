@@ -272,13 +272,15 @@ async function renderNow(slot, now) {
   if (!settings.group) {
     slot.innerHTML = `
       <div class="card has-art" style="padding:20px">
-        <div class="now-kicker" style="color:var(--text-secondary)">Расписание</div>
-        <div style="font-size:19px;font-weight:800;margin:8px 0 4px">Выбери свою группу</div>
-        <div class="row-subtitle" style="margin-bottom:16px;max-width:210px">
-          Покажу пары на сегодня, ближайшую и всю неделю
+        <div class="has-art-body">
+          <div class="now-kicker" style="color:var(--text-secondary)">Расписание</div>
+          <div style="font-size:19px;font-weight:800;margin:8px 0 4px">Выбери свою группу</div>
+          <div class="row-subtitle" style="margin-bottom:16px">
+            Покажу пары на сегодня, ближайшую и всю неделю
+          </div>
+          <button class="btn-primary" id="pick">Выбрать группу</button>
         </div>
-        <button class="btn-primary" id="pick">Выбрать группу</button>
-        ${art('group', 92, 'art-aside')}
+        ${art('group', 84, 'art-aside')}
       </div>`;
     slot.querySelector('#pick').addEventListener('click', () =>
       pickGroup(() => location.reload()));
@@ -322,12 +324,14 @@ async function renderNow(slot, now) {
            </div>
          </div>`
       : `<div class="now-card rest has-art">
-           <div class="now-kicker">${day > 6 ? 'Воскресенье' : 'На сегодня всё'}</div>
-           <div class="now-title">Пар больше нет</div>
-           <div class="now-meta muted">
-             <span>${esc(settings.group)}</span><span>${week + 1}-я неделя цикла</span>
+           <div class="has-art-body">
+             <div class="now-kicker">${day > 6 ? 'Воскресенье' : 'На сегодня всё'}</div>
+             <div class="now-title">Пар больше нет</div>
+             <div class="now-meta muted">
+               <span>${esc(settings.group)}</span><span>${week + 1}-я неделя цикла</span>
+             </div>
            </div>
-           ${art(day > 6 ? 'rest' : 'done', 86, 'art-aside')}
+           ${art(day > 6 ? 'rest' : 'done', 76, 'art-aside')}
          </div>`;
 
   slot.innerHTML = `
