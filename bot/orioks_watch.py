@@ -167,6 +167,11 @@ def check_user(user_id: int, send: bool = True) -> list:
     Возвращает новые объявления. Первый заход возвращает пустой список и
     только запоминает — иначе подключение ОРИОКС оборачивалось бы
     рассылкой всего семестра разом.
+
+    `send=False` — сухой прогон: ничего не отправляем и ничего не
+    запоминаем. Иначе разведка «а что он сейчас видит» съедала бы
+    настоящее уведомление: объявление помечено показанным, а показать
+    его никто не показал.
     """
     cookie = orioks.cookie_of(user_id)
     if not cookie:
@@ -177,9 +182,9 @@ def check_user(user_id: int, send: bool = True) -> list:
     except orioks_web.SessionExpired:
         # Явный отказ: сессия кончилась. Стираем её и говорим об этом
         # один раз — без cookie следующий обход этого человека пропустит.
-        orioks.drop_cookie(user_id)
-        orioks.forget_materials(user_id)
         if send:
+            orioks.drop_cookie(user_id)
+            orioks.forget_materials(user_id)
             notify.to_user(user_id, (
                 "🔑 <b>ОРИОКС попросил войти заново</b>\n\n"
                 "Сессия кончилась — это обычное дело. Открой раздел "
@@ -197,19 +202,22 @@ def check_user(user_id: int, send: bool = True) -> list:
 
     # Первый заход: помечаем всё известным и молчим.
     if not known:
-        remember(user_id, [PRIMED] + [it.get("id") for it in items])
-        log.info("сторож ОРИОКС начал следить за %s (%d объявлений)",
-                 user_id, len(items))
+        if send:
+            remember(user_id, [PRIMED] + [it.get("id") for it in items])
+            log.info("сторож ОРИОКС начал следить за %s (%d объявлений)",
+                     user_id, len(items))
         return []
 
+    # Сухой прогон: показали, что видно, и разошлись.
+    if not send:
+        return fresh
     if not fresh:
         return []
 
     # Запоминаем ДО отправки: не ушло сообщение — беда невелика, а вот
     # повторять его каждые полтора часа человек не простит.
     remember(user_id, [it.get("id") for it in fresh])
-    if send:
-        notify.to_user(user_id, message(fresh))
+    notify.to_user(user_id, message(fresh))
     return fresh
 
 
