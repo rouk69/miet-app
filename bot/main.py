@@ -964,6 +964,21 @@ def main() -> None:
     except ApiTelegramException as e:
         log.warning("не удалось задать команды: %s", e)
 
+    # Кнопка меню слева от поля ввода ведёт в мини-приложение — и адрес
+    # ей нужен с меткой выкладки. Telegram кеширует страницу по адресу и
+    # держит её дольше, чем просит HTTP: человек жмёт «Приложение» и
+    # видит прошлую выкладку. Ставим при каждом запуске, потому что
+    # запуск и происходит после выкладки.
+    if WEBAPP_URL:
+        link = kbs.webapp_link(WEBAPP_URL)
+        try:
+            bot.set_chat_menu_button(menu_button=types.MenuButtonWebApp(
+                type="web_app", text="Приложение",
+                web_app=types.WebAppInfo(url=link)))
+            log.info("кнопка меню ведёт на %s", link)
+        except ApiTelegramException as e:
+            log.warning("не удалось обновить кнопку меню: %s", e)
+
     # HTTP-API для мини-приложения: приём событий и админка. Отдельным
     # потоком в том же процессе — база у них общая, и разносить их по
     # процессам значило бы делить одну SQLite между контейнерами.
