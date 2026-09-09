@@ -3,6 +3,7 @@
 import { icon } from '../icons.js';
 import { esc, listCard, listRow, toast, sheet, emptyState } from '../ui.js';
 import { data, settings, save, applyTheme, resolveTheme } from '../store.js';
+import { BUILD } from '../config.js';
 import { fetchSchedule, weekOfCycle } from '../schedule.js';
 import { go, refresh } from '../router.js';
 import { tgUser, openLink, syncChrome, haptic, confirmDialog } from '../tg.js';
@@ -84,7 +85,8 @@ export default async function profileScreen() {
 
       <div class="fab-note">
         Расписание — miet.ru/schedule, обновляется при каждом открытии.<br>
-        Новости и справочная информация собраны ${esc(data.meta?.generated || '')}.
+        Новости и справочная информация собраны ${esc(data.meta?.generated || '')}.<br>
+        Версия приложения ${esc(BUILD)}.
       </div>`,
   });
 
