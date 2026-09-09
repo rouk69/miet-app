@@ -13,7 +13,7 @@ from urllib.parse import quote
 from telebot import types
 
 from . import schedule_api as api
-from .paths import webapp_version
+from .webapp import version as webapp_version
 
 SEP = "|"
 

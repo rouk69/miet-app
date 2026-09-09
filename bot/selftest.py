@@ -170,6 +170,24 @@ check("без метки адрес всё равно рабочий",
       kbs.webapp_link("https://example.com/app") is not None
       and kbs.webapp_link(None) is None)
 
+# Метку клиента бот теперь узнаёт у самого приложения: иначе каждая
+# правка на Pages требовала перезапуска контейнера — то есть пары минут
+# молчания бота из-за правки цвета кнопки.
+from . import webapp as webapp_watch                    # noqa: E402
+
+check("метка берётся с диска, пока сеть молчит",
+      webapp_watch.version() == paths.webapp_version(),
+      webapp_watch.version())
+check("чужой ответ вместо метки отвергнут",
+      webapp_watch.fetch("") == "")
+webapp_watch._seen["version"] = "deadbeef"
+check("увиденная в сети метка сильнее файла",
+      webapp_watch.version() == "deadbeef")
+check("и она попадает в адрес",
+      kbs.webapp_link("https://example.com/app").endswith("?v=deadbeef"),
+      kbs.webapp_link("https://example.com/app"))
+webapp_watch._seen["version"] = ""
+
 longest = max(groups, key=lambda g: len(g.encode()))
 try:
     data = kbs.cb("d", 3, 6, longest)
