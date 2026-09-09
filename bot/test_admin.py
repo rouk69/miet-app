@@ -982,6 +982,14 @@ check("без подключения подписку не включить",
 check("отключившийся в обход не попадает", 42 not in orioks_watch.watchers(),
       orioks_watch.watchers())
 
+# Разведка сторожа — только владельцу и только про него самого:
+# чужие объявления не сторожит никто, и посмотреть на них тоже нельзя.
+s_, r_ = api.handle("GET", "/api/admin/orioks-watch", {}, {}, USER)
+check("разведка сторожа не для всех", s_ == 403, (s_, r_))
+s_, r_ = api.handle("GET", "/api/admin/orioks-watch", {}, {}, ADMIN)
+check("владельцу сторож отчитывается",
+      s_ == 200 and "watchers" in r_ and r_["fresh"] == [], (s_, r_))
+
 notify.bind(None)
 
 print("\n" + "=" * 58)
