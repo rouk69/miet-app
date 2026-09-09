@@ -1212,6 +1212,10 @@ textarea.field-input {
   gap: 10px;
 }
 
+/* Плитка окрашена не только значком: лёгкий налёт тона сверху и рамка
+   того же цвета связывают карточки раздела в группу. Раньше цвет жил
+   в одном квадратике сорок на сорок, и с расстояния вытянутой руки все
+   разделы выглядели одинаково серыми. */
 .tile-card {
   display: flex;
   flex-direction: column;
@@ -1219,7 +1223,10 @@ textarea.field-input {
   gap: 4px;
   padding: 16px;
   border-radius: var(--radius-lg);
-  background: var(--surface);
+  border: 1px solid var(--tile-line, var(--border));
+  background:
+    linear-gradient(180deg, var(--tile-tint, transparent), transparent 64%),
+    var(--surface);
   box-shadow: var(--shadow-card);
   text-align: left;
   transition: transform 0.12s ease;
@@ -1231,20 +1238,61 @@ textarea.field-input {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 40px;
-  height: 40px;
-  margin-bottom: 6px;
-  border-radius: 13px;
+  width: 44px;
+  height: 44px;
+  margin-bottom: 8px;
+  border-radius: 14px;
+  background: var(--tile-bg);
+  color: var(--tile-fg);
 }
 
-/* Пять оттенков закреплены за смыслом: учёба синяя, справочное зелёное,
-   деньги и жильё тёплые, инструменты фиолетовые, своё серое. Одинаковые
-   плитки не различались бы, пёстрые превратили бы экран в ёлку. */
-.tone-blue .tile-ico { background: var(--primary-dim); color: var(--primary); }
-.tone-green .tile-ico { background: rgba(52, 199, 89, 0.14); color: var(--success-text); }
-.tone-warm .tile-ico { background: rgba(255, 159, 10, 0.16); color: var(--warning-text); }
-.tone-violet .tile-ico { background: rgba(124, 92, 255, 0.14); color: #7C5CFF; }
-.tone-grey .tile-ico { background: var(--surface-2); color: var(--text-secondary); }
+/* Пять оттенков закреплены за смыслом: семестр синий, университет
+   зелёный, деньги и жильё тёплые, инструменты фиолетовые, своё серое.
+   Одинаковые плитки не различались бы, пёстрые превратили бы экран в
+   ёлку. */
+.tone-blue {
+  --tile-fg: var(--primary);
+  --tile-bg: var(--primary-dim);
+  --tile-line: rgba(57, 94, 244, 0.18);
+  --tile-tint: rgba(57, 94, 244, 0.05);
+}
+
+.tone-green {
+  --tile-fg: var(--success-text);
+  --tile-bg: rgba(52, 199, 89, 0.14);
+  --tile-line: rgba(32, 124, 56, 0.18);
+  --tile-tint: rgba(32, 124, 56, 0.05);
+}
+
+.tone-warm {
+  --tile-fg: var(--warning-text);
+  --tile-bg: rgba(255, 159, 10, 0.16);
+  --tile-line: rgba(155, 94, 0, 0.18);
+  --tile-tint: rgba(155, 94, 0, 0.05);
+}
+
+.tone-violet {
+  --tile-fg: #6941C6;
+  --tile-bg: rgba(124, 92, 255, 0.14);
+  --tile-line: rgba(105, 65, 198, 0.18);
+  --tile-tint: rgba(105, 65, 198, 0.05);
+}
+
+.tone-grey {
+  --tile-fg: var(--text-secondary);
+  --tile-bg: var(--surface-2);
+  --tile-line: var(--border);
+  --tile-tint: transparent;
+}
+
+/* В темноте налёт цвета на карточке читается как грязь, а рамка — как
+   царапина: оставляем цвет значку, а карточке возвращаем ровный фон. */
+:root[data-theme="dark"] .tile-card {
+  --tile-tint: transparent;
+  --tile-line: var(--border);
+}
+
+:root[data-theme="dark"] .tone-violet { --tile-fg: #B197FC; }
 
 .tile-name {
   font-size: 15px;

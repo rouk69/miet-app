@@ -18,7 +18,7 @@ import { flatten, pendingOf, subjectLook } from './tasks.js';
 const QUICK = [
   { id: 'url:https://orioks.miet.ru/main/login', ico: 'chart', label: 'ОРИОКС' },
   { id: 'teachers', ico: 'teacher', label: 'Преподаватели' },
-  { id: 'tasks', ico: 'backpack', label: 'Учёба' },
+  { id: 'tasks', ico: 'backpack', label: 'Задания' },
   { id: 'url:https://account.miet.ru/', ico: 'key', label: 'Кабинет' },
   { id: 'campus:canteen', ico: 'utensils', label: 'Столовая' },
   { id: 'campus:library', ico: 'book', label: 'Библиотека' },
@@ -179,14 +179,14 @@ const stillFresh = hit =>
 /**
  * Ближайшие дела из ОРИОКС — три строки под расписанием.
  *
- * Экран «Учёба» знает про задания всё, но открывают его, когда про
+ * Экран «Задания» знает про них всё, но открывают его, когда про
  * задание и так вспомнили. Главную открывают просто так, по дороге на
  * пару, — и здесь ближайший срок стоит ровно там, где на него смотрят.
  *
  * Молча и последним: ОРИОКС отвечает секундами (обход всех дисциплин),
  * и задерживать из-за него расписание нельзя. Не подключён, не ответил,
  * нечего показать — блока просто нет, а звать подключаться на главной
- * незачем: для этого есть плитка «Учёба».
+ * незачем: для этого есть плитка «Задания».
  */
 async function renderStudy(slot) {
   if (!slot || !canTalk || !settings.group) return;

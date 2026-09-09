@@ -336,7 +336,7 @@ const doneRow = t => `
 export default async function tasksScreen() {
   if (!canTalk) {
     return screen({
-      title: 'Учёба',
+      title: 'Задания',
       body: emptyState('Раздел работает внутри Telegram', 'backpack'),
     });
   }
@@ -359,7 +359,7 @@ export default async function tasksScreen() {
     web = both[1].web === true;
   } catch (err) {
     return screen({
-      title: 'Учёба',
+      title: 'Задания',
       body: `<div class="card" style="padding:18px">
         <div class="row-subtitle">${esc(err.message)}</div></div>`,
     });
@@ -401,8 +401,8 @@ export default async function tasksScreen() {
     m => files.push({ ...m, subject: t.subject, event: t.title.main })));
 
   const node = screen({
-    title: 'Учёба',
-    subtitle: start ? 'Задания, сроки и файлы из ОРИОКС'
+    title: 'Задания',
+    subtitle: start ? 'Сроки, баллы и файлы из ОРИОКС'
       : 'Выбери группу в профиле, чтобы видеть даты',
     actions: `<button class="icon-btn" data-action="orioks">${icon('external', 19)}</button>`,
     body: `
@@ -643,7 +643,7 @@ export default async function tasksScreen() {
 
 function notLinked() {
   const node = screen({
-    title: 'Учёба',
+    title: 'Задания',
     subtitle: 'Что задали, что сдать и файлы из ОРИОКС',
     body: `
       <div class="card" style="padding:18px">
@@ -672,7 +672,7 @@ function notLinked() {
 
 function linkedButBroken(message) {
   const node = screen({
-    title: 'Учёба',
+    title: 'Задания',
     body: `
       <div class="card" style="padding:18px">
         <div class="row-title" style="margin-bottom:6px">ОРИОКС не ответил</div>

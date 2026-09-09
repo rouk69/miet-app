@@ -21,11 +21,11 @@ import { screen, iconBtn } from './common.js';
  */
 const SECTIONS = [
   {
-    title: 'Учёба',
+    title: 'Мой семестр',
     note: 'То, что спрашивают чаще всего',
     tiles: [
-      { id: 'tasks', ico: 'backpack', tone: 'blue', title: 'Учёба',
-        sub: 'Что задали, что сдать и файлы из ОРИОКС' },
+      { id: 'tasks', ico: 'backpack', tone: 'blue', title: 'Задания',
+        sub: 'Что задали, сроки и файлы из ОРИОКС' },
       { id: 'teachers', ico: 'teacher', tone: 'blue', title: 'Преподаватели',
         sub: 'Кто, где и когда ведёт' },
       { id: 'rooms', ico: 'door', tone: 'blue', title: 'Аудитории',
@@ -36,8 +36,6 @@ const SECTIONS = [
         sub: 'Семестр, недели, сессия' },
       { id: 'help', ico: 'handshake', tone: 'blue', title: 'Помощь в заданиях',
         sub: 'Найти старшекурсника' },
-      { id: 'curators', ico: 'handHeart', tone: 'blue', title: 'Кураторы',
-        sub: 'Кто ведёт первый курс' },
     ],
   },
   {
@@ -53,6 +51,8 @@ const SECTIONS = [
         sub: 'Телефоны и почта' },
       { id: 'chats', ico: 'messageCircle', tone: 'green', title: 'Чаты',
         sub: 'Каналы и сообщества' },
+      { id: 'curators', ico: 'handHeart', tone: 'green', title: 'Кураторы',
+        sub: 'Кто ведёт первый курс' },
       { id: 'dorm', ico: 'homes', tone: 'warm', title: 'Общежития',
         sub: 'Адреса и заселение' },
       { id: 'money', ico: 'wallet', tone: 'warm', title: 'Деньги',
