@@ -60,7 +60,7 @@ const fullName = u =>
 
 const avatar = (u, size = 44) => (u.photo_url
   ? `<img class="avatar" src="${esc(u.photo_url)}" alt=""
-       style="width:${size}px;height:${size}px;object-fit:cover">`
+       style="width:${size}px;height:${size}px;object-fit:cover" decoding="async">`
   : `<div class="avatar" style="width:${size}px;height:${size}px;font-size:${Math.round(size / 2.6)}px">
        ${esc((u.first_name || '?')[0])}</div>`);
 

@@ -12,7 +12,7 @@ const CATS = ['Все', 'Спорт', 'Творчество', 'Медиа', 'Н�
 
 const clubCard = c => `
   <div class="tile" data-club="${esc(c.id)}">
-    ${c.photos?.[0] ? `<img class="tile-cover" src="img/${esc(c.photos[0])}" alt="" loading="lazy">` : ''}
+    ${c.photos?.[0] ? `<img class="tile-cover" src="img/${esc(c.photos[0])}" alt="" loading="lazy" decoding="async">` : ''}
     <div class="tile-body">
       <div class="tile-head">
         <span class="tile-icon">${icon(c.icon || 'sparkles', 17)}</span>
@@ -107,7 +107,7 @@ export async function clubScreen({ id }) {
   const node = screen({
     body: `
       ${c.photos?.[0] ? `<div class="hero">
-        <img src="img/${esc(c.photos[0])}" alt="">
+        <img src="img/${esc(c.photos[0])}" alt="" decoding="async">
         <div class="hero-fade"></div>
       </div>` : ''}
       <div class="screen-top">
@@ -135,7 +135,7 @@ export async function clubScreen({ id }) {
       ${c.photos?.length > 1 ? `
         <div class="section-head"><div class="section-title">Фото</div></div>
         <div class="gallery">
-          ${c.photos.slice(1).map(p => `<img src="img/${esc(p)}" data-full="img/${esc(p)}" alt="" loading="lazy">`).join('')}
+          ${c.photos.slice(1).map(p => `<img src="img/${esc(p)}" data-full="img/${esc(p)}" alt="" loading="lazy" decoding="async">`).join('')}
         </div>` : ''}
 
       ${c.social?.length ? `

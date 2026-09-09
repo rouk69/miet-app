@@ -90,6 +90,35 @@ body {
   font-variant-numeric: tabular-nums;
   -webkit-tap-highlight-color: transparent;
   overscroll-behavior-y: none;
+  /* iOS сам увеличивает шрифт при повороте экрана — в приложении с
+     собственной типографикой это ломает вёрстку карточек. */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+/* Нажатие пальцем обводки не рисует, а вот приход с клавиатуры — рисует:
+   иначе на десктопе и с внешней клавиатурой не видно, где ты находишься. */
+:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Кому системно выключили анимации — тому и здесь. Движение в интерфейсе
+   не украшение, а помеха, если от него укачивает. Спиннер оставляем
+   вращаться медленнее: замерший кружок читается как «всё зависло». */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .boot-spinner, .spinner {
+    animation-duration: 1.6s !important;
+    animation-iteration-count: infinite !important;
+  }
 }
 
 button {
@@ -163,10 +192,6 @@ input, textarea, select {
   padding: calc(var(--safe-top) + 20px) 18px calc(96px + var(--safe-bottom));
   max-width: var(--content-max);
   margin-inline: auto;
-}
-
-.screen-header {
-  margin-bottom: 20px;
 }
 
 /* ---------- Карточки ---------- */
@@ -246,16 +271,6 @@ input, textarea, select {
 .pill.active {
   background: var(--primary);
   color: #fff;
-}
-
-.pill-icon-tile {
-  width: 20px;
-  height: 20px;
-  border-radius: 6px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
 }
 
 /* внутренний segmented control (два таба на всю ширину, напр. Список/Карта) */
@@ -561,53 +576,6 @@ input, textarea, select {
   object-fit: cover;
 }
 
-.avatar-stack {
-  display: flex;
-}
-
-.avatar-stack .avatar {
-  border: 2px solid var(--surface);
-  margin-left: -8px;
-}
-
-.avatar-stack .avatar:first-child {
-  margin-left: 0;
-}
-
-/* ---------- Тег цены ---------- */
-
-.price-tag {
-  display: inline-flex;
-  align-items: center;
-  padding: 6px 12px;
-  border-radius: var(--radius-pill);
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.price-tag.free {
-  background: #E6F9ED;
-  color: var(--success);
-}
-
-.price-tag.paid {
-  background: var(--primary-dim);
-  color: var(--primary);
-}
-
-/* ---------- Статус-точка ---------- */
-
-.status-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-
-.status-dot.ok { background: var(--success); }
-.status-dot.warn { background: var(--warning); }
-.status-dot.err { background: var(--danger); }
-
 /* ---------- Пустое состояние ---------- */
 
 .empty-state {
@@ -619,21 +587,4 @@ input, textarea, select {
   text-align: center;
   color: var(--text-secondary);
   gap: 10px;
-}
-
-/* ---------- Карта: кастомные маркеры ---------- */
-
-/* Leaflet по умолчанию рисует под div-иконками белый прямоугольник с рамкой
-   (расчёт на случай, если своих стилей не передали) — у нас маркер уже
-   полностью стилизован своей разметкой, поэтому глушим дефолт. */
-.leaflet-div-icon {
-  background: transparent;
-  border: none;
-}
-
-.orbit-map-popup-btn {
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--primary);
-  padding: 2px 4px;
 }

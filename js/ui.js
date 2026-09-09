@@ -168,7 +168,7 @@ export function lightbox(src) {
     position:fixed; inset:0; z-index:150; background:rgba(0,0,0,.92);
     display:flex; align-items:center; justify-content:center; padding:20px;">
     <img src="${esc(src)}" style="max-width:100%; max-height:100%;
-      border-radius:14px; object-fit:contain">
+      border-radius:14px; object-fit:contain" decoding="async">
   </div>`);
   b.addEventListener('click', () => b.remove());
   layer().append(b);

@@ -1,7 +1,7 @@
 // Точка входа: тема → Telegram → данные → роутер.
 
 import { initTelegram, syncChrome } from './tg.js';
-import { loadData, settings, save, applyTheme } from './store.js';
+import { loadData, settings, save, applyTheme, resolveTheme } from './store.js';
 import { register, init as initRouter, switchTab } from './router.js';
 import { loadMe, account, track, syncGroup } from './api.js';
 
@@ -27,9 +27,19 @@ import help from './screens/help.js';
 import adminDays, { dayScreen } from './screens/admin-days.js';
 import tasks from './screens/tasks.js';
 
-applyTheme(settings.theme);
-initTelegram(settings.theme);
-syncChrome(settings.theme);
+// Тему уже поставил маленький скрипт в index.html — до первой отрисовки,
+// чтобы тёмный Telegram не мигал белым. Здесь она применяется ещё раз:
+// разметку рисует уже этот код, и расходиться им нельзя.
+const theme = resolveTheme();
+applyTheme();
+syncChrome(theme);
+// Пока тема «как в Telegram», переключение в самом Telegram меняет и
+// приложение — на ходу, не закрывая его. Выбранную руками не трогаем.
+initTelegram(theme, () => {
+  if (settings.theme !== 'auto') return;
+  applyTheme();
+  syncChrome(resolveTheme());
+});
 
 register('home', home);
 register('schedule', schedule);

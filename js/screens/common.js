@@ -83,7 +83,7 @@ export function pickGroup(onPick) {
 /** Большая карточка новости с обложкой. */
 export const newsCard = n => `
   <div class="news-card" data-news="${esc(n.id)}">
-    ${n.cover ? `<img class="news-cover" src="img/${esc(n.cover)}" alt="" loading="lazy">` : ''}
+    ${n.cover ? `<img class="news-cover" src="img/${esc(n.cover)}" alt="" loading="lazy" decoding="async">` : ''}
     <div class="news-body">
       <div class="news-title">${esc(n.title)}</div>
       <div class="news-date">${esc(n.date)}</div>
@@ -93,7 +93,9 @@ export const newsCard = n => `
 /** Компактная строка новости для главной. */
 export const newsRow = n => `
   <div class="news-row" data-news="${esc(n.id)}">
-    ${n.cover ? `<img src="img/${esc(n.cover)}" alt="" loading="lazy">` : `<div class="icon-tile" style="width:62px;height:62px;border-radius:14px">${icon('news', 24)}</div>`}
+    ${n.cover
+      ? `<img src="img/${esc(n.cover)}" alt="" loading="lazy" decoding="async">`
+      : `<div class="news-row-stub">${icon('news', 24)}</div>`}
     <div style="flex:1;min-width:0">
       <div class="news-row-title">${esc(n.title)}</div>
       <div class="news-date" style="margin-top:5px">${esc(n.date)}</div>

@@ -97,7 +97,7 @@ export async function articleScreen({ id }) {
 
   const node = screen({
     body: `
-      ${n.cover ? `<img class="article-cover" src="img/${esc(n.cover)}" alt="">` : ''}
+      ${n.cover ? `<img class="article-cover" src="img/${esc(n.cover)}" alt="" decoding="async">` : ''}
       <div class="article-title">${esc(n.title)}</div>
       <div class="news-date" style="margin-bottom:14px">${esc(n.date)}</div>
       ${n.tags?.length ? `<div class="tag-row" style="margin-bottom:18px">
@@ -111,7 +111,7 @@ export async function articleScreen({ id }) {
       ${n.gallery?.length ? `
         <div class="section-head"><div class="section-title">Фото</div></div>
         <div class="gallery">
-          ${n.gallery.map(g => `<img src="img/${esc(g)}" data-full="img/${esc(g)}" alt="" loading="lazy">`).join('')}
+          ${n.gallery.map(g => `<img src="img/${esc(g)}" data-full="img/${esc(g)}" alt="" loading="lazy" decoding="async">`).join('')}
         </div>` : ''}
       <div style="margin-top:22px">
         <button class="btn-primary" id="open">

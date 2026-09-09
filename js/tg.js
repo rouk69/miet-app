@@ -32,7 +32,7 @@ export function syncChrome(theme) {
   document.querySelector('meta[name="theme-color"]')?.setAttribute('content', color);
 }
 
-export function initTelegram(theme = 'light') {
+export function initTelegram(theme = 'light', onThemeChange = null) {
   if (!tg) return;
   try {
     tg.ready();
@@ -45,6 +45,9 @@ export function initTelegram(theme = 'light') {
     tg.onEvent?.('safeAreaChanged', applySafeArea);
     tg.onEvent?.('contentSafeAreaChanged', applySafeArea);
     tg.onEvent?.('fullscreenChanged', applySafeArea);
+    // Человек может переключить тему Telegram, не закрывая мини-апп.
+    // Кто на это откликается, решает вызывающий: у него настройки.
+    if (onThemeChange) tg.onEvent?.('themeChanged', onThemeChange);
   } catch { /* вне Telegram просто нет WebApp API */ }
 }
 
