@@ -263,14 +263,53 @@ CASES = [
     ("чужого предмета в расписании нет",
      "String(lessonDay(SCHED, new Date(2026, 8, 1),"
      " { week: 2, type: 'Лабораторная работа' }, 'Философия', 0))", "null"),
+
+    # Разбор ведомости общий у экрана заданий и главной: если он начнёт
+    # считать делами посещаемость, это увидят оба сразу.
+    ("ведомость разворачивается целиком", "PLAN.length", "4"),
+    ("в делах только настоящее задание", "TODO.length", "1"),
+    ("сданное делом не считается",
+     "String(TODO.every(function (t) { return !t.done; }))", "true"),
+    ("формальности и сессия отсеяны", "TODO[0].name", "ЛР.2"),
+    ("у дела есть срок и предмет",
+     "String(TODO[0].due instanceof Date && TODO[0].subject.length > 0)",
+     "true"),
 ]
 
 
 # Модули в сборке завёрнуты, глобальных имён нет: достаём нужное из
 # таблицы экспортов и раскладываем по коротким именам.
-PRELUDE = ("var _t = __mod['js/screens/tasks.js'];"
-           "var subjectLook = _t.subjectLook, newsDate = _t.newsDate,"
-           "    linkify = _t.linkify, NUMBERED = _t.NUMBERED,    fileLook = _t.fileLook, weekMonday = _t.weekMonday,    subjectKey = _t.subjectKey, lessonDay = _t.lessonDay;var SCHED = { semestr: 'Осенний семестр 2026/2027', lessons: [  { week: 1, day: 4, pair: 3, subject: 'Физика. Механика',    kindCls: 'lab', from: '12:00', room: '3229' },  { week: 1, day: 5, pair: 2, subject: 'Физика. Механика',    kindCls: 'lek', from: '10:30', room: '1201' }] };")
+PRELUDE = """
+var _t = __mod['js/screens/tasks.js'];
+var subjectLook = _t.subjectLook, newsDate = _t.newsDate,
+    linkify = _t.linkify, NUMBERED = _t.NUMBERED, fileLook = _t.fileLook,
+    weekMonday = _t.weekMonday, subjectKey = _t.subjectKey,
+    lessonDay = _t.lessonDay, flatten = _t.flatten, pendingOf = _t.pendingOf;
+
+var SCHED = { semestr: 'Осенний семестр 2026/2027', lessons: [
+  { week: 1, day: 4, pair: 3, subject: 'Физика. Механика',
+    kindCls: 'lab', from: '12:00', room: '3229' },
+  { week: 1, day: 5, pair: 2, subject: 'Физика. Механика',
+    kindCls: 'lek', from: '10:30', room: '1201' }
+] };
+
+// Ведомость в том виде, в каком её отдаёт сервер: задание, сданное
+// задание, экзамен и формальность. Из четырёх записей делом является
+// ровно одна.
+var VEDOMOST = { disciplines: [{ name: 'Физика. Механика', events: [
+  { name: 'ЛР.2', type: 'Лабораторная работа', week: 10, max_grade: 10,
+    grade: null, done: false, task: true, session: false },
+  { name: 'ЛР.1', type: 'Лабораторная работа', week: 2, max_grade: 10,
+    grade: 8, done: true, task: true, session: false },
+  { name: 'Экзамен', type: 'Экзамен', week: 17, max_grade: 30,
+    done: false, task: false, session: true },
+  { name: 'А/П', type: 'Активность/Посещаемость', week: 8, max_grade: 24,
+    done: false, task: false, session: false }
+] }] };
+
+var PLAN = flatten(VEDOMOST, SCHED, new Date(2026, 8, 1), 0);
+var TODO = pendingOf(PLAN);
+"""
 
 
 def check_logic(bundle: str) -> int:

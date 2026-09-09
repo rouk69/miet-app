@@ -1650,6 +1650,93 @@ textarea.field-input {
   color: var(--text-tertiary);
 }
 
+/* ---------- Ближайшие дела на главной ---------- */
+
+/* Строка, а не карточка: на главной у неё соседи сверху и снизу —
+   расписание и новости, — и три одинаковых блока подряд читаются лучше
+   трёх разных. Значок предмета тот же, что в объявлениях: цвет узнаётся
+   раньше, чем прочитано название. */
+.study-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 14px;
+  border: none;
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.study-row:active { transform: scale(0.985); }
+
+.study-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  background: var(--tone-bg);
+  color: var(--tone-fg);
+}
+
+.study-main {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  gap: 2px;
+}
+
+.study-subject {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.study-what {
+  font-size: 12px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.study-when {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  flex-shrink: 0;
+  gap: 2px;
+}
+
+.study-day {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.study-left {
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+/* Срок красит только сам срок: подсвечивать строку целиком означало бы
+   три тревожных плашки подряд у любого, кто заглянул в конце недели. */
+.study-row.late .study-day { color: var(--danger); }
+.study-row.late .study-left { color: var(--danger); font-weight: 600; }
+.study-row.now .study-day { color: var(--warning); }
+.study-row.now .study-left { color: var(--warning); font-weight: 600; }
+
 /* ---------- Объявления преподавателей ---------- */
 
 /* Подписка стоит сразу под объявлениями: она про них, а не про список

@@ -278,6 +278,50 @@ const fileRow = f => {
   </button>`;
 };
 
+/**
+ * Всё, что ОРИОКС знает о заданиях, — одним плоским списком со сроками.
+ *
+ * Предмет здесь часть строки, а не заголовок блока: задание нельзя
+ * понять в отрыве от него, а группировка по дисциплинам давала полсотни
+ * строк, в которых не видно главного — что делать в ближайшие дни.
+ *
+ * Живёт отдельно от экрана, потому что тот же список нужен главной: она
+ * показывает из него три ближайших дела.
+ */
+export function flatten(tasks, sched, start, shift) {
+  const all = [];
+  (tasks.disciplines || []).forEach(d => (d.events || []).forEach(e => {
+    const at = lessonDay(sched, start, e, d.name, shift);
+    const due = at ? at.date : dueDate(start, e.week);
+    const left = daysLeft(due);
+    all.push({
+      ...e,
+      idx: all.length,
+      // Пара, на которой сдают: по ней и показываем день вместо
+      // безликого «конца второй недели».
+      lesson: at ? at.lesson : null,
+      exactDay: !!(at && at.exact),
+      subject: d.name,
+      title: titleOf(e),
+      due,
+      left,
+      bucket: bucketOf(left),
+    });
+  }));
+  return all;
+}
+
+/**
+ * Несданные задания, ближайшие сверху.
+ *
+ * Формальности (посещаемость, «порядок НБС») и события сессии сюда не
+ * попадают: сдавать там нечего, а строк они дают больше трети.
+ */
+export function pendingOf(all) {
+  return all.filter(t => t.task && !t.done)
+    .sort((a, b) => (a.left ?? 9999) - (b.left ?? 9999));
+}
+
 const doneRow = t => `
   <div class="todo done">
     <div class="todo-main">
@@ -335,27 +379,7 @@ export default async function tasksScreen() {
     } catch { /* без дат покажем недели */ }
   }
 
-  // Разворачиваем всё в один плоский список: предмет — часть строки, а
-  // не заголовок блока, иначе задание нельзя понять в отрыве от него.
-  const all = [];
-  data.tasks.disciplines.forEach(d => d.events.forEach(e => {
-    const at = lessonDay(sched, start, e, d.name, settings.weekShift);
-    const due = at ? at.date : dueDate(start, e.week);
-    const left = daysLeft(due);
-    all.push({
-      ...e,
-      idx: all.length,
-      // Пара, на которой сдают: по ней и показываем день вместо
-      // безликого «конца второй недели».
-      lesson: at ? at.lesson : null,
-      exactDay: !!(at && at.exact),
-      subject: d.name,
-      title: titleOf(e),
-      due,
-      left,
-      bucket: bucketOf(left),
-    });
-  }));
+  const all = flatten(data.tasks, sched, start, settings.weekShift);
 
   // ОРИОКС отдаёт вперемешку с заданиями формальности: посещаемость,
   // «порядок НБС», семестровый план. Сдавать там нечего, а строк они
@@ -365,8 +389,7 @@ export default async function tasksScreen() {
     .sort((a, b) => (a.left ?? 9999) - (b.left ?? 9999));
   const formal = all.filter(t => !t.task && !t.session);
 
-  const pending = tasks.filter(t => !t.done)
-    .sort((a, b) => (a.left ?? 9999) - (b.left ?? 9999));
+  const pending = pendingOf(all);
   const done = tasks.filter(t => t.done);
 
   const soon = pending.filter(t => t.left !== null && t.left <= 7).length;
