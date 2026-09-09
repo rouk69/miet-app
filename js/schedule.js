@@ -103,23 +103,54 @@ function normalize(json) {
   return { semestr: json.Semestr || '', times, lessons };
 }
 
-/** Загружает расписание группы. force=true обходит кеш. */
+/** Сохранённая копия расписания: {at, data} или null. */
+function saved(group) {
+  try {
+    const hit = JSON.parse(localStorage.getItem(CACHE_KEY(group)) || 'null');
+    return hit && hit.data ? hit : null;
+  } catch {
+    return null;                       // копия побилась — считаем, что её нет
+  }
+}
+
+/**
+ * Загружает расписание группы. force=true обходит свежую копию.
+ *
+ * Отказ сети не должен превращаться в «данных нет»: у человека почти
+ * всегда лежит вчерашняя копия, а расписание меняется раз в семестр.
+ * Поэтому порядок такой: свежая копия → сеть → любая копия, даже
+ * просроченная (с пометкой `stale`, экран честно скажет, что показывает
+ * сохранённое). Ошибка остаётся только для случая, когда показывать
+ * действительно нечего.
+ */
 export async function fetchSchedule(group, { force = false } = {}) {
   const key = CACHE_KEY(group);
-  if (!force) {
-    try {
-      const hit = JSON.parse(localStorage.getItem(key) || 'null');
-      if (hit && Date.now() - hit.at < TTL) return { ...hit.data, cached: true };
-    } catch { /* битый кеш — просто перезапросим */ }
+  const copy = saved(group);
+  if (!force && copy && Date.now() - copy.at < TTL) {
+    return { ...copy.data, cached: true };
   }
+
   const url = `${API}?group=${encodeURIComponent(group)}`;
-  const res = await fetch(url, { cache: 'no-cache' });
-  if (!res.ok) throw new Error(`Расписание недоступно (${res.status})`);
-  const data = normalize(await res.json());
   try {
-    localStorage.setItem(key, JSON.stringify({ at: Date.now(), data }));
-  } catch { /* переполнение хранилища — работаем без кеша */ }
-  return { ...data, cached: false };
+    const res = await fetch(url, { cache: 'no-cache' });
+    if (!res.ok) throw new Error(`miet.ru ответил ${res.status}`);
+    const data = normalize(await res.json());
+    try {
+      localStorage.setItem(key, JSON.stringify({ at: Date.now(), data }));
+    } catch { /* переполнение хранилища — работаем без копии */ }
+    return { ...data, cached: false };
+  } catch (err) {
+    if (copy) {
+      console.warn('расписание не обновилось, показываю сохранённое:',
+        err.message);
+      return { ...copy.data, cached: true, stale: true, why: err.message };
+    }
+    // Показывать нечего. Сообщение делаем человеческим: «Failed to
+    // fetch» ничего не объясняет тому, кто просто открыл приложение.
+    throw new Error(navigator.onLine === false
+      ? 'Нет сети — расписание берётся с miet.ru'
+      : `Сайт МИЭТ не ответил (${err.message})`);
+  }
 }
 
 /** Все записи расписания на конкретный день конкретной недели цикла. */

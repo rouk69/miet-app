@@ -170,6 +170,29 @@ check("без метки адрес всё равно рабочий",
       kbs.webapp_link("https://example.com/app") is not None
       and kbs.webapp_link(None) is None)
 
+# Сайт института падает и чинится сам, а расписание меняется раз в
+# семестр: отдать сохранённое честнее, чем сказать «недоступно» тому,
+# кто спросил про ближайшую пару.
+class _Dead:
+    def get(self, *a, **k):
+        raise OSError("сеть отключена")
+
+
+_alive = api._session
+try:
+    api._session = _Dead()
+    saved_sched = api.fetch_schedule("ПИН-31", force=True)
+    check("при отказе miet.ru отдаётся сохранённое",
+          len(saved_sched.get("lessons") or []) > 0, len(saved_sched or {}))
+    fell = False
+    try:
+        api.fetch_schedule("НЕТ-ТАКОЙ-ГРУППЫ-99", force=True)
+    except Exception:                                   # noqa: BLE001
+        fell = True
+    check("а без сохранённого ошибка честная", fell)
+finally:
+    api._session = _alive
+
 # Метку клиента бот теперь узнаёт у самого приложения: иначе каждая
 # правка на Pages требовала перезапуска контейнера — то есть пары минут
 # молчания бота из-за правки цвета кнопки.

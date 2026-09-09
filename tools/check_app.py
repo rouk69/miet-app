@@ -264,6 +264,14 @@ CASES = [
      "String(lessonDay(SCHED, new Date(2026, 8, 1),"
      " { week: 2, type: 'Лабораторная работа' }, 'Философия', 0))", "null"),
 
+    # Отказ сети не должен превращаться в «данных нет»: расписание
+    # меняется раз в семестр, и вчерашняя копия — то же расписание.
+    ("копия отдаётся, когда сеть молчит", "__stale.lessons.length", "2"),
+    ("и помечена как сохранённая", "String(__stale.stale)", "true"),
+    ("без копии — человеческое сообщение",
+     "String(__failed.indexOf('miet.ru') > 0 || __failed.indexOf('МИЭТ') > 0)",
+     "true"),
+
     # День без пар — обычное дело: у ИКТ-12 такой четверг всегда. Он
     # обязан выглядеть свободным днём, а не отказом загрузки.
     ("пустой день отдаёт пустой список",
@@ -338,6 +346,19 @@ var mediaSize = _f.mediaSize, mediaTag = _f.mediaTag;
 var _sc = __mod['js/schedule.js'];
 var slotsOf = _sc.slotsOf, dayCounts = _sc.dayCounts, nowState = _sc.nowState;
 
+// Сеть отвалилась, а копия в хранилище есть: экран обязан показать её,
+// а не ошибку. Второй случай — копии нет, и тогда сообщение должно
+// называть виновника, а не «Failed to fetch».
+var __stale = null, __failed = '';
+(function () {
+  var copy = { at: 0, data: { semestr: 'Осенний семестр 2026/2027', times: [],
+    lessons: [{ week: 0, day: 1 }, { week: 0, day: 2 }] } };
+  localStorage.setItem('miet-sched:Г-1', JSON.stringify(copy));
+  fetch = function () { return Promise.reject(new Error('нет сети')); };
+  _sc.fetchSchedule('Г-1').then(function (s) { __stale = s; });
+  _sc.fetchSchedule('Г-2').catch(function (e) { __failed = e.message; });
+})();
+
 // Расписание группы, у которой в четверг пар нет вовсе (так живёт
 // ИКТ-12): пустой день обязан оставаться пустым днём, а не поломкой.
 var NO_THURSDAY = { semestr: 'Осенний семестр 2026/2027', times: [], lessons: [
@@ -374,11 +395,28 @@ var TODO = pendingOf(PLAN);
 
 
 def check_logic(bundle: str) -> int:
-    """Гоняет функции экрана заданий на живом движке."""
+    """
+    Гоняет чистые функции клиента на живом движке.
+
+    Контекст один на все проверки, а не по одному на каждую: часть
+    подготовки — обещания (загрузка расписания с подменённой сетью), а
+    они разрешаются не сразу. Между подготовкой и проверками очередь
+    прокручивается вхолостую — иначе обещание так и осталось бы
+    висящим, а проверка сравнивала бы пустоту.
+    """
+    try:
+        js = dukpy.JSInterpreter()
+        js.evaljs(bundle + PRELUDE + "\n'готово';")
+        for _ in range(50):
+            js.evaljs("0;")
+    except Exception as e:                              # noqa: BLE001
+        print(f"  ✗ подготовка не выполнилась: {str(e)[:300]}")
+        return 1
+
     bad = 0
     for name, expr, want in CASES:
         try:
-            got = dukpy.evaljs(bundle + PRELUDE + "\nString(" + expr + ");")
+            got = js.evaljs("String(" + expr + ");")
         except Exception as e:                          # noqa: BLE001
             print(f"  ✗ {name}: {str(e)[:200]}")
             bad += 1
@@ -387,9 +425,9 @@ def check_logic(bundle: str) -> int:
             print(f"  ✗ {name}: получили {got!r}, ждали {want!r}")
             bad += 1
     if bad:
-        print(f"логика экрана заданий: провалено {bad} из {len(CASES)}")
+        print(f"логика клиента: провалено {bad} из {len(CASES)}")
         return 1
-    print(f"логика экрана заданий: {len(CASES)} проверок сошлись")
+    print(f"логика клиента: {len(CASES)} проверок сошлись")
     return 0
 
 

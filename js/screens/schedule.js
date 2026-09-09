@@ -100,8 +100,12 @@ export default async function scheduleScreen(params = {}) {
       subtitle: settings.group,
       body: `<div class="card">
         ${artState('offline', 'Расписание не загрузилось', err.message)}
+        <button class="btn-primary" id="retry" style="margin:0 20px 20px">
+          Попробовать снова
+        </button>
       </div>`,
     });
+    node.querySelector('#retry').addEventListener('click', () => refresh());
     return node;
   }
 
@@ -122,11 +126,23 @@ export default async function scheduleScreen(params = {}) {
           </button>`).join('')}
       </div>
       <div class="week-strip" id="days"></div>
+      <div id="stale"></div>
       <div id="list" class="stack" style="margin-top:16px"></div>`,
   });
 
   const daysEl = node.querySelector('#days');
   const listEl = node.querySelector('#list');
+  const staleEl = node.querySelector('#stale');
+
+  /** Честная плашка: показываем сохранённое, потому что сайт молчит. */
+  function drawStale() {
+    staleEl.innerHTML = sched.stale
+      ? `<div class="warn-note" style="margin-top:12px">
+           ${icon('info', 16)}
+           Показываю сохранённое расписание: ${esc(sched.why || 'сайт МИЭТ не ответил')}.
+         </div>`
+      : '';
+  }
 
   function drawDays() {
     const counts = dayCounts(sched, week);
@@ -170,6 +186,7 @@ export default async function scheduleScreen(params = {}) {
 
   drawDays();
   drawList();
+  drawStale();
 
   node.querySelector('#weeks').addEventListener('click', e => {
     const b = e.target.closest('[data-week]');
@@ -203,7 +220,9 @@ export default async function scheduleScreen(params = {}) {
       sched = await fetchSchedule(settings.group, { force: true });
       drawDays();
       drawList();
-      toast('Расписание обновлено');
+      drawStale();
+      toast(sched.stale ? 'Сайт МИЭТ молчит — расписание прежнее'
+        : 'Расписание обновлено');
     } catch (err) {
       toast(err.message);
     }

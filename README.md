@@ -63,14 +63,14 @@ python -m bot.setup_bot
 нужна. В inline-сообщениях Telegram запрещает кнопки `web_app`, поэтому
 кнопка приложения там не показывается — только в личке.
 
-**Проверка без Telegram** — четыре сюиты, 561 проверка и 49 проверок клиента:
+**Проверка без Telegram** — четыре сюиты, 563 проверки и 52 проверки клиента:
 
 ```bash
 python tools/check_modules.py  # клиент: импорты, имена, иконки, классы
 python tools/check_app.py      # клиент: выполнение модулей в движке JS
 python tools/check_contrast.py # клиент: читаемость палитры
 python tools/stamp.py          # клиент: метки версий перед выкладкой
-python -m bot.selftest     # 58 — единицы кода и живой API miet.ru
+python -m bot.selftest     # 60 — единицы кода и живой API miet.ru
 python -m bot.test_flows   # 127 — сценарии целиком
 python -m bot.test_admin   # 235 — права, справочник, доска, ОРИОКС
 python -m bot.test_posts   # 141 — лента, комментарии, режимы
@@ -391,7 +391,7 @@ bot/api.py            HTTP-API мини-приложения и админки
 bot/auth.py           проверка подписи initData
 bot/emoji.py          премиум-иконки с запасными эмодзи
 bot/rich.py           карточки rich-разметкой: таблицы, кнопки, выбор группы
-bot/selftest.py       58 проверок: единицы кода и живой API
+bot/selftest.py       60 проверок: единицы кода и живой API
 bot/test_flows.py     111 проверок: сценарии через настоящие обработчики
 bot/test_admin.py     235 проверок: права, справочник, доска, ОРИОКС
 bot/test_posts.py     141 проверка: лента, комментарии, режимы
