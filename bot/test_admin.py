@@ -1042,6 +1042,24 @@ check("показ памяти не трогает", orioks_watch.seen_ids(777) 
 orioks.forget(777)
 SENT.clear()
 
+# Сухой прогон ничего не помнит: иначе разведка «а что он сейчас видит»
+# съедала бы настоящее уведомление — объявление помечено показанным, а
+# показать его никто не показал.
+api.handle("POST", "/api/orioks/link", {},
+           {"login": "stud", "password": "secret"}, USER)
+orioks_watch.forget(42)
+FEED["items"] = [news(51, "Первое")]
+orioks_watch.check_user(42)
+FEED["items"] = [news(52, "Второе")] + FEED["items"]
+SENT.clear()
+dry = orioks_watch.check_user(42, send=False)
+check("сухой прогон показывает новое", len(dry) == 1 and not SENT, (dry, SENT))
+check("и ничего не запоминает",
+      orioks_watch.seen_ids(42) == {"-", "51"}, orioks_watch.seen_ids(42))
+check("после него уведомление доходит",
+      len(orioks_watch.check_user(42)) == 1 and len(SENT) == 1, SENT)
+SENT.clear()
+
 # Разведка сторожа — только владельцу и только про него самого:
 # чужие объявления не сторожит никто, и посмотреть на них тоже нельзя.
 s_, r_ = api.handle("GET", "/api/admin/orioks-watch", {}, {}, USER)
