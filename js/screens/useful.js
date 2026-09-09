@@ -89,7 +89,7 @@ const SECTIONS = [
 
 const tile = t => `
   <button class="tile-card tone-${t.tone}" data-open="${t.id}">
-    <span class="tile-ico">${icon(t.ico, 20)}</span>
+    <span class="tile-ico">${icon(t.ico, 22)}</span>
     <span class="tile-name">${esc(t.title)}</span>
     <span class="tile-note">${esc(typeof t.sub === 'function' ? t.sub(data) : t.sub)}</span>
   </button>`;
@@ -107,7 +107,7 @@ export default async function usefulScreen() {
       <div class="section-head"><div class="section-title">Управление</div></div>
       <div class="tile-grid">
         <button class="tile-card tone-blue" data-open="admin">
-          <span class="tile-ico">${icon('shield', 20)}</span>
+          <span class="tile-ico">${icon('shield', 22)}</span>
           <span class="tile-name">Админка</span>
           <span class="tile-note">Статистика и юзеры</span>
         </button>
