@@ -71,7 +71,14 @@ window.alert = function () {};
 var history = { pushState: function () {}, back: function () {} };
 var location = { search: '', reload: function () {} };
 var navigator = { userAgent: 'test' };
-var setTimeout = function (f) { return 0; };
+// Таймер выполняет обещанное сразу: движку некуда ждать, а проверкам
+// нужен результат. Задержки в коде (подстраховочный запрос к miet.ru,
+// откладывание отрисовки) от этого не ломаются — они про порядок, а не
+// про часы.
+var setTimeout = function (f) {
+  if (typeof f === 'function') { try { f(); } catch (e) {} }
+  return 0;
+};
 var clearTimeout = function () {};
 var requestAnimationFrame = function (f) { return 0; };
 var IntersectionObserver = function () {
@@ -201,6 +208,13 @@ CASES = [
     ("меньше часа — только минуты", "humanGap(45)", "45 мин"),
     ("нулевое окно не называется никак", "humanGap(0)", ""),
 
+    # Расписание берётся у того, кто ответил: бот быстрее и легче, но
+    # молчащий бот не должен оставлять человека без пар.
+    ("живы оба — берём ответ бота", "__botWon.semestr", "от бота"),
+    ("бот молчит — берём с сайта", "__siteWon.semestr", "с сайта"),
+    ("молчат оба — честная ошибка",
+     "String(__bothDead.indexOf('Расписание не пришло') === 0)", "true"),
+
     # Отказ сети не должен превращаться в «данных нет»: расписание
     # меняется раз в семестр, и вчерашняя копия — то же расписание.
     ("копия отдаётся, когда сеть молчит", "__stale.lessons.length", "2"),
@@ -293,17 +307,54 @@ var WITH_GAP = [
 ];
 var slotsOf = _sc.slotsOf, dayCounts = _sc.dayCounts, nowState = _sc.nowState;
 
-// Сеть отвалилась, а копия в хранилище есть: экран обязан показать её,
-// а не ошибку. Второй случай — копии нет, и тогда сообщение должно
-// называть виновника, а не «Failed to fetch».
-var __stale = null, __failed = '';
+// Два источника наперегонки: бот и сам сайт института. Проверяем, что
+// берётся ответивший, а молчание одного не оставляет человека без
+// расписания.
+//
+// Заглушка сети одна на все случаи и решает по имени группы: обещания
+// разворачиваются не сразу, и три подменённых по очереди `fetch`
+// перепутались бы между собой.
+var __botWon = null, __siteWon = null, __bothDead = '', __stale = null,
+    __failed = '';
 (function () {
+  var BOT = { ready: true, semestr: 'от бота', times: [], lessons: [{ day: 1 }] };
+  var SITE = { Semestr: 'с сайта', Times: [], Data: [] };
+  var ok = function (body) {
+    return Promise.resolve({ ok: true, status: 200,
+      json: function () { return Promise.resolve(body); } });
+  };
+  var no = function (why) { return Promise.reject(new Error(why)); };
+
+  fetch = function (url) {
+    var u = String(url);
+    var bot = u.indexOf('/api/schedule') >= 0;
+    if (u.indexOf('%D0%A0-1') >= 0 || u.indexOf('Р-1') >= 0) {
+      return ok(bot ? BOT : SITE);            // живы оба
+    }
+    if (u.indexOf('%D0%A0-2') >= 0 || u.indexOf('Р-2') >= 0) {
+      return bot ? no('бот молчит') : ok(SITE);  // бот молчит
+    }
+    return no('нет сети');                    // всё остальное — тишина
+  };
+
   var copy = { at: 0, data: { semestr: 'Осенний семестр 2026/2027', times: [],
     lessons: [{ week: 0, day: 1 }, { week: 0, day: 2 }] } };
   localStorage.setItem('miet-sched:Г-1', JSON.stringify(copy));
-  fetch = function () { return Promise.reject(new Error('нет сети')); };
-  _sc.fetchSchedule('Г-1').then(function (s) { __stale = s; });
-  _sc.fetchSchedule('Г-2').catch(function (e) { __failed = e.message; });
+
+  var keep = function (put) {
+    return function (v) { put(v); };
+  };
+  _sc.fetchSchedule('Р-1', { force: true }).then(
+    keep(function (v) { __botWon = v; }), function () {});
+  _sc.fetchSchedule('Р-2', { force: true }).then(
+    keep(function (v) { __siteWon = v; }), function () {});
+  _sc.fetchSchedule('Р-3', { force: true }).then(
+    function () {}, function (e) { __bothDead = e.message; });
+  // Копия есть — её и покажем, вместо ошибки.
+  _sc.fetchSchedule('Г-1').then(
+    keep(function (v) { __stale = v; }), function () {});
+  _sc.fetchSchedule('Г-2').then(
+    function () {}, function (e) { __failed = e.message; });
 })();
 
 // Расписание группы, у которой в четверг пар нет вовсе (так живёт
