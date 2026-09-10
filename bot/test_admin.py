@@ -1060,6 +1060,39 @@ check("после него уведомление доходит",
       len(orioks_watch.check_user(42)) == 1 and len(SENT) == 1, SENT)
 SENT.clear()
 
+# Расписание через бота: приложение ходит сюда, а не на miet.ru, —
+# сайт института отвечает не всем и не всегда, а у бота есть кеш.
+import types as _types                                            # noqa: E402
+from . import schedule_api as _sched                              # noqa: E402
+
+_real_fetch = _sched.fetch_schedule
+_sched.fetch_schedule = lambda group, force=False: {
+    "semestr": "Осенний семестр 2026/2027", "times": [],
+    "lessons": [{"day": 1, "week": 0, "pair": 1, "from": "09:00", "to": "10:20",
+                 "subject": "Физика", "kind": "Лекция", "kindCls": "lek",
+                 "flags": [], "teacher": "Иванов И.И.",
+                 "teacherShort": "Иванов И.И.", "room": "1201",
+                 "group": group}]}
+s_, r_ = api.handle("GET", "/api/schedule", {"group": ["ПИН-31"]}, {}, USER)
+check("расписание отдаётся приложению",
+      s_ == 200 and r_.get("ready") and len(r_["lessons"]) == 1, (s_, r_))
+check("в записи есть всё, что рисует клиент",
+      r_["lessons"][0].get("teacherShort") and r_["lessons"][0].get("group"),
+      r_["lessons"][0])
+s_, r_ = api.handle("GET", "/api/schedule", {}, {}, USER)
+check("без группы расписание не отдаётся", s_ == 400, (s_, r_))
+
+
+def _boom(group, force=False):
+    raise RuntimeError("miet.ru молчит")
+
+
+_sched.fetch_schedule = _boom
+s_, r_ = api.handle("GET", "/api/schedule", {"group": ["ПИН-31"]}, {}, USER)
+check("отказ института честно передан клиенту", s_ == 502, (s_, r_))
+_sched.fetch_schedule = _real_fetch
+del _types
+
 # Предпросмотр карточки дня: им проверяют, что бот рисует на бою.
 s_, r_ = api.handle("GET", "/api/admin/day-preview", {"group": ["ПИН-31"]},
                     {}, USER)

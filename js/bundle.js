@@ -1,5 +1,5 @@
 /* Собрано tools/stamp.py из js/*.js — не правьте здесь.
-   Версия a34c6bba. Исходники лежат рядом и остаются модулями. */
+   Версия 417bc129. Исходники лежат рядом и остаются модулями. */
 var __mod = {};
 /* ==== js\config.js ==== */
 __mod['js/config.js'] = (function () {
@@ -34,7 +34,7 @@ const API_BASE = (stored() || DEFAULT_BASE).replace(/\/+$/, '');
 // свежую ли страницу открыл человек: Telegram кеширует мини-приложения
 // по своим правилам, и «у меня ничего не поменялось» разбирается
 // сравнением этой строки, а не на слово.
-const BUILD = 'a34c6bba';
+const BUILD = '417bc129';
 
 return {'API_BASE': API_BASE, 'BUILD': BUILD};
 })();
@@ -193,9 +193,19 @@ return {'icon': icon, 'hasIcon': hasIcon, 'iconNames': iconNames};
 
 /* ==== js\schedule.js ==== */
 __mod['js/schedule.js'] = (function () {
-// Расписание. Данные берутся живьём с miet.ru — эндпоинт отдаёт
-// Access-Control-Allow-Origin: *, поэтому запрос идёт прямо из браузера,
-// без своего бэкенда. Ответ кладём в localStorage на сутки.
+// Расписание — живое, но добывается тремя путями подряд.
+//
+// Сначала своя копия в телефоне (сутки), потом сервер бота: у него есть
+// кеш, он ближе к институту и отвечает мгновенно. Только если и он
+// молчит — идём на miet.ru сами (он отдаёт Access-Control-Allow-Origin,
+// поэтому запрос из браузера возможен), а совсем в конце достаём
+// сохранённое, даже просроченное.
+//
+// Порядок именно такой, потому что сайт института отвечает не всем и не
+// всегда: с части мобильных сетей он недоступен вовсе, и это выглядело
+// как ошибка приложения.
+
+var API_BASE = __mod['js/config.js']['API_BASE'];
 
 const API = 'https://miet.ru/schedule/data';
 const CACHE_KEY = g => `miet-sched:${g}`;
@@ -309,14 +319,51 @@ function saved(group) {
 }
 
 /**
+ * Расписание с сервера бота: у него есть кеш и он ближе к институту.
+ *
+ * Пустая строка вместо адреса означает, что серверная часть выключена
+ * (обычный браузер вне Telegram) — тогда этот путь просто пропускается.
+ */
+async function fromBot(group) {
+  if (!API_BASE) return null;
+  const stop = new AbortController();
+  const bell = setTimeout(() => stop.abort(), 8000);
+  try {
+    const res = await fetch(
+      `${API_BASE}/api/schedule?group=${encodeURIComponent(group)}`,
+      { signal: stop.signal, headers: initDataHeader() });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data && data.ready && Array.isArray(data.lessons) ? data : null;
+  } catch {
+    return null;                        // молчит — пойдём на miet.ru сами
+  } finally {
+    clearTimeout(bell);
+  }
+}
+
+/** Заголовок с подписью Telegram, если мы внутри него. */
+function initDataHeader() {
+  const raw = window.Telegram?.WebApp?.initData || '';
+  return raw ? { 'X-Init-Data': raw } : {};
+}
+
+/** Расписание прямо с miet.ru — как ходило приложение до сих пор. */
+async function fromSite(group) {
+  const res = await fetch(`${API}?group=${encodeURIComponent(group)}`,
+    { cache: 'no-cache' });
+  if (!res.ok) throw new Error(`miet.ru ответил ${res.status}`);
+  return normalize(await res.json());
+}
+
+/**
  * Загружает расписание группы. force=true обходит свежую копию.
  *
- * Отказ сети не должен превращаться в «данных нет»: у человека почти
- * всегда лежит вчерашняя копия, а расписание меняется раз в семестр.
- * Поэтому порядок такой: свежая копия → сеть → любая копия, даже
- * просроченная (с пометкой `stale`, экран честно скажет, что показывает
- * сохранённое). Ошибка остаётся только для случая, когда показывать
- * действительно нечего.
+ * Порядок такой: свежая копия в телефоне → сервер бота (у него кеш и он
+ * отвечает мгновенно) → miet.ru напрямую → любая копия, даже
+ * просроченная. Сайт института отвечает не всем и не всегда: с части
+ * мобильных сетей он недоступен вовсе, и раньше это означало ошибку
+ * вместо расписания.
  */
 async function fetchSchedule(group, { force = false } = {}) {
   const key = CACHE_KEY(group);
@@ -325,27 +372,34 @@ async function fetchSchedule(group, { force = false } = {}) {
     return { ...copy.data, cached: true };
   }
 
-  const url = `${API}?group=${encodeURIComponent(group)}`;
-  try {
-    const res = await fetch(url, { cache: 'no-cache' });
-    if (!res.ok) throw new Error(`miet.ru ответил ${res.status}`);
-    const data = normalize(await res.json());
+  let data = await fromBot(group);
+  let err = null;
+  if (!data) {
+    try {
+      data = await fromSite(group);
+    } catch (e) {
+      err = e;
+    }
+  }
+
+  if (data) {
     try {
       localStorage.setItem(key, JSON.stringify({ at: Date.now(), data }));
     } catch { /* переполнение хранилища — работаем без копии */ }
     return { ...data, cached: false };
-  } catch (err) {
-    if (copy) {
-      console.warn('расписание не обновилось, показываю сохранённое:',
-        err.message);
-      return { ...copy.data, cached: true, stale: true, why: err.message };
-    }
-    // Показывать нечего. Сообщение делаем человеческим: «Failed to
-    // fetch» ничего не объясняет тому, кто просто открыл приложение.
-    throw new Error(navigator.onLine === false
-      ? 'Нет сети — расписание берётся с miet.ru'
-      : `Сайт МИЭТ не ответил (${err.message})`);
   }
+
+  if (copy) {
+    console.warn('расписание не обновилось, показываю сохранённое:',
+      err && err.message);
+    return { ...copy.data, cached: true, stale: true, why: err && err.message };
+  }
+
+  // Показывать нечего. Сообщение делаем человеческим: «Failed to fetch»
+  // ничего не объясняет тому, кто просто открыл приложение.
+  throw new Error(navigator.onLine === false
+    ? 'Нет сети — расписание берётся с miet.ru'
+    : `Расписание не пришло (${(err && err.message) || 'сервер молчит'})`);
 }
 
 /** Все записи расписания на конкретный день конкретной недели цикла. */

@@ -102,6 +102,23 @@ def handle(method: str, path: str, query: dict, body: dict, init_data: str):
     user, me = who
     uid = int(user["id"])
 
+    if path == "/api/schedule" and method == "GET":
+        # Приложение ходит за расписанием сюда, а не на miet.ru напрямую.
+        # Причин две. Сайт института отвечает не всем и не всегда — с
+        # части мобильных сетей он просто недоступен, и человек видел
+        # ошибку на пустом месте. И у бота есть кеш: он отдаёт то же
+        # расписание мгновенно, а сам ходит за свежим в фоне.
+        group = (query.get("group", [""])[0] or "").strip()
+        if not group:
+            return 400, {"error": "Нужна группа"}
+        try:
+            data = schedule.fetch_schedule(group)
+        except Exception as e:                          # noqa: BLE001
+            # Приложение переживёт: у него есть свой запасной путь —
+            # сходить на miet.ru самому и своя вчерашняя копия.
+            return 502, {"error": f"Расписание недоступно: {e}"}
+        return 200, {"ready": True, **data}
+
     if path == "/api/me" and method == "GET":
         return 200, _me(user, me)
 
