@@ -210,8 +210,12 @@ def _normalize(js: dict) -> dict:
             "kindCls": s["cls"],
             "emoji": s["emoji"],
             "flags": s["flags"],
+            # Полное имя показывает бот, короткое — приложение: в
+            # карточке «сейчас идёт» на длинное просто нет места.
             "teacher": cls.get("Teacher") or cls.get("TeacherFull") or "",
+            "teacherShort": cls.get("Teacher") or "",
             "room": (d.get("Room") or {}).get("Name") or "",
+            "group": (d.get("Group") or {}).get("Name") or "",
         })
     lessons.sort(key=lambda x: (x["day"] or 0, x["pair"] or 0))
     return {"semestr": js.get("Semestr", ""), "times": times, "lessons": lessons}
