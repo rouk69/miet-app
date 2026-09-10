@@ -32,6 +32,7 @@ from urllib.parse import parse_qs, urlparse
 from . import analytics, appconf, auth, directory, help_board, notify
 from . import orioks, orioks_watch, orioks_web, posts
 from . import paths, render, storage
+from . import webapp as webapp_watch
 from . import rich
 from . import schedule_api as schedule
 from . import media as mediastore
@@ -91,10 +92,12 @@ def handle(method: str, path: str, query: dict, body: dict, init_data: str):
     Возвращает (код ответа, объект для JSON).
     """
     if path == "/api/health":
-        # Заодно версия клиента, которую знает бот: по ней видно, дошла
-        # ли выкладка до контейнера, — иначе это выясняется только по
-        # адресу кнопки меню, то есть через Telegram.
-        return 200, {"ok": True, "webapp": paths.webapp_version()}
+        # Версия клиента, которую бот считает текущей: её он и
+        # подставляет в адрес кнопки меню. Рядом — та, что лежит у него
+        # на диске: они расходятся, когда клиент выложили без выкладки
+        # бота, и это нормальный, ожидаемый случай, а не поломка.
+        return 200, {"ok": True, "webapp": webapp_watch.version(),
+                     "webapp_on_disk": paths.webapp_version()}
 
     who = _actor(init_data)
     if not who:
