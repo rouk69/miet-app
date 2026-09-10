@@ -37,7 +37,7 @@
   <!-- Приложение собрано в один файл (tools/stamp.py): те же
        модули, но одним походом по сети вместо тридцати двух.
        Исходники лежат рядом и остаются модулями — правят их. -->
-  <link rel="modulepreload" href="js/bundle.js?v=310d3c5c">
+  <link rel="modulepreload" href="js/bundle.js?v=6826661c">
   <!-- /карта модулей -->
 </head>
 <body>
@@ -52,7 +52,7 @@
   <div id="layer"></div>
 
   <!-- точка входа -->
-  <script type="module" src="js/bundle.js?v=310d3c5c"></script>
+  <script type="module" src="js/bundle.js?v=6826661c"></script>
   <!-- Сборка не выполнилась — подключаем исходные модули:
        белый экран хуже лишнего запроса. -->
   <script>
@@ -60,7 +60,7 @@
       if (window.__mietBooted) return;
       var s = document.createElement('script');
       s.type = 'module';
-      s.src = 'js/app.js?v=310d3c5c';
+      s.src = 'js/app.js?v=6826661c';
       document.body.appendChild(s);
     }, 2000);
   </script>
