@@ -9,7 +9,7 @@ import { go, switchTab } from '../router.js';
 import { tgUser, openLink } from '../tg.js';
 import { get, canTalk } from '../api.js';
 import { screen, pickGroup, newsRow, humanDate, iconBtn } from './common.js';
-import { lessonRow } from './schedule.js';
+import { dayRows } from './schedule.js';
 import { feedRow } from './feed.js';
 import { flatten, pendingOf, subjectLook } from './tasks.js';
 import { art, artState } from '../art.js';
@@ -341,7 +341,7 @@ async function renderNow(slot, now) {
       <button class="section-link" data-go="schedule">Вся неделя</button>
     </div>
     ${today.length
-      ? `<div class="stack">${today.map(l => lessonRow(l, now)).join('')}</div>`
+      ? `<div class="stack">${dayRows(today, now)}</div>`
       : `<div class="card">${day > 6
         ? artState('rest', 'Воскресенье — выходной',
           'Расписание всей недели цикла — на своей вкладке')

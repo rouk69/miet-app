@@ -6,7 +6,7 @@ import { art, artState } from '../art.js';
 import { settings, save } from '../store.js';
 import {
   fetchSchedule, weekOfCycle, slotsOf, dayCounts, mondayOf, shortSemestr,
-  DAY_SHORT, DAY_NAMES,
+  gapsOf, humanGap, DAY_SHORT, DAY_NAMES,
 } from '../schedule.js';
 import { refresh } from '../router.js';
 import { haptic, hapticSelect } from '../tg.js';
@@ -27,6 +27,33 @@ const whereLine = e => `
 // колба, практика и семинар — карандаш: это не украшение, а второй
 // признак рядом с цветом, потому что цвет различают не все.
 const KIND_ICONS = { lek: 'board', lab: 'flask', pr: 'pencil' };
+
+/**
+ * Полоска окна между парами.
+ *
+ * Стоит между строками, а не внутри: окно — это не занятие, и делать
+ * из него такую же карточку значило бы прятать его среди пар. Здесь
+ * важно ровно две вещи — сколько ждать и до которого часа.
+ */
+export const gapRow = g => `
+  <div class="gap-row">
+    <span class="gap-line"></span>
+    <span class="gap-text">
+      ${icon('clock', 13)}
+      Окно ${esc(humanGap(g.minutes) || `${g.pairs} пары`)}
+      ${g.from && g.to ? `· ${esc(g.from)}–${esc(g.to)}` : ''}
+    </span>
+    <span class="gap-line"></span>
+  </div>`;
+
+/** Пары дня вперемешку с окнами — в том порядке, в каком их проживают. */
+export function dayRows(slots, now = null) {
+  const gaps = gapsOf(slots);
+  return slots.map((l, i) => {
+    const after = gaps.find(g => g.after === l.pair);
+    return lessonRow(l, now) + (after && i + 1 < slots.length ? gapRow(after) : '');
+  }).join('');
+}
 
 export function lessonRow(l, now = null, showState = true) {
   const entries = l.entries || [l];
@@ -173,7 +200,7 @@ export default async function scheduleScreen(params = {}) {
         <span class="muted" style="font-size:14px;font-weight:600">${shortDate(mon)}</span>
       </div>
       ${items.length
-        ? items.map(l => lessonRow(l, isToday ? now : null)).join('')
+        ? dayRows(items, isToday ? now : null)
         : `<div class="card">${day === 6
           ? artState('rest', 'Суббота свободна', 'Пар в этот день нет')
           : artState('free', 'В этот день пар нет',

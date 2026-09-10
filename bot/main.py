@@ -1001,6 +1001,13 @@ def main() -> None:
     if not web.admin_ids():
         log.warning("ADMIN_IDS не задан — админка не откроется никому")
 
+    # Кеш расписания после перезапуска пуст, и первый вопрос каждого
+    # упирается в сеть. Прогреваем самые ходовые группы — это секунды.
+    try:
+        api.warm_up(storage.popular_groups())
+    except Exception:                                   # noqa: BLE001
+        log.exception("прогрев расписания не запустился")
+
     # Новости с miet.ru бот тянет сам: data/app.json обновляется только
     # при пересборке руками, а лента должна пополняться без выкладок.
     news_feed.run_in_background()

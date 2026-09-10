@@ -72,6 +72,7 @@ def lesson_rows(slots: list[dict], live: dict | None, custom: bool) -> str:
     у нескольких преподавателей в одно время, и отдельными строками они
     читались бы как лишние пары.
     """
+    gaps = {g["after"]: g for g in api.gaps_of(slots)}
     out = []
     for s in slots:
         num = em.pair_num(s.get("pair"), custom)
@@ -107,6 +108,17 @@ def lesson_rows(slots: list[dict], live: dict | None, custom: bool) -> str:
         out.append(
             f'<tr><td align="center" valign="middle">{left}</td>'
             f'<td valign="middle">{right}</td></tr>')
+        gap = gaps.get(s.get("pair"))
+        if gap:
+            # Окно — своей строкой: студент планирует день промежутками,
+            # а в столбце пар оно видно только дыркой в номерах.
+            span = render.human_gap(gap.get("minutes")) or render.plural(
+                gap.get("pairs") or 0, "пара", "пары", "пар")
+            when = (f'{esc(gap["from"])}<br><i>{esc(gap["to"])}</i>'
+                    if gap.get("from") and gap.get("to") else "")
+            out.append(f'<tr><td>{when}</td>'
+                       f'<td>{em.ico("time", custom)} <i>окно · {esc(span)}</i>'
+                       f'</td></tr>')
     return "".join(out)
 
 

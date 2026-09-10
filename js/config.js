@@ -29,4 +29,4 @@ export const API_BASE = (stored() || DEFAULT_BASE).replace(/\/+$/, '');
 // свежую ли страницу открыл человек: Telegram кеширует мини-приложения
 // по своим правилам, и «у меня ничего не поменялось» разбирается
 // сравнением этой строки, а не на слово.
-export const BUILD = 'd67ceb3a';
+export const BUILD = '7fdff7d0';
