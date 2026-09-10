@@ -217,8 +217,23 @@ function firstOk(promises) {
  * мобильных сетей он недоступен вовсе, и раньше это означало ошибку
  * вместо расписания.
  */
-export async function fetchSchedule(group, { force = false } = {}) {
-  const key = CACHE_KEY(group);
+// Запросы, которые уже в пути: группа → обещание. Нужны, потому что
+// расписание просят двое сразу — приложение при старте (чтобы не ждать
+// справочник) и экран, который его рисует. Без этого выходило бы два
+// одинаковых запроса и две записи в хранилище.
+const inFlight = new Map();
+
+export function fetchSchedule(group, { force = false } = {}) {
+  const key = `${group}|${force ? 'force' : ''}`;
+  const going = inFlight.get(key);
+  if (going) return going;
+  const started = load(group, force).finally(() => inFlight.delete(key));
+  inFlight.set(key, started);
+  return started;
+}
+
+async function load(group, force) {
+  const cacheKey = CACHE_KEY(group);
   const copy = saved(group);
   if (!force && copy && Date.now() - copy.at < TTL) {
     return { ...copy.data, cached: true };
@@ -228,7 +243,7 @@ export async function fetchSchedule(group, { force = false } = {}) {
 
   if (data) {
     try {
-      localStorage.setItem(key, JSON.stringify({ at: Date.now(), data }));
+      localStorage.setItem(cacheKey, JSON.stringify({ at: Date.now(), data }));
     } catch { /* переполнение хранилища — работаем без копии */ }
     return { ...data, cached: false };
   }

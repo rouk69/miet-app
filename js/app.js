@@ -3,6 +3,7 @@
 import { initTelegram, syncChrome, guardTaps } from './tg.js';
 import { loadData, settings, save, applyTheme, resolveTheme } from './store.js';
 import { register, init as initRouter, switchTab, refresh } from './router.js';
+import { fetchSchedule } from './schedule.js';
 import { loadMe, account, track, syncGroup } from './api.js';
 
 import home from './screens/home.js';
@@ -104,6 +105,14 @@ const blockedScreen = () => `
 function syncSettings() {
   if (settings.group) syncGroup(settings.group);
   else if (account.group) save({ group: account.group });
+}
+
+// Расписание запрашиваем сразу, не дожидаясь справочника: экран всё
+// равно попросит его первым делом, а так два ожидания идут рядом, а не
+// друг за другом. Обещание живёт в schedule.js, поэтому экран возьмёт
+// готовое, а не пошлёт второй такой же запрос.
+if (settings.group) {
+  fetchSchedule(settings.group).catch(() => { /* разберётся экран */ });
 }
 
 // Сервер спрашиваем сразу, но первый экран его не ждёт.

@@ -1,5 +1,5 @@
 /* Собрано tools/stamp.py из js/*.js — не правьте здесь.
-   Версия 310d3c5c. Исходники лежат рядом и остаются модулями. */
+   Версия 6826661c. Исходники лежат рядом и остаются модулями. */
 var __mod = {};
 /* ==== js\config.js ==== */
 __mod['js/config.js'] = (function () {
@@ -34,7 +34,7 @@ const API_BASE = (stored() || DEFAULT_BASE).replace(/\/+$/, '');
 // свежую ли страницу открыл человек: Telegram кеширует мини-приложения
 // по своим правилам, и «у меня ничего не поменялось» разбирается
 // сравнением этой строки, а не на слово.
-const BUILD = '310d3c5c';
+const BUILD = '6826661c';
 
 return {'API_BASE': API_BASE, 'BUILD': BUILD};
 })();
@@ -412,8 +412,23 @@ function firstOk(promises) {
  * мобильных сетей он недоступен вовсе, и раньше это означало ошибку
  * вместо расписания.
  */
-async function fetchSchedule(group, { force = false } = {}) {
-  const key = CACHE_KEY(group);
+// Запросы, которые уже в пути: группа → обещание. Нужны, потому что
+// расписание просят двое сразу — приложение при старте (чтобы не ждать
+// справочник) и экран, который его рисует. Без этого выходило бы два
+// одинаковых запроса и две записи в хранилище.
+const inFlight = new Map();
+
+function fetchSchedule(group, { force = false } = {}) {
+  const key = `${group}|${force ? 'force' : ''}`;
+  const going = inFlight.get(key);
+  if (going) return going;
+  const started = load(group, force).finally(() => inFlight.delete(key));
+  inFlight.set(key, started);
+  return started;
+}
+
+async function load(group, force) {
+  const cacheKey = CACHE_KEY(group);
   const copy = saved(group);
   if (!force && copy && Date.now() - copy.at < TTL) {
     return { ...copy.data, cached: true };
@@ -423,7 +438,7 @@ async function fetchSchedule(group, { force = false } = {}) {
 
   if (data) {
     try {
-      localStorage.setItem(key, JSON.stringify({ at: Date.now(), data }));
+      localStorage.setItem(cacheKey, JSON.stringify({ at: Date.now(), data }));
     } catch { /* переполнение хранилища — работаем без копии */ }
     return { ...data, cached: false };
   }
@@ -7343,6 +7358,7 @@ var register = __mod['js/router.js']['register'];
 var initRouter = __mod['js/router.js']['init'];
 var switchTab = __mod['js/router.js']['switchTab'];
 var refresh = __mod['js/router.js']['refresh'];
+var fetchSchedule = __mod['js/schedule.js']['fetchSchedule'];
 var loadMe = __mod['js/api.js']['loadMe'];
 var account = __mod['js/api.js']['account'];
 var track = __mod['js/api.js']['track'];
@@ -7460,6 +7476,14 @@ const blockedScreen = () => `
 function syncSettings() {
   if (settings.group) syncGroup(settings.group);
   else if (account.group) save({ group: account.group });
+}
+
+// Расписание запрашиваем сразу, не дожидаясь справочника: экран всё
+// равно попросит его первым делом, а так два ожидания идут рядом, а не
+// друг за другом. Обещание живёт в schedule.js, поэтому экран возьмёт
+// готовое, а не пошлёт второй такой же запрос.
+if (settings.group) {
+  fetchSchedule(settings.group).catch(() => { /* разберётся экран */ });
 }
 
 // Сервер спрашиваем сразу, но первый экран его не ждёт.
