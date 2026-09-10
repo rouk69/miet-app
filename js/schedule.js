@@ -161,6 +161,53 @@ async function fromSite(group) {
   return normalize(await res.json());
 }
 
+// Почему второй запрос уходит с задержкой, а не сразу: обычно хватает
+// первого, и дёргать сайт института за каждым расписанием незачем. Но
+// ждать его молчание целиком — значит ставить человека в очередь к
+// чужому серверу, поэтому через полторы секунды стартует второй путь.
+const HEDGE_AFTER = 1200;
+
+// Причина последнего отказа — её показывает плашка «сохранённое».
+let lastWhy = '';
+
+const wait = ms => new Promise(done => setTimeout(done, ms));
+
+/**
+ * Два источника наперегонки: чей ответ пришёл первым, тот и берём.
+ *
+ * Раньше они шли по очереди, и молчащий бот (например, он как раз
+ * перезапускается после выкладки) означал восемь секунд ожидания перед
+ * тем, как приложение вообще попробует miet.ru. Теперь худший случай —
+ * это время ответа того, кто жив.
+ */
+async function race(group) {
+  lastWhy = '';
+  const attempts = [
+    fromBot(group).catch(() => null),
+    wait(HEDGE_AFTER).then(() => fromSite(group).catch(e => {
+      lastWhy = e.message;
+      return null;
+    })),
+  ];
+
+  return firstOk(attempts);
+}
+
+/**
+ * Первый непустой ответ из нескольких.
+ *
+ * Своими руками, а не Promise.any: тот появился в 2021-м, а мини-апп
+ * открывают и на старых телефонах — там его просто нет, и приложение
+ * упало бы на ровном месте.
+ */
+function firstOk(promises) {
+  return new Promise(resolve => {
+    let left = promises.length;
+    const miss = () => { if (--left === 0) resolve(null); };
+    promises.forEach(p => p.then(v => (v ? resolve(v) : miss()), miss));
+  });
+}
+
 /**
  * Загружает расписание группы. force=true обходит свежую копию.
  *
@@ -177,15 +224,7 @@ export async function fetchSchedule(group, { force = false } = {}) {
     return { ...copy.data, cached: true };
   }
 
-  let data = await fromBot(group);
-  let err = null;
-  if (!data) {
-    try {
-      data = await fromSite(group);
-    } catch (e) {
-      err = e;
-    }
-  }
+  const data = await race(group);
 
   if (data) {
     try {
@@ -195,16 +234,15 @@ export async function fetchSchedule(group, { force = false } = {}) {
   }
 
   if (copy) {
-    console.warn('расписание не обновилось, показываю сохранённое:',
-      err && err.message);
-    return { ...copy.data, cached: true, stale: true, why: err && err.message };
+    console.warn('расписание не обновилось, показываю сохранённое');
+    return { ...copy.data, cached: true, stale: true, why: lastWhy };
   }
 
   // Показывать нечего. Сообщение делаем человеческим: «Failed to fetch»
   // ничего не объясняет тому, кто просто открыл приложение.
   throw new Error(navigator.onLine === false
     ? 'Нет сети — расписание берётся с miet.ru'
-    : `Расписание не пришло (${(err && err.message) || 'сервер молчит'})`);
+    : `Расписание не пришло (${lastWhy || 'оба источника молчат'})`);
 }
 
 /** Все записи расписания на конкретный день конкретной недели цикла. */
