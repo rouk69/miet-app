@@ -1,5 +1,5 @@
 /* Собрано tools/stamp.py из js/*.js — не правьте здесь.
-   Версия 417bc129. Исходники лежат рядом и остаются модулями. */
+   Версия 7df7c315. Исходники лежат рядом и остаются модулями. */
 var __mod = {};
 /* ==== js\config.js ==== */
 __mod['js/config.js'] = (function () {
@@ -34,7 +34,7 @@ const API_BASE = (stored() || DEFAULT_BASE).replace(/\/+$/, '');
 // свежую ли страницу открыл человек: Telegram кеширует мини-приложения
 // по своим правилам, и «у меня ничего не поменялось» разбирается
 // сравнением этой строки, а не на слово.
-const BUILD = '417bc129';
+const BUILD = '7df7c315';
 
 return {'API_BASE': API_BASE, 'BUILD': BUILD};
 })();
@@ -3619,11 +3619,22 @@ var pickGroup = __mod['js/screens/common.js']['pickGroup'];
 var iconBtn = __mod['js/screens/common.js']['iconBtn'];
 var shortDate = __mod['js/screens/common.js']['shortDate'];
 
+/**
+ * Как звать преподавателя в строке.
+ *
+ * Приложение показывает короткое имя — на длинное в карточке нет места.
+ * Но расписание приходит двумя путями: у miet.ru короткое лежит своим
+ * полем, а из кеша бота может прийти только полное. Пусто — не рисуем
+ * ничего, это лучше пустой строки со значком.
+ */
+const teacherOf = l =>
+  (l && (l.teacherShort || l.teacher)) || '';
+
 /** Преподаватель и аудитория — одна строка на подгруппу. */
 const whereLine = e => `
   <div class="lesson-meta">
     ${e.room ? `<span>${icon('door', 14)} ${esc(e.room)}</span>` : ''}
-    ${e.teacherShort ? `<span>${icon('teacher', 14)} ${esc(e.teacherShort)}</span>` : ''}
+    ${teacherOf(e) ? `<span>${icon('teacher', 14)} ${esc(teacherOf(e))}</span>` : ''}
   </div>`;
 
 /**
@@ -3876,7 +3887,7 @@ function plural(n, one, few, many) {
 
 
 
-return {'default': scheduleScreen, 'gapRow': gapRow, 'dayRows': dayRows, 'lessonRow': lessonRow, 'plural': plural};
+return {'default': scheduleScreen, 'teacherOf': teacherOf, 'gapRow': gapRow, 'dayRows': dayRows, 'lessonRow': lessonRow, 'plural': plural};
 })();
 
 /* ==== js\screens\search.js ==== */
@@ -6846,6 +6857,7 @@ var newsRow = __mod['js/screens/common.js']['newsRow'];
 var humanDate = __mod['js/screens/common.js']['humanDate'];
 var iconBtn = __mod['js/screens/common.js']['iconBtn'];
 var dayRows = __mod['js/screens/schedule.js']['dayRows'];
+var teacherOf = __mod['js/screens/schedule.js']['teacherOf'];
 var feedRow = __mod['js/screens/feed.js']['feedRow'];
 var flatten = __mod['js/screens/tasks.js']['flatten'];
 var pendingOf = __mod['js/screens/tasks.js']['pendingOf'];
@@ -7148,7 +7160,7 @@ async function renderNow(slot, now) {
          <div class="now-meta">
            <span>${icon('clock', 15)} ${esc(current.from)}–${esc(current.to)}</span>
            ${current.room ? `<span>${icon('door', 15)} ${esc(current.room)}</span>` : ''}
-           ${current.teacherShort ? `<span>${icon('teacher', 15)} ${esc(current.teacherShort)}</span>` : ''}
+           ${teacherOf(current) ? `<span>${icon('teacher', 15)} ${esc(teacherOf(current))}</span>` : ''}
          </div>
          <div class="now-progress"><i style="width:${Math.round(progress * 100)}%"></i></div>
        </div>`
@@ -7159,7 +7171,7 @@ async function renderNow(slot, now) {
            <div class="now-meta">
              <span>${icon('clock', 15)} в ${esc(next.from)}</span>
              ${next.room ? `<span>${icon('door', 15)} ${esc(next.room)}</span>` : ''}
-             ${next.teacherShort ? `<span>${icon('teacher', 15)} ${esc(next.teacherShort)}</span>` : ''}
+             ${teacherOf(next) ? `<span>${icon('teacher', 15)} ${esc(teacherOf(next))}</span>` : ''}
            </div>
          </div>`
       : `<div class="now-card rest has-art">

@@ -26,6 +26,11 @@ GROUPS_API = "https://miet.ru/schedule/groups"
 UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/128.0 Safari/537.36")
 TTL = 6 * 60 * 60          # расписание меняется редко, но не «никогда»
+
+# Имя кеша с номером: в записях прибавились поля, которые рисует
+# приложение (короткое имя преподавателя, группа), и старые файлы под
+# тем же именем отдавали бы расписание без них — на диске Amvera они
+# переживают выкладку.
 GROUPS_TTL = 24 * 60 * 60
 
 # Версия формата разобранного расписания. Меняется, когда в записи пары
@@ -233,7 +238,7 @@ _refreshing: set[str] = set()
 
 def _refresh_later(group: str) -> None:
     """Обновляет копию в фоне, ничего не сообщая наружу."""
-    key = f"sched_{group}"
+    key = f"sched2_{group}"
     if key in _refreshing:
         return
     _refreshing.add(key)
@@ -259,7 +264,7 @@ def fetch_schedule(group: str, force: bool = False) -> dict:
     запроса ради тех же самых пар незачем. В сеть он ждёт только тогда,
     когда показать действительно нечего.
     """
-    key = f"sched_{group}"
+    key = f"sched2_{group}"
     if not force:
         hit = _cache_get(key, TTL)
         if hit:
@@ -324,7 +329,7 @@ def warm_up(groups: list[str]) -> threading.Thread:
 def cached_schedule(group: str) -> dict | None:
     """Отдаёт расписание, только если оно уже в кеше. Нужно inline-режиму:
     там на ответ есть секунды, и лезть в сеть за каждым кандидатом нельзя."""
-    return _cache_get(f"sched_{group}", TTL)
+    return _cache_get(f"sched2_{group}", TTL)
 
 
 def lessons_of(sched: dict, week: int, day: int) -> list[dict]:

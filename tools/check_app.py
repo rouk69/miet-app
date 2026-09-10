@@ -176,6 +176,17 @@ CASES = [
      "String(lessonDay(SCHED, new Date(2026, 8, 1),"
      " { week: 2, type: 'Лабораторная работа' }, 'Философия', 0))", "null"),
 
+    # Расписание приходит двумя путями, и имя преподавателя в них
+    # называется по-разному: рисуем то, что пришло.
+    ("короткое имя берётся первым",
+     "__scr.teacherOf({ teacherShort: 'Иванов И.И.', teacher: 'Иванов Иван' })",
+     "Иванов И.И."),
+    ("без короткого берём полное",
+     "__scr.teacherOf({ teacher: 'Иванов Иван Иванович' })",
+     "Иванов Иван Иванович"),
+    ("без имени не рисуем ничего", "__scr.teacherOf({})", ""),
+    ("и пустая запись не роняет", "__scr.teacherOf(null)", ""),
+
     # Окно между парами: тот же расчёт есть у бота, и расходиться им
     # нельзя — иначе в приложении окно есть, а в сообщении нет.
     ("окно найдено одно", "gapsOf(WITH_GAP).length", "1"),
@@ -270,6 +281,7 @@ var art = _a.art, artState = _a.artState;
 var _f = __mod['js/screens/feed.js'];
 var mediaSize = _f.mediaSize, mediaTag = _f.mediaTag;
 
+var __scr = __mod['js/screens/schedule.js'];
 var _sc = __mod['js/schedule.js'];
 var gapsOf = _sc.gapsOf, humanGap = _sc.humanGap;
 
