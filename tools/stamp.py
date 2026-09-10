@@ -52,14 +52,27 @@ MAP_BLOCK = re.compile(
 BOOT_BLOCK = re.compile(
     r"[ \t]*<!-- точка входа -->.*?<!-- /точка входа -->\n", re.S)
 BUILD_LINE = re.compile(r"(export const BUILD = ')([^']*)(';)")
+# Метки в адресах: их вычёркиваем, когда считаем метку.
+STAMP_IN_URL = re.compile(r"[?]v=[0-9a-f]+")
 
 
 def body(path: str) -> bytes:
-    """Содержимое файла — у config.js без собственной метки."""
+    """
+    Содержимое файла для подсчёта метки — без самих меток.
+
+    У `config.js` вычёркивается строка с версией, у `index.html` — все
+    «?v=…»: иначе метка зависела бы от себя самой и не сошлась бы
+    никогда. Сам `index.html` в подсчёт входит обязательно — правка в
+    нём (подключение сборки, порядок скриптов) обязана менять метку,
+    иначе Telegram отдаст страницу из кеша.
+    """
     blob = io.open(path, "rb").read()
-    if os.path.normpath(path) == os.path.normpath(CONFIG):
+    name = os.path.normpath(path)
+    if name == os.path.normpath(CONFIG):
+        blob = BUILD_LINE.sub(r"\1dev\3", blob.decode("utf-8")).encode("utf-8")
+    elif name == os.path.normpath(INDEX):
         text = blob.decode("utf-8")
-        blob = BUILD_LINE.sub(r"\1dev\3", text).encode("utf-8")
+        blob = STAMP_IN_URL.sub("", text).encode("utf-8")
     return blob
 
 
@@ -83,7 +96,7 @@ def main() -> int:
     styles = [os.path.join(ROOT, "css", n)
               for n in sorted(os.listdir(os.path.join(ROOT, "css")))
               if n.endswith(".css")]
-    version = digest_of(styles + mods)
+    version = digest_of(styles + mods + [INDEX])
     touched = []
 
     # ── метка внутрь клиента и рядом с ним
