@@ -1060,6 +1060,13 @@ check("после него уведомление доходит",
       len(orioks_watch.check_user(42)) == 1 and len(SENT) == 1, SENT)
 SENT.clear()
 
+# Предпросмотр карточки дня: им проверяют, что бот рисует на бою.
+s_, r_ = api.handle("GET", "/api/admin/day-preview", {"group": ["ПИН-31"]},
+                    {}, USER)
+check("предпросмотр не для всех", s_ == 403, (s_, r_))
+s_, r_ = api.handle("GET", "/api/admin/day-preview", {}, {}, ADMIN)
+check("без группы предпросмотр отказывает", s_ == 400, (s_, r_))
+
 # Разведка сторожа — только владельцу и только про него самого:
 # чужие объявления не сторожит никто, и посмотреть на них тоже нельзя.
 s_, r_ = api.handle("GET", "/api/admin/orioks-watch", {}, {}, USER)

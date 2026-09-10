@@ -32,6 +32,8 @@ from urllib.parse import parse_qs, urlparse
 from . import analytics, appconf, auth, directory, help_board, notify
 from . import orioks, orioks_watch, orioks_web, posts
 from . import paths, render, storage
+from . import rich
+from . import schedule_api as schedule
 from . import media as mediastore
 
 log = logging.getLogger("miet.api")
@@ -752,6 +754,32 @@ def _admin(path: str, method: str, query: dict, body: dict, uid: int, me: dict):
                        "title": n.get("title"),
                        "date": n.get("date")} for n in fresh],
             "preview": orioks_watch.message(fresh) if fresh else "",
+        }
+
+    if path == "/api/admin/day-preview" and method == "GET":
+        # Что бот показывает на самом деле. Проверить рендер иначе можно
+        # только написав боту и посмотрев глазами — а половина правок
+        # расписания (окна, значки, подгруппы) видна как раз в тексте
+        # карточки, и увидеть её со стороны было нечем.
+        group = (query.get("group", [""])[0] or "").strip()
+        if not group:
+            return 400, {"error": "Нужна группа: ?group=ПИН-31"}
+        week = max(0, min(3, int(query.get("week", ["0"])[0] or 0)))
+        day = max(1, min(6, int(query.get("day", ["1"])[0] or 1)))
+        try:
+            sched = schedule.fetch_schedule(group)
+        except Exception as e:                          # noqa: BLE001
+            return 200, {"error": f"{type(e).__name__}: {e}"}
+        slots = schedule.slots_of(sched, week, day)
+        return 200, {
+            "group": group, "week": week, "day": day,
+            "semestr": sched.get("semestr", ""),
+            "pairs": len(slots),
+            "gaps": schedule.gaps_of(slots),
+            "text": render.schedule_card(group, sched, week, day, week,
+                                         custom=False),
+            "rich": rich.day_html(group, sched, week, day, week,
+                                  custom=False, buttons=False),
         }
 
     if path == "/api/admin/orioks-probe" and method == "GET":
