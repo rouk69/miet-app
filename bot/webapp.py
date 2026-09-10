@@ -74,10 +74,15 @@ def fetch(url: str) -> str:
     return ""
 
 
-def run_in_background(url: str, on_change=None) -> threading.Thread:
+def run_in_background(url: str, on_check=None) -> threading.Thread:
     """
-    Следит за меткой. `on_change` зовётся, когда она сменилась, —
-    им бот переставляет кнопку меню на свежий адрес.
+    Следит за меткой выложенного клиента.
+
+    `on_check` зовётся КАЖДЫЙ круг, а не только при смене метки: разовая
+    установка кнопки меню могла не удаться (Telegram ответил «слишком
+    часто», сеть моргнула), и тогда чинить её было бы некому — метка-то
+    не менялась. Пусть решает тот, кто ставит: он видит, куда кнопка
+    ведёт сейчас.
     """
     def loop():
         # Первый заход почти сразу: контейнер только что поднялся, и
@@ -92,8 +97,8 @@ def run_in_background(url: str, on_change=None) -> threading.Thread:
                     _seen["at"] = time.time()
                     if got != was:
                         log.info("клиент обновился: %s → %s", was or "—", got)
-                        if on_change:
-                            on_change(got)
+                if on_check:
+                    on_check(version())
             except Exception:                           # noqa: BLE001
                 log.exception("проверка метки приложения сорвалась")
             time.sleep(EVERY)

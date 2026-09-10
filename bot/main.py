@@ -972,7 +972,22 @@ def main() -> None:
     # видит прошлую выкладку. Ставим при каждом запуске, потому что
     # запуск и происходит после выкладки.
     def point_menu_at_app(_version: str | None = None) -> None:
+        """
+        Ведёт кнопку меню на свежий адрес приложения.
+
+        Сначала спрашиваем, куда она ведёт сейчас: адрес совпал — не
+        трогаем (Telegram не любит частых перестановок), не совпал или
+        спросить не вышло — ставим. Зовётся и при запуске, и каждым
+        кругом наблюдателя: разовая установка могла не удаться, а
+        чинить её иначе было бы некому.
+        """
         link = kbs.webapp_link(WEBAPP_URL)
+        try:
+            now = bot.get_chat_menu_button()
+            if getattr(getattr(now, "web_app", None), "url", None) == link:
+                return
+        except ApiTelegramException as e:
+            log.info("не спросил про кнопку меню: %s", e)
         try:
             bot.set_chat_menu_button(menu_button=types.MenuButtonWebApp(
                 type="web_app", text="Приложение",
