@@ -12,11 +12,22 @@ import { refresh } from '../router.js';
 import { haptic, hapticSelect } from '../tg.js';
 import { screen, pickGroup, iconBtn, shortDate } from './common.js';
 
+/**
+ * Как звать преподавателя в строке.
+ *
+ * Приложение показывает короткое имя — на длинное в карточке нет места.
+ * Но расписание приходит двумя путями: у miet.ru короткое лежит своим
+ * полем, а из кеша бота может прийти только полное. Пусто — не рисуем
+ * ничего, это лучше пустой строки со значком.
+ */
+export const teacherOf = l =>
+  (l && (l.teacherShort || l.teacher)) || '';
+
 /** Преподаватель и аудитория — одна строка на подгруппу. */
 const whereLine = e => `
   <div class="lesson-meta">
     ${e.room ? `<span>${icon('door', 14)} ${esc(e.room)}</span>` : ''}
-    ${e.teacherShort ? `<span>${icon('teacher', 14)} ${esc(e.teacherShort)}</span>` : ''}
+    ${teacherOf(e) ? `<span>${icon('teacher', 14)} ${esc(teacherOf(e))}</span>` : ''}
   </div>`;
 
 /**

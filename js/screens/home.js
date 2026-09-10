@@ -9,7 +9,7 @@ import { go, switchTab } from '../router.js';
 import { tgUser, openLink } from '../tg.js';
 import { get, canTalk } from '../api.js';
 import { screen, pickGroup, newsRow, humanDate, iconBtn } from './common.js';
-import { dayRows } from './schedule.js';
+import { dayRows, teacherOf } from './schedule.js';
 import { feedRow } from './feed.js';
 import { flatten, pendingOf, subjectLook } from './tasks.js';
 import { art, artState } from '../art.js';
@@ -309,7 +309,7 @@ async function renderNow(slot, now) {
          <div class="now-meta">
            <span>${icon('clock', 15)} ${esc(current.from)}–${esc(current.to)}</span>
            ${current.room ? `<span>${icon('door', 15)} ${esc(current.room)}</span>` : ''}
-           ${current.teacherShort ? `<span>${icon('teacher', 15)} ${esc(current.teacherShort)}</span>` : ''}
+           ${teacherOf(current) ? `<span>${icon('teacher', 15)} ${esc(teacherOf(current))}</span>` : ''}
          </div>
          <div class="now-progress"><i style="width:${Math.round(progress * 100)}%"></i></div>
        </div>`
@@ -320,7 +320,7 @@ async function renderNow(slot, now) {
            <div class="now-meta">
              <span>${icon('clock', 15)} в ${esc(next.from)}</span>
              ${next.room ? `<span>${icon('door', 15)} ${esc(next.room)}</span>` : ''}
-             ${next.teacherShort ? `<span>${icon('teacher', 15)} ${esc(next.teacherShort)}</span>` : ''}
+             ${teacherOf(next) ? `<span>${icon('teacher', 15)} ${esc(teacherOf(next))}</span>` : ''}
            </div>
          </div>`
       : `<div class="now-card rest has-art">
