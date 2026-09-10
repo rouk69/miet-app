@@ -1,26 +1,23 @@
 # -*- coding: utf-8 -*-
 """
-Метка версии на статике: чтобы правка доходила до людей сразу.
+Сборка клиента и метки версий: чтобы приложение открывалось быстро и
+правка доходила до людей сразу.
 
-GitHub Pages отдаёт файлы с десятиминутным кешем, Telegram держит их
-дольше и по своим правилам, а страницу мини-приложения кеширует ещё и
-по адресу. После выкладки человек открывает приложение и видит
-вчерашний вид — правка выглядит так, будто её не делали.
+Две беды решаются здесь.
 
-Лечится адресом: другой адрес — другой файл, значит запросить заново.
-Метка считается от содержимого и меняется ровно тогда, когда менялись
-файлы. Скрипт проставляет её в трёх местах:
+**Тридцать два похода по сети.** Приложение написано ES-модулями без
+сборщика — так его удобно править и читать, но браузер за это платит:
+каждый модуль отдельным запросом, и на мобильном интернете это секунды
+ожидания. Поэтому рядом с исходниками кладётся `js/bundle.js` — те же
+модули одним файлом (`tools/bundle.py`), и страница грузит его. Если
+сборка почему-то не выполнилась, через две секунды подключаются
+исходные модули: белый экран хуже лишнего запроса.
 
-- **стилям** — каждому свою (`app.css?v=3f2a1b`), они правятся порознь;
-- **модулям** — общую, через карту импортов в `index.html`. Приписать
-  версию к `<script src="js/app.js">` мало: модули тянут друг друга
-  своими путями, и вышла бы каша из нового app.js и вчерашнего ui.js.
-  Точка входа подключается инлайновым `import './js/app.js'` — он тоже
-  проходит через карту. Браузер без importmap (iOS до 16.4) возьмёт всё
-  дерево по старым адресам: не свежо, зато согласованно;
-- **всей выкладке** — в `webapp.version` (её бот подставляет в адрес
-  кнопки) и в `js/config.js` (её показывает профиль, чтобы «ничего не
-  поменялось» перестало быть спором на слово).
+**Кеш.** GitHub Pages отдаёт файлы с десятиминутным кешем, Telegram
+держит их дольше и по своим правилам, а страницу мини-приложения
+кеширует ещё и по адресу. Поэтому к файлам дописывается метка от
+содержимого, а общая метка выкладки уходит в `webapp.version` (её бот
+подставляет в адрес кнопки) и в `js/config.js` (её показывает профиль).
 
 Своя же метка внутри `config.js` в подсчёт не идёт: иначе каждый прогон
 менял бы файл, файл менял бы метку, и та никогда бы не сошлась.
@@ -37,12 +34,17 @@ import os
 import re
 import sys
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+import bundle                                           # noqa: E402
+
 sys.stdout.reconfigure(encoding="utf-8")
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+ROOT = bundle.ROOT
 INDEX = os.path.join(ROOT, "index.html")
 CONFIG = os.path.join(ROOT, "js", "config.js")
 VERSION = os.path.join(ROOT, "webapp.version")
+BUILT = os.path.join(ROOT, "js", "bundle.js")
 
 CSS_LINK = re.compile(r'(<link[^>]*href=")(css/[\w.-]+\.css)(\?v=[0-9a-f]+)?(")')
 MAP_BLOCK = re.compile(
@@ -50,13 +52,6 @@ MAP_BLOCK = re.compile(
 BOOT_BLOCK = re.compile(
     r"[ \t]*<!-- точка входа -->.*?<!-- /точка входа -->\n", re.S)
 BUILD_LINE = re.compile(r"(export const BUILD = ')([^']*)(';)")
-
-PRELOAD = [
-    "js/app.js", "js/router.js", "js/store.js", "js/ui.js", "js/icons.js",
-    "js/tg.js", "js/api.js", "js/config.js", "js/schedule.js",
-    "js/screens/common.js", "js/screens/home.js", "js/screens/schedule.js",
-    "js/screens/feed.js",
-]
 
 
 def body(path: str) -> bytes:
@@ -75,17 +70,6 @@ def digest_of(paths) -> str:
     return h.hexdigest()[:8]
 
 
-def modules() -> list:
-    """Все модули приложения — путями, какими их видит браузер."""
-    out = []
-    for base, _, names in os.walk(os.path.join(ROOT, "js")):
-        for n in sorted(names):
-            if n.endswith(".js"):
-                full = os.path.join(base, n)
-                out.append((full, os.path.relpath(full, ROOT).replace(os.sep, "/")))
-    return sorted(out, key=lambda x: x[1])
-
-
 def write_if_changed(path: str, text: str) -> bool:
     old = io.open(path, encoding="utf-8").read() if os.path.exists(path) else None
     if old == text:
@@ -95,11 +79,11 @@ def write_if_changed(path: str, text: str) -> bool:
 
 
 def main() -> int:
-    mods = modules()
+    mods = bundle.modules()
     styles = [os.path.join(ROOT, "css", n)
               for n in sorted(os.listdir(os.path.join(ROOT, "css")))
               if n.endswith(".css")]
-    version = digest_of(styles + [full for full, _ in mods])
+    version = digest_of(styles + mods)
     touched = []
 
     # ── метка внутрь клиента и рядом с ним
@@ -112,7 +96,17 @@ def main() -> int:
     if write_if_changed(VERSION, version + chr(10)):
         touched.append("webapp.version")
 
-    # ── index.html: стилям свои метки, модулям общая
+    # ── сборка: те же модули одним файлом
+    built = bundle.build(
+        "/* Собрано tools/stamp.py из js/*.js — не правьте здесь.\n"
+        f"   Версия {version}. Исходники лежат рядом и остаются модулями. */")
+    # Флаг говорит странице, что сборка выполнилась целиком: по нему
+    # решается, не подключать ли исходные модули запасным путём.
+    built += "\nwindow.__mietBooted = true;\n"
+    if write_if_changed(BUILT, built):
+        touched.append("js/bundle.js")
+
+    # ── index.html: стилям свои метки, приложению — сборка
     html = io.open(INDEX, encoding="utf-8").read()
 
     def stamp_css(m):
@@ -125,33 +119,28 @@ def main() -> int:
 
     html = CSS_LINK.sub(stamp_css, html)
 
-    imports = ",\n".join(
-        f'      "./{href}": "./{href}?v={version}"' for _, href in mods)
-    preload = "\n".join(
-        f'  <link rel="modulepreload" href="{p}?v={version}">' for p in PRELOAD)
-
     block = (
         "  <!-- карта модулей -->\n"
-        "  <!-- Собрано tools/stamp.py: подменяет адрес каждому модулю разом,\n"
-        "       чтобы выкладка доходила до людей, а не лежала в кеше. -->\n"
-        '  <script type="importmap">\n'
-        "  {\n"
-        '    "imports": {\n'
-        f"{imports}\n"
-        "    }\n"
-        "  }\n"
-        "  </script>\n\n"
-        "  <!-- Модули без сборки грузятся каскадом: app.js → экраны → ui и\n"
-        "       icons, и каждая ступень стоит целого круга по сети.\n"
-        "       Предзагрузка ставит весь горячий путь в одну волну. -->\n"
-        f"{preload}\n"
+        "  <!-- Приложение собрано в один файл (tools/stamp.py): те же\n"
+        "       модули, но одним походом по сети вместо тридцати двух.\n"
+        "       Исходники лежат рядом и остаются модулями — правят их. -->\n"
+        f'  <link rel="modulepreload" href="js/bundle.js?v={version}">\n'
         "  <!-- /карта модулей -->\n")
 
     boot = (
         "  <!-- точка входа -->\n"
-        "  <!-- Через import, а не src: так адрес точки входа тоже проходит\n"
-        "       через карту выше и обновляется вместе со всем деревом. -->\n"
-        '  <script type="module">import \'./js/app.js\';</script>\n'
+        f'  <script type="module" src="js/bundle.js?v={version}"></script>\n'
+        "  <!-- Сборка не выполнилась — подключаем исходные модули:\n"
+        "       белый экран хуже лишнего запроса. -->\n"
+        "  <script>\n"
+        "    setTimeout(function () {\n"
+        "      if (window.__mietBooted) return;\n"
+        "      var s = document.createElement('script');\n"
+        "      s.type = 'module';\n"
+        f"      s.src = 'js/app.js?v={version}';\n"
+        "      document.body.appendChild(s);\n"
+        "    }, 2000);\n"
+        "  </script>\n"
         "  <!-- /точка входа -->\n")
 
     if not MAP_BLOCK.search(html) or not BOOT_BLOCK.search(html):

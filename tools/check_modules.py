@@ -11,7 +11,9 @@ sys.stdout.reconfigure(encoding="utf-8")
 files = []
 for base, _, names in os.walk(os.path.join(ROOT, "js")):
     for n in names:
-        if n.endswith(".js"):
+        # bundle.js собран из этих же модулей — проверять его отдельно
+        # значит ругаться на них дважды.
+        if n.endswith(".js") and n != "bundle.js":
             files.append(os.path.join(base, n))
 
 src = {f: io.open(f, encoding="utf-8").read() for f in files}
@@ -117,6 +119,21 @@ for name in ("tokens.css", "app.css"):
                 f"css: «{sel}» описан дважды — {seen[sel]} и {where}")
         else:
             seen[sel] = where
+
+# Сборка должна быть свежее исходников: она уезжает на Pages вместо
+# них, и забытый stamp.py означал бы, что люди открывают вчерашний код.
+built = os.path.join(ROOT, "js", "bundle.js")
+if not os.path.exists(built):
+    problems.append("js/bundle.js не собран — прогони tools/stamp.py")
+else:
+    # Сравниваем содержимое, а не время файлов: время сбивается от
+    # любого касания, а разойтись сборка может только по содержимому.
+    sys.path.insert(0, os.path.join(ROOT, "tools"))
+    import bundle                                                  # noqa: E402
+    if bundle.build() not in io.open(built, encoding="utf-8").read():
+        problems.append(
+            "js/bundle.js разошёлся с исходниками — прогони tools/stamp.py")
+
 
 SHARED = {
     "esc", "el", "icon", "listCard", "listRow", "emptyState", "toast", "sheet",

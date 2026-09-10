@@ -34,63 +34,10 @@
   </script>
 
   <!-- карта модулей -->
-  <!-- Собрано tools/stamp.py: подменяет адрес каждому модулю разом,
-       чтобы выкладка доходила до людей, а не лежала в кеше. -->
-  <script type="importmap">
-  {
-    "imports": {
-      "./js/api.js": "./js/api.js?v=7fdff7d0",
-      "./js/app.js": "./js/app.js?v=7fdff7d0",
-      "./js/art.js": "./js/art.js?v=7fdff7d0",
-      "./js/config.js": "./js/config.js?v=7fdff7d0",
-      "./js/icons.js": "./js/icons.js?v=7fdff7d0",
-      "./js/router.js": "./js/router.js?v=7fdff7d0",
-      "./js/schedule.js": "./js/schedule.js?v=7fdff7d0",
-      "./js/screens/about.js": "./js/screens/about.js?v=7fdff7d0",
-      "./js/screens/admin-days.js": "./js/screens/admin-days.js?v=7fdff7d0",
-      "./js/screens/admin.js": "./js/screens/admin.js?v=7fdff7d0",
-      "./js/screens/campus.js": "./js/screens/campus.js?v=7fdff7d0",
-      "./js/screens/clubs.js": "./js/screens/clubs.js?v=7fdff7d0",
-      "./js/screens/common.js": "./js/screens/common.js?v=7fdff7d0",
-      "./js/screens/community.js": "./js/screens/community.js?v=7fdff7d0",
-      "./js/screens/feed.js": "./js/screens/feed.js?v=7fdff7d0",
-      "./js/screens/guide.js": "./js/screens/guide.js?v=7fdff7d0",
-      "./js/screens/help.js": "./js/screens/help.js?v=7fdff7d0",
-      "./js/screens/home.js": "./js/screens/home.js?v=7fdff7d0",
-      "./js/screens/institutes.js": "./js/screens/institutes.js?v=7fdff7d0",
-      "./js/screens/links.js": "./js/screens/links.js?v=7fdff7d0",
-      "./js/screens/news.js": "./js/screens/news.js?v=7fdff7d0",
-      "./js/screens/profile.js": "./js/screens/profile.js?v=7fdff7d0",
-      "./js/screens/schedule.js": "./js/screens/schedule.js?v=7fdff7d0",
-      "./js/screens/search.js": "./js/screens/search.js?v=7fdff7d0",
-      "./js/screens/support.js": "./js/screens/support.js?v=7fdff7d0",
-      "./js/screens/tasks.js": "./js/screens/tasks.js?v=7fdff7d0",
-      "./js/screens/teachers.js": "./js/screens/teachers.js?v=7fdff7d0",
-      "./js/screens/tools.js": "./js/screens/tools.js?v=7fdff7d0",
-      "./js/screens/useful.js": "./js/screens/useful.js?v=7fdff7d0",
-      "./js/store.js": "./js/store.js?v=7fdff7d0",
-      "./js/tg.js": "./js/tg.js?v=7fdff7d0",
-      "./js/ui.js": "./js/ui.js?v=7fdff7d0"
-    }
-  }
-  </script>
-
-  <!-- Модули без сборки грузятся каскадом: app.js → экраны → ui и
-       icons, и каждая ступень стоит целого круга по сети.
-       Предзагрузка ставит весь горячий путь в одну волну. -->
-  <link rel="modulepreload" href="js/app.js?v=7fdff7d0">
-  <link rel="modulepreload" href="js/router.js?v=7fdff7d0">
-  <link rel="modulepreload" href="js/store.js?v=7fdff7d0">
-  <link rel="modulepreload" href="js/ui.js?v=7fdff7d0">
-  <link rel="modulepreload" href="js/icons.js?v=7fdff7d0">
-  <link rel="modulepreload" href="js/tg.js?v=7fdff7d0">
-  <link rel="modulepreload" href="js/api.js?v=7fdff7d0">
-  <link rel="modulepreload" href="js/config.js?v=7fdff7d0">
-  <link rel="modulepreload" href="js/schedule.js?v=7fdff7d0">
-  <link rel="modulepreload" href="js/screens/common.js?v=7fdff7d0">
-  <link rel="modulepreload" href="js/screens/home.js?v=7fdff7d0">
-  <link rel="modulepreload" href="js/screens/schedule.js?v=7fdff7d0">
-  <link rel="modulepreload" href="js/screens/feed.js?v=7fdff7d0">
+  <!-- Приложение собрано в один файл (tools/stamp.py): те же
+       модули, но одним походом по сети вместо тридцати двух.
+       Исходники лежат рядом и остаются модулями — правят их. -->
+  <link rel="modulepreload" href="js/bundle.js?v=7fdff7d0">
   <!-- /карта модулей -->
 </head>
 <body>
@@ -105,9 +52,18 @@
   <div id="layer"></div>
 
   <!-- точка входа -->
-  <!-- Через import, а не src: так адрес точки входа тоже проходит
-       через карту выше и обновляется вместе со всем деревом. -->
-  <script type="module">import './js/app.js';</script>
+  <script type="module" src="js/bundle.js?v=7fdff7d0"></script>
+  <!-- Сборка не выполнилась — подключаем исходные модули:
+       белый экран хуже лишнего запроса. -->
+  <script>
+    setTimeout(function () {
+      if (window.__mietBooted) return;
+      var s = document.createElement('script');
+      s.type = 'module';
+      s.src = 'js/app.js?v=7fdff7d0';
+      document.body.appendChild(s);
+    }, 2000);
+  </script>
   <!-- /точка входа -->
 </body>
 </html>
