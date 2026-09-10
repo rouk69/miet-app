@@ -1719,6 +1719,37 @@ textarea.field-input {
   color: var(--text-tertiary);
 }
 
+/* ---------- Окно между парами ---------- */
+
+/* Окно — не занятие, поэтому и не карточка: тонкая строка между парами,
+   которую видно, но которая не спорит с ними за внимание. Линии по
+   бокам показывают, что это промежуток, а не ещё одна пара. */
+.gap-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 2px 6px;
+}
+
+.gap-line {
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+.gap-text {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+
+.gap-text svg { flex-shrink: 0; }
+
 /* ---------- Иллюстрации ---------- */
 
 /* Два цвета на всю сцену: линия и мягкая заливка. Оба — токены, поэтому

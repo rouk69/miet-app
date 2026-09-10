@@ -192,6 +192,57 @@ export function slotsOf(sched, week, day) {
     });
 }
 
+/**
+ * Окна между парами: где в дне пропущен слот звонков.
+ *
+ * Студент планирует день не парами, а промежутками: «после второй окно
+ * до четвёртой» — это полтора часа, за которые успеваешь доехать,
+ * поесть или доделать лабу. В расписании окно видно только дыркой в
+ * номерах пар, и её приходилось замечать самому, сверяя время конца
+ * одной строки с началом следующей.
+ *
+ * Тот же расчёт есть у бота (`schedule_api.gaps_of`) — они порты друг
+ * друга, и меняться должны вместе.
+ */
+export function gapsOf(slots) {
+  const out = [];
+  for (let i = 0; i + 1 < slots.length; i++) {
+    const before = slots[i];
+    const after = slots[i + 1];
+    const missed = (after.pair || 0) - (before.pair || 0) - 1;
+    if (missed <= 0) continue;
+    out.push({
+      after: before.pair,
+      before: after.pair,
+      pairs: missed,
+      from: before.to || '',
+      to: after.from || '',
+      minutes: minutesBetween(before.to, after.from),
+    });
+  }
+  return out;
+}
+
+function minutesBetween(start, end) {
+  const mins = t => {
+    const m = /^(\d{1,2}):(\d{2})$/.exec(String(t || ''));
+    return m ? +m[1] * 60 + +m[2] : null;
+  };
+  const a = mins(start);
+  const b = mins(end);
+  return a !== null && b !== null && b > a ? b - a : 0;
+}
+
+/** «100» → «1 ч 40 мин»: человек считает окно часами, а не минутами. */
+export function humanGap(minutes) {
+  const m = Math.max(0, Math.round(minutes || 0));
+  if (!m) return '';
+  const h = Math.floor(m / 60);
+  const rest = m % 60;
+  if (!h) return `${rest} мин`;
+  return rest ? `${h} ч ${rest} мин` : `${h} ч`;
+}
+
 /** Сколько пар в каждый день выбранной недели — для точек под датами. */
 export function dayCounts(sched, week) {
   const seen = [0, 1, 2, 3, 4, 5, 6].map(() => new Set());

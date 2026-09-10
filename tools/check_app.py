@@ -264,6 +264,20 @@ CASES = [
      "String(lessonDay(SCHED, new Date(2026, 8, 1),"
      " { week: 2, type: 'Лабораторная работа' }, 'Философия', 0))", "null"),
 
+    # Окно между парами: тот же расчёт есть у бота, и расходиться им
+    # нельзя — иначе в приложении окно есть, а в сообщении нет.
+    ("окно найдено одно", "gapsOf(WITH_GAP).length", "1"),
+    ("окно между второй и пятой",
+     "gapsOf(WITH_GAP)[0].after + '-' + gapsOf(WITH_GAP)[0].before", "2-5"),
+    ("пропущено две пары", "gapsOf(WITH_GAP)[0].pairs", "2"),
+    ("длительность посчитана", "gapsOf(WITH_GAP)[0].minutes", "250"),
+    ("подряд идущие пары окна не дают",
+     "gapsOf(WITH_GAP.slice(0, 2)).length + gapsOf([]).length", "0"),
+    ("окно называется по-человечески", "humanGap(250)", "4 ч 10 мин"),
+    ("ровный час без минут", "humanGap(120)", "2 ч"),
+    ("меньше часа — только минуты", "humanGap(45)", "45 мин"),
+    ("нулевое окно не называется никак", "humanGap(0)", ""),
+
     # Отказ сети не должен превращаться в «данных нет»: расписание
     # меняется раз в семестр, и вчерашняя копия — то же расписание.
     ("копия отдаётся, когда сеть молчит", "__stale.lessons.length", "2"),
@@ -344,6 +358,14 @@ var _f = __mod['js/screens/feed.js'];
 var mediaSize = _f.mediaSize, mediaTag = _f.mediaTag;
 
 var _sc = __mod['js/schedule.js'];
+var gapsOf = _sc.gapsOf, humanGap = _sc.humanGap;
+
+// День с дыркой в номерах пар: после второй сразу пятая.
+var WITH_GAP = [
+  { pair: 1, from: '09:00', to: '10:20' },
+  { pair: 2, from: '10:30', to: '11:50' },
+  { pair: 5, from: '16:00', to: '17:20' }
+];
 var slotsOf = _sc.slotsOf, dayCounts = _sc.dayCounts, nowState = _sc.nowState;
 
 // Сеть отвалилась, а копия в хранилище есть: экран обязан показать её,

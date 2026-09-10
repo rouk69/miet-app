@@ -100,6 +100,34 @@ def lesson_block(l: dict, live: bool = False, custom: bool = True) -> str:
     return "<blockquote>" + "\n".join(lines) + "</blockquote>"
 
 
+def human_gap(minutes: int) -> str:
+    """«100» → «1 ч 40 мин»: окно человек меряет часами, а не минутами."""
+    m = max(0, int(minutes or 0))
+    if not m:
+        return ""
+    h, rest = divmod(m, 60)
+    if not h:
+        return f"{rest} мин"
+    return f"{h} ч {rest} мин" if rest else f"{h} ч"
+
+
+def gap_block(gap: dict, custom: bool = True) -> str:
+    """
+    Строка окна между парами.
+
+    Своим блоком, а не примечанием к паре: окно — это то, что человек
+    планирует («успею доехать?»), и искать его в хвосте предыдущей
+    строки он не станет.
+    """
+    span = human_gap(gap.get("minutes")) or plural(
+        gap.get("pairs") or 0, "пара", "пары", "пар")
+    when = ""
+    if gap.get("from") and gap.get("to"):
+        when = "\n" + esc(gap["from"]) + " – " + esc(gap["to"])
+    return (f"<blockquote>{em.ico('time', custom)} <b>Окно · {esc(span)}</b>"
+            f"{when}</blockquote>")
+
+
 def _now_pair(lessons: list[dict], now: dt.datetime) -> dict | None:
     mins = now.hour * 60 + now.minute
     def m(t):
@@ -134,11 +162,20 @@ def schedule_card(group: str, sched: dict, week: int, day: int, cur_week: int,
     if not slots:
         body = "\n<blockquote>☕ <b>Пар нет</b>\nМожно выдохнуть</blockquote>"
     else:
-        body = "\n" + "\n".join(
-            lesson_block(sl,
-                         live is not None and any(e is live for e in sl["entries"]),
-                         custom)
-            for sl in slots)
+        # Окна показываем прямо между парами: студент планирует день
+        # промежутками, а в списке пар окно видно только дыркой в
+        # номерах, которую надо заметить самому.
+        gaps = {g["after"]: g for g in api.gaps_of(slots)}
+        parts = []
+        for sl in slots:
+            parts.append(lesson_block(
+                sl,
+                live is not None and any(e is live for e in sl["entries"]),
+                custom))
+            gap = gaps.get(sl["pair"])
+            if gap:
+                parts.append(gap_block(gap, custom))
+        body = "\n" + "\n".join(parts)
 
     footer = ""
     if slots:

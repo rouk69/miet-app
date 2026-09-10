@@ -217,12 +217,53 @@ def _normalize(js: dict) -> dict:
     return {"semestr": js.get("Semestr", ""), "times": times, "lessons": lessons}
 
 
+# Сколько ещё живёт просроченная копия, пока обновление идёт в фоне.
+# Шесть часов — это «расписание за сегодня», сутки — «оно же, но вчера
+# скачанное»: и то и другое одно и то же расписание, а вот ожидание в
+# полторы секунды человек замечает каждый раз.
+STALE_TTL = 24 * 60 * 60
+
+# Группы, за которыми уже пошли в фон: второй такой же поход не нужен.
+_refreshing: set[str] = set()
+
+
+def _refresh_later(group: str) -> None:
+    """Обновляет копию в фоне, ничего не сообщая наружу."""
+    key = f"sched_{group}"
+    if key in _refreshing:
+        return
+    _refreshing.add(key)
+
+    def work():
+        try:
+            fetch_schedule(group, force=True)
+        except Exception as e:                          # noqa: BLE001
+            log.info("фоновое обновление %s не вышло: %s", group, e)
+        finally:
+            _refreshing.discard(key)
+
+    threading.Thread(target=work, name=f"sched-{group}", daemon=True).start()
+
+
 def fetch_schedule(group: str, force: bool = False) -> dict:
+    """
+    Расписание группы: из памяти, из файла или из сети.
+
+    Свежую копию отдаём сразу. Просроченную, но не старее суток, —
+    тоже сразу, а обновление уходит в фон: расписание меняется раз в
+    семестр, и заставлять человека ждать полторы секунды сетевого
+    запроса ради тех же самых пар незачем. В сеть он ждёт только тогда,
+    когда показать действительно нечего.
+    """
     key = f"sched_{group}"
     if not force:
         hit = _cache_get(key, TTL)
         if hit:
             return hit
+        warm = _cache_get(key, STALE_TTL)
+        if warm:
+            _refresh_later(group)
+            return warm
     with _lock_for(key):
         # Пока ждали замок, соседний поток мог уже всё скачать.
         if not force:
@@ -247,6 +288,33 @@ def fetch_schedule(group: str, force: bool = False) -> dict:
             raise
         _cache_put(key, data)
     return data
+
+
+def warm_up(groups: list[str]) -> threading.Thread:
+    """
+    Тянет расписание перечисленных групп в фоне.
+
+    После перезапуска контейнера кеш пуст, и первый вопрос каждого
+    человека упирается в сеть — а перезапуск случается на каждой
+    выкладке. Прогрев занимает секунды и снимает эту заминку с тех
+    групп, которые спрашивают чаще всего.
+    """
+    def work():
+        time.sleep(10)
+        done = 0
+        for group in groups:
+            try:
+                fetch_schedule(group)
+                done += 1
+            except Exception as e:                      # noqa: BLE001
+                log.info("прогрев %s не вышел: %s", group, e)
+            time.sleep(0.3)
+        if done:
+            log.info("расписание прогрето для %d групп", done)
+
+    t = threading.Thread(target=work, name="sched-warmup", daemon=True)
+    t.start()
+    return t
 
 
 def cached_schedule(group: str) -> dict | None:
@@ -298,6 +366,46 @@ def slots_of(sched: dict, week: int, day: int) -> list[dict]:
         slot["split"] = len(slot["entries"]) > 1
     out.sort(key=lambda s: s["pair"] or 0)
     return out
+
+
+def gaps_of(slots: list[dict]) -> list[dict]:
+    """
+    Окна между парами: где в дне пропущен слот звонков.
+
+    Студент планирует день не пáрами, а промежутками: «после второй у
+    меня окно до четвёртой» — это полтора часа, за которые успеваешь
+    доехать, поесть или доделать лабу. В расписании они видны только
+    дыркой в номерах пар, и её приходилось замечать самому, сверяя
+    время окончания одной строки с началом следующей.
+
+    Возвращает список: между какими парами окно, сколько слотов оно
+    занимает и с какого по какое время идёт.
+    """
+    out = []
+    for before, after in zip(slots, slots[1:]):
+        a = before.get("pair") or 0
+        b = after.get("pair") or 0
+        missed = b - a - 1
+        if missed <= 0:
+            continue
+        out.append({
+            "after": a,          # после какой пары
+            "before": b,         # и до какой
+            "pairs": missed,     # сколько пар пропущено
+            "from": before.get("to") or "",
+            "to": after.get("from") or "",
+            "minutes": _minutes_between(before.get("to"), after.get("from")),
+        })
+    return out
+
+
+def _minutes_between(start: str, end: str) -> int:
+    """Сколько минут между «14:20» и «15:50». Не разобрали — ноль."""
+    def mins(t):
+        m = re.match(r"^(\d{1,2}):(\d{2})$", str(t or ""))
+        return int(m.group(1)) * 60 + int(m.group(2)) if m else None
+    a, b = mins(start), mins(end)
+    return b - a if a is not None and b is not None and b > a else 0
 
 
 def day_counts(sched: dict, week: int) -> list[int]:

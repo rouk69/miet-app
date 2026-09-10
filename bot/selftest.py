@@ -170,6 +170,31 @@ check("без метки адрес всё равно рабочий",
       kbs.webapp_link("https://example.com/app") is not None
       and kbs.webapp_link(None) is None)
 
+# Окно между парами: студент планирует день промежутками, а в списке
+# пар окно видно только дыркой в номерах — её и ищем за него.
+DAY = [
+    {"pair": 1, "from": "09:00", "to": "10:20"},
+    {"pair": 2, "from": "10:30", "to": "11:50"},
+    {"pair": 5, "from": "16:00", "to": "17:20"},
+]
+gaps = api.gaps_of(DAY)
+check("окно найдено одно", len(gaps) == 1, gaps)
+check("окно между второй и пятой",
+      gaps and gaps[0]["after"] == 2 and gaps[0]["before"] == 5, gaps)
+check("пропущено две пары", gaps and gaps[0]["pairs"] == 2, gaps)
+check("время окна взято по краям",
+      gaps and gaps[0]["from"] == "11:50" and gaps[0]["to"] == "16:00", gaps)
+check("длительность посчитана", gaps and gaps[0]["minutes"] == 250, gaps)
+check("подряд идущие пары окна не дают",
+      api.gaps_of(DAY[:2]) == [] and api.gaps_of([]) == [])
+check("окно называется по-человечески",
+      render.human_gap(250) == "4 ч 10 мин", render.human_gap(250))
+check("ровный час без минут", render.human_gap(120) == "2 ч")
+check("меньше часа — только минуты", render.human_gap(45) == "45 мин")
+check("нулевое окно не называется никак", render.human_gap(0) == "")
+check("строка окна попадает в карточку",
+      "Окно" in render.gap_block(gaps[0], custom=False), render.gap_block(gaps[0], False))
+
 # Сайт института падает и чинится сам, а расписание меняется раз в
 # семестр: отдать сохранённое честнее, чем сказать «недоступно» тому,
 # кто спросил про ближайшую пару.

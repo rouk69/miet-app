@@ -72,3 +72,18 @@ def stats() -> dict:
     with_group = c.execute(
         "SELECT COUNT(*) FROM users WHERE group_name IS NOT NULL").fetchone()[0]
     return {"users": total, "with_group": with_group}
+
+def popular_groups(limit: int = 15) -> list[str]:
+    """
+    Группы, которые спрашивают чаще других.
+
+    Нужны для прогрева: после перезапуска контейнера кеш расписания
+    пуст, и первый же человек ждёт полторы секунды сетевого запроса.
+    Пятнадцати групп хватает: у бота их несколько сотен, но обращаются
+    в основном к своим.
+    """
+    rows = conn().execute(
+        "SELECT group_name, COUNT(*) AS n FROM users "
+        "WHERE group_name IS NOT NULL AND group_name<>'' "
+        "GROUP BY group_name ORDER BY n DESC LIMIT ?", (limit,))
+    return [r[0] for r in rows]
