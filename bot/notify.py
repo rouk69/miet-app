@@ -40,3 +40,28 @@ def to_user(user_id: int, text: str) -> bool:
     except Exception as e:                        # noqa: BLE001
         log.info("уведомление %s не ушло: %s", user_id, e)
         return False
+
+_send_rich = None
+
+
+def bind_rich(fn) -> None:
+    """Бот отдаёт сюда отправку rich-сообщений (таблицы и кнопки)."""
+    global _send_rich
+    _send_rich = fn
+
+
+def rich_to_user(user_id: int, html: str) -> bool:
+    """
+    Шлёт человеку карточку разметкой. Возвращает, ушло ли.
+
+    Не ушло — значит клиент или аккаунт таких сообщений не принимает;
+    вызывающий сам решит, отправлять ли обычным письмом.
+    """
+    if not _send_rich or not user_id:
+        return False
+    try:
+        _send_rich(int(user_id), html)
+        return True
+    except Exception as e:                        # noqa: BLE001
+        log.info("таблица для %s не ушла: %s", user_id, e)
+        return False

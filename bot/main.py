@@ -1012,6 +1012,8 @@ def main() -> None:
     # main из api замкнул бы круг. Отдаём ей отправку сообщений здесь.
     notify.bind(lambda uid, text: bot.send_message(
         uid, text, disable_web_page_preview=True))
+    notify.bind_rich(lambda uid, html: bot.send_rich_message(
+        uid, types.InputRichMessage(html=html)))
 
     web.serve_in_background()
     if not web.admin_ids():

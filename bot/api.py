@@ -31,6 +31,7 @@ from urllib.parse import parse_qs, urlparse
 
 from . import analytics, appconf, auth, directory, help_board, notify
 from . import orioks, orioks_watch, orioks_web, posts
+from . import morning
 from . import paths, render, storage
 from . import webapp as webapp_watch
 from . import rich
@@ -793,6 +794,23 @@ def _admin(path: str, method: str, query: dict, body: dict, uid: int, me: dict):
         group = (query.get("group", [""])[0] or "").strip()
         if not group:
             return 400, {"error": "Нужна группа: ?group=ПИН-31"}
+
+        if query.get("morning"):
+            # Утренняя карточка — та самая, что придёт в 7:30. С «send»
+            # она ещё и отправляется: посмотреть на неё в Telegram
+            # полезнее, чем читать разметку.
+            made = morning.card(group, me["id"])
+            if not made:
+                return 200, {"morning": True, "empty": True,
+                             "why": "сегодня выходной или пар нет"}
+            html, text = made
+            sent = False
+            if query.get("send"):
+                sent = notify.rich_to_user(me["id"], html)
+                if not sent:
+                    sent = notify.to_user(me["id"], text)
+            return 200, {"morning": True, "sent": sent,
+                         "rich": html, "text": text}
         week = max(0, min(3, int(query.get("week", ["0"])[0] or 0)))
         day = max(1, min(6, int(query.get("day", ["1"])[0] or 1)))
         try:
