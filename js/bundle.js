@@ -1,5 +1,5 @@
 /* Собрано tools/stamp.py из js/*.js — не правьте здесь.
-   Версия 6826661c. Исходники лежат рядом и остаются модулями. */
+   Версия 140824d6. Исходники лежат рядом и остаются модулями. */
 var __mod = {};
 /* ==== js\config.js ==== */
 __mod['js/config.js'] = (function () {
@@ -34,7 +34,7 @@ const API_BASE = (stored() || DEFAULT_BASE).replace(/\/+$/, '');
 // свежую ли страницу открыл человек: Telegram кеширует мини-приложения
 // по своим правилам, и «у меня ничего не поменялось» разбирается
 // сравнением этой строки, а не на слово.
-const BUILD = '6826661c';
+const BUILD = '140824d6';
 
 return {'API_BASE': API_BASE, 'BUILD': BUILD};
 })();
@@ -3459,6 +3459,7 @@ var listRow = __mod['js/ui.js']['listRow'];
 var toast = __mod['js/ui.js']['toast'];
 var sheet = __mod['js/ui.js']['sheet'];
 var emptyState = __mod['js/ui.js']['emptyState'];
+var toggle = __mod['js/ui.js']['toggle'];
 var data = __mod['js/store.js']['data'];
 var settings = __mod['js/store.js']['settings'];
 var save = __mod['js/store.js']['save'];
@@ -3473,8 +3474,11 @@ var tgUser = __mod['js/tg.js']['tgUser'];
 var openLink = __mod['js/tg.js']['openLink'];
 var syncChrome = __mod['js/tg.js']['syncChrome'];
 var haptic = __mod['js/tg.js']['haptic'];
+var hapticNotify = __mod['js/tg.js']['hapticNotify'];
 var confirmDialog = __mod['js/tg.js']['confirmDialog'];
 var account = __mod['js/api.js']['account'];
+var canTalk = __mod['js/api.js']['canTalk'];
+var post = __mod['js/api.js']['post'];
 var screen = __mod['js/screens/common.js']['screen'];
 var pickGroup = __mod['js/screens/common.js']['pickGroup'];
 
@@ -3524,6 +3528,21 @@ async function profileScreen() {
       listRow({ ico: 'heart', title: 'Избранные кружки', value: String(favCount), chevron: true, id: 'fav', cls: 'tap' }),
     ])}
 
+      ${canTalk ? `
+        <div class="section-head"><div class="section-title">Утро</div></div>
+        <div class="list-card">
+          <div class="list-row">
+            <div class="list-row-body">
+              <div class="row-title">Расписание по утрам</div>
+              <div class="row-subtitle">
+                В 7:30 бот пришлёт пары на сегодня: во сколько первая,
+                где идут, какие окна. В выходные и дни без пар — молчит.
+              </div>
+            </div>
+            ${toggle(account.morning === true, 'morning')}
+          </div>
+        </div>` : ''}
+
       <div class="section-head"><div class="section-title">Оформление</div></div>
       <div class="card" style="padding:14px 16px">
         <div class="field-label" style="margin-bottom:9px">Тема</div>
@@ -3556,6 +3575,23 @@ async function profileScreen() {
         Новости и справочная информация собраны ${esc(data.meta?.generated || '')}.<br>
         Версия приложения ${esc(BUILD)}.
       </div>`,
+  });
+
+  node.querySelector('[data-toggle="morning"]')?.addEventListener('click', async e => {
+    const t = e.currentTarget;
+    const on = !t.classList.contains('on');
+    // Переключаем сразу, откатываем при отказе: ждать ответа сервера,
+    // глядя на неподвижный тумблер, незачем.
+    t.classList.toggle('on', on);
+    haptic('light');
+    try {
+      await post('/api/morning', { on });
+      account.morning = on;
+      hapticNotify('success');
+    } catch (err) {
+      toast(err.message);
+      t.classList.toggle('on', !on);
+    }
   });
 
   node.querySelector('#theme').addEventListener('click', e => {

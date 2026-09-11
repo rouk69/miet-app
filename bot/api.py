@@ -105,6 +105,14 @@ def handle(method: str, path: str, query: dict, body: dict, init_data: str):
     user, me = who
     uid = int(user["id"])
 
+    if path == "/api/morning" and method == "POST":
+        # Утренняя карточка: включает её человек сам. Сообщение в
+        # половине восьмого — вещь личная, и рассылки «всем, у кого есть
+        # группа» здесь нет и не будет.
+        on = bool(body.get("on"))
+        storage.set_morning(uid, on)
+        return 200, {"ok": True, "morning": on}
+
     if path == "/api/schedule" and method == "GET":
         # Приложение ходит за расписанием сюда, а не на miet.ru напрямую.
         # Причин две. Сайт института отвечает не всем и не всегда — с
@@ -175,6 +183,7 @@ def _me(user: dict, me: dict) -> dict:
         "can_pin": analytics.can(me, "posts_pin"),
         "can_clean_comments": analytics.can(me, "comments_delete"),
         "orioks": bool(orioks.token_of(me["id"])),
+        "morning": storage.morning_on(me["id"]),
         "label": _label(me),
         # Группа с сервера: человек выбрал её в боте — приложение подхватит
         # её на другом устройстве, и наоборот.

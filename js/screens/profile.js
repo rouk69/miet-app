@@ -1,13 +1,14 @@
 // Профиль: группа, тема, поправка недели, избранное, обслуживание кеша.
 
 import { icon } from '../icons.js';
-import { esc, listCard, listRow, toast, sheet, emptyState } from '../ui.js';
+import { esc, listCard, listRow, toast, sheet, emptyState, toggle } from '../ui.js';
 import { data, settings, save, applyTheme, resolveTheme } from '../store.js';
 import { BUILD } from '../config.js';
 import { fetchSchedule, weekOfCycle } from '../schedule.js';
 import { go, refresh } from '../router.js';
-import { tgUser, openLink, syncChrome, haptic, confirmDialog } from '../tg.js';
-import { account } from '../api.js';
+import { tgUser, openLink, syncChrome, haptic, hapticNotify, confirmDialog }
+  from '../tg.js';
+import { account, canTalk, post } from '../api.js';
 import { screen, pickGroup } from './common.js';
 
 export default async function profileScreen() {
@@ -56,6 +57,21 @@ export default async function profileScreen() {
       listRow({ ico: 'heart', title: 'Избранные кружки', value: String(favCount), chevron: true, id: 'fav', cls: 'tap' }),
     ])}
 
+      ${canTalk ? `
+        <div class="section-head"><div class="section-title">Утро</div></div>
+        <div class="list-card">
+          <div class="list-row">
+            <div class="list-row-body">
+              <div class="row-title">Расписание по утрам</div>
+              <div class="row-subtitle">
+                В 7:30 бот пришлёт пары на сегодня: во сколько первая,
+                где идут, какие окна. В выходные и дни без пар — молчит.
+              </div>
+            </div>
+            ${toggle(account.morning === true, 'morning')}
+          </div>
+        </div>` : ''}
+
       <div class="section-head"><div class="section-title">Оформление</div></div>
       <div class="card" style="padding:14px 16px">
         <div class="field-label" style="margin-bottom:9px">Тема</div>
@@ -88,6 +104,23 @@ export default async function profileScreen() {
         Новости и справочная информация собраны ${esc(data.meta?.generated || '')}.<br>
         Версия приложения ${esc(BUILD)}.
       </div>`,
+  });
+
+  node.querySelector('[data-toggle="morning"]')?.addEventListener('click', async e => {
+    const t = e.currentTarget;
+    const on = !t.classList.contains('on');
+    // Переключаем сразу, откатываем при отказе: ждать ответа сервера,
+    // глядя на неподвижный тумблер, незачем.
+    t.classList.toggle('on', on);
+    haptic('light');
+    try {
+      await post('/api/morning', { on });
+      account.morning = on;
+      hapticNotify('success');
+    } catch (err) {
+      toast(err.message);
+      t.classList.toggle('on', !on);
+    }
   });
 
   node.querySelector('#theme').addEventListener('click', e => {

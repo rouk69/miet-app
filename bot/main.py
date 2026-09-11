@@ -30,6 +30,7 @@ from . import keyboards as kbs
 from . import directory
 from . import news_feed
 from . import media as mediastore
+from . import morning
 from . import notify
 from . import orioks_watch
 from . import posts as feed
@@ -1038,6 +1039,29 @@ def main() -> None:
         mediastore.backfill()
     except Exception:                                   # noqa: BLE001
         log.exception("размеры картинок не дописались")
+
+    # Утренняя карточка дня — тем, кто её попросил. Отправку отдаём
+    # сюда: модуль рассылки не должен знать про Telegram, иначе его не
+    # прогнать в проверках.
+    def morning_rich(uid: int, html: str) -> bool:
+        if not _rich["direct"]:
+            return False
+        try:
+            bot.send_rich_message(uid, types.InputRichMessage(html=html))
+            return True
+        except ApiTelegramException as e:
+            log.info("утренняя таблица %s не ушла: %s", uid, e)
+            return False
+
+    def morning_plain(uid: int, text: str) -> bool:
+        try:
+            bot.send_message(uid, text, disable_web_page_preview=True)
+            return True
+        except ApiTelegramException as e:
+            log.info("утреннее письмо %s не ушло: %s", uid, e)
+            return False
+
+    morning.run_in_background(morning_rich, morning_plain)
 
     # Объявления преподавателей в ОРИОКС: единственное место, где лежит
     # текст домашнего задания. Экран «Учёба» показывает их тому, кто

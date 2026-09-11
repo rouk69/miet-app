@@ -1060,6 +1060,74 @@ check("после него уведомление доходит",
       len(orioks_watch.check_user(42)) == 1 and len(SENT) == 1, SENT)
 SENT.clear()
 
+# Утренняя карточка дня. Слать её можно только тому, кто попросил, —
+# сообщение в половине восьмого утра вещь личная.
+from . import morning, storage as _storage                        # noqa: E402
+import datetime as _dt                                            # noqa: E402
+
+check("по умолчанию рассылка выключена", not _storage.morning_on(42))
+s_, r_ = api.handle("GET", "/api/me", {}, {}, USER)
+check("признак виден приложению", r_.get("morning") is False, r_.get("morning"))
+
+s_, r_ = api.handle("POST", "/api/morning", {}, {"on": True}, USER)
+check("подписка включается", s_ == 200 and r_["morning"] is True, (s_, r_))
+check("и запомнилась", _storage.morning_on(42))
+
+# Время: будим утром буднего дня и не будим ночью, поздно и в воскресенье.
+check("в 7:30 понедельника пора",
+      morning.time_to_send(_dt.datetime(2026, 9, 14, 7, 30)))
+check("в 6 утра рано",
+      not morning.time_to_send(_dt.datetime(2026, 9, 14, 6, 0)))
+check("в 11 уже поздно",
+      not morning.time_to_send(_dt.datetime(2026, 9, 14, 11, 0)))
+check("в воскресенье молчим",
+      not morning.time_to_send(_dt.datetime(2026, 9, 13, 8, 0)))
+
+# Рассылка: кому ушло, кому нет и что именно.
+SENT = []
+_real_card = morning.card
+morning.card = lambda group, uid, custom=True: (
+    f"<h3>Доброе утро</h3><table><tr><td>{group}</td></tr></table>",
+    f"Доброе утро, {group}")
+
+storage.set_group(42, "ПИН-31")
+day = _dt.datetime(2026, 9, 14, 7, 30)
+sent = morning.send_all(lambda uid, html: SENT.append(("rich", uid, html)) or True,
+                        lambda uid, text: SENT.append(("text", uid, text)) or True,
+                        now=day)
+check("карточка ушла подписанному", sent == 1 and SENT and SENT[0][1] == 42,
+      (sent, SENT))
+check("ушла таблицей, а не текстом", SENT and SENT[0][0] == "rich", SENT)
+
+SENT.clear()
+check("второй раз за день не шлём",
+      morning.send_all(lambda u, h: True, lambda u, t: True, now=day) == 0)
+
+# Таблица не прошла — уходит обычным письмом.
+_storage.morning_sent(42, "")
+SENT.clear()
+morning.send_all(lambda uid, html: False,
+                 lambda uid, text: SENT.append(("text", uid, text)) or True,
+                 now=day)
+check("при отказе таблицы уходит письмо",
+      SENT and SENT[0][0] == "text", SENT)
+
+# Выходной или день без пар — молчим вовсе.
+_storage.morning_sent(42, "")
+morning.card = lambda group, uid, custom=True: None
+SENT.clear()
+check("в день без пар не пишем",
+      morning.send_all(lambda u, h: True,
+                       lambda u, t: SENT.append(t) or True, now=day) == 0
+      and not SENT, SENT)
+morning.card = _real_card
+
+s_, r_ = api.handle("POST", "/api/morning", {}, {"on": False}, USER)
+check("подписка выключается", s_ == 200 and r_["morning"] is False, (s_, r_))
+check("выключенный в рассылку не попадает",
+      all(row[0] != 42 for row in _storage.morning_list()),
+      _storage.morning_list())
+
 # Расписание через бота: приложение ходит сюда, а не на miet.ru, —
 # сайт института отвечает не всем и не всегда, а у бота есть кеш.
 import types as _types                                            # noqa: E402
