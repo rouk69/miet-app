@@ -87,3 +87,37 @@ def popular_groups(limit: int = 15) -> list[str]:
         "WHERE group_name IS NOT NULL AND group_name<>'' "
         "GROUP BY group_name ORDER BY n DESC LIMIT ?", (limit,))
     return [r[0] for r in rows]
+
+# ─────────────── утренняя карточка дня ───────────────
+
+def morning_on(user_id: int) -> bool:
+    row = conn().execute("SELECT morning FROM users WHERE user_id=?",
+                         (user_id,)).fetchone()
+    return bool(row and row[0])
+
+
+def set_morning(user_id: int, on: bool) -> None:
+    """Включает или выключает утреннюю рассылку для человека."""
+    conn().execute(
+        "INSERT INTO users (user_id, morning) VALUES (?, ?) "
+        "ON CONFLICT(user_id) DO UPDATE SET morning=excluded.morning",
+        (user_id, 1 if on else 0))
+
+
+def morning_list() -> list:
+    """
+    Кому слать: подписанные, у кого выбрана группа.
+
+    Без группы карточку не собрать, а звать выбирать её сообщением в
+    половине восьмого — худшее, что можно сделать с утра.
+    """
+    return [(r[0], r[1], r[2] or "") for r in conn().execute(
+        "SELECT user_id, group_name, morning_at FROM users "
+        "WHERE COALESCE(morning, 0)=1 AND group_name IS NOT NULL "
+        "AND group_name<>''")]
+
+
+def morning_sent(user_id: int, day: str) -> None:
+    """Помечает, что за этот день человеку уже написали."""
+    conn().execute("UPDATE users SET morning_at=? WHERE user_id=?",
+                   (day, user_id))
