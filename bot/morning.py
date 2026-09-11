@@ -35,6 +35,7 @@ import threading
 import time
 
 from . import emoji as em
+from . import keyboards as kbs
 from . import render, rich, storage
 from . import schedule_api as api
 
@@ -69,7 +70,8 @@ def time_to_send(now: dt.datetime | None = None) -> bool:
     return after_start and now.hour < LATEST_HOUR
 
 
-def card(group: str, uid: int, custom: bool = True) -> tuple[str, str] | None:
+def card(group: str, uid: int, custom: bool = True,
+         webapp_url: str | None = None) -> tuple[str, str] | None:
     """
     Утренняя карточка: (разметка для rich, текст для обычного письма).
 
@@ -108,7 +110,8 @@ def card(group: str, uid: int, custom: bool = True) -> tuple[str, str] | None:
     rich_html = (f'<h3>{head}</h3><p><i>{render.esc(group)} · {line}</i></p>'
                  + f'<table bordered compact>'
                  + rich.lesson_rows(slots, None, custom)
-                 + '</table>')
+                 + '</table>'
+                 + buttons(group, webapp_url))
 
     text = render.schedule_card(group, sched, week, day, week, custom=custom)
     plain = (f'{em.ico("wave", custom)} <b>Доброе утро!</b>\n'
@@ -116,7 +119,32 @@ def card(group: str, uid: int, custom: bool = True) -> tuple[str, str] | None:
     return rich_html, render.clamp(plain)
 
 
-def send_all(send_rich, send_plain, now: dt.datetime | None = None) -> int:
+# Кнопка отказа: по ней человек выключает рассылку, не заходя никуда.
+OFF_DATA = "morning|off"
+
+
+def buttons(group: str, webapp_url: str | None) -> str:
+    """
+    Две кнопки под карточкой.
+
+    Первая ведёт в приложение — на расписание целиком, второй ряд
+    отдаёт отказ. Отказ стоит прямо под сообщением намеренно: карточка
+    приходит всем, у кого выбрана группа, и уйти от неё должно быть
+    так же просто, как получить, — одно нажатие, без поиска настроек.
+    """
+    open_app = rich.button("Открыть расписание", type="web_app",
+                           url=kbs.webapp_link(webapp_url, group) or "",
+                           style=rich.STYLE_ACTIVE)
+    stop = rich.button("Не присылать", data=OFF_DATA)
+    rows = []
+    if webapp_url:
+        rows.append(rich.row(open_app))
+    rows.append(rich.row(stop))
+    return "".join(rows)
+
+
+def send_all(send_rich, send_plain, now: dt.datetime | None = None,
+             webapp_url: str | None = None) -> int:
     """
     Один утренний круг. Возвращает, скольким ушло.
 
@@ -130,7 +158,7 @@ def send_all(send_rich, send_plain, now: dt.datetime | None = None) -> int:
         if last == today:
             continue
         try:
-            made = card(group, uid)
+            made = card(group, uid, webapp_url=webapp_url)
         except Exception as e:                          # noqa: BLE001
             log.info("расписание для %s не собралось: %s", group, e)
             continue
@@ -155,7 +183,8 @@ def send_all(send_rich, send_plain, now: dt.datetime | None = None) -> int:
             # отклоняет целиком у тех, кому имя бота не куплено на
             # Fragment, а расписание человеку нужно в любом виде.
             try:
-                simple = card(group, uid, custom=False)
+                simple = card(group, uid, custom=False,
+                              webapp_url=webapp_url)
                 ok = bool(simple) and send_plain(uid, simple[1])
             except Exception as e:                      # noqa: BLE001
                 log.info("простая карточка %s не ушла: %s", uid, e)
@@ -168,14 +197,15 @@ def send_all(send_rich, send_plain, now: dt.datetime | None = None) -> int:
     return sent
 
 
-def run_in_background(send_rich, send_plain) -> threading.Thread:
+def run_in_background(send_rich, send_plain,
+                      webapp_url: str | None = None) -> threading.Thread:
     """Будильник. Просыпается раз в пять минут и смотрит на часы."""
     def loop():
         time.sleep(90)
         while True:
             try:
                 if time_to_send():
-                    send_all(send_rich, send_plain)
+                    send_all(send_rich, send_plain, webapp_url=webapp_url)
             except Exception:
                 log.exception("утренняя рассылка сорвалась")
             time.sleep(TICK)
