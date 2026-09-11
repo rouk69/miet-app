@@ -64,11 +64,12 @@ export default async function profileScreen() {
             <div class="list-row-body">
               <div class="row-title">Расписание по утрам</div>
               <div class="row-subtitle">
-                В 7:30 бот пришлёт пары на сегодня: во сколько первая,
-                где идут, какие окна. В выходные и дни без пар — молчит.
+                В 7:30 бот присылает пары на сегодня: во сколько первая,
+                где идут, какие окна. В выходные и дни без пар молчит.
+                Отключить можно и кнопкой под самим сообщением.
               </div>
             </div>
-            ${toggle(account.morning === true, 'morning')}
+            ${toggle(account.morning !== false, 'morning')}
           </div>
         </div>` : ''}
 

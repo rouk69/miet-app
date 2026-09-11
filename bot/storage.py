@@ -91,29 +91,37 @@ def popular_groups(limit: int = 15) -> list[str]:
 # ─────────────── утренняя карточка дня ───────────────
 
 def morning_on(user_id: int) -> bool:
-    row = conn().execute("SELECT morning FROM users WHERE user_id=?",
-                         (user_id,)).fetchone()
-    return bool(row and row[0])
+    """Придёт ли человеку утренняя карточка. По умолчанию — да."""
+    row = conn().execute(
+        "SELECT COALESCE(morning_off, 0) FROM users WHERE user_id=?",
+        (user_id,)).fetchone()
+    return not (row and row[0])
 
 
 def set_morning(user_id: int, on: bool) -> None:
-    """Включает или выключает утреннюю рассылку для человека."""
+    """
+    Включает или выключает утреннюю карточку.
+
+    Хранится отказ, а не согласие: строка в базе есть не у всех, а
+    рассылка идёт всем с группой — значит отсутствие записи обязано
+    означать «шлём».
+    """
     conn().execute(
-        "INSERT INTO users (user_id, morning) VALUES (?, ?) "
-        "ON CONFLICT(user_id) DO UPDATE SET morning=excluded.morning",
-        (user_id, 1 if on else 0))
+        "INSERT INTO users (user_id, morning_off) VALUES (?, ?) "
+        "ON CONFLICT(user_id) DO UPDATE SET morning_off=excluded.morning_off",
+        (user_id, 0 if on else 1))
 
 
 def morning_list() -> list:
     """
-    Кому слать: подписанные, у кого выбрана группа.
+    Кому слать: всем, у кого выбрана группа и кто не отказался.
 
     Без группы карточку не собрать, а звать выбирать её сообщением в
     половине восьмого — худшее, что можно сделать с утра.
     """
     return [(r[0], r[1], r[2] or "") for r in conn().execute(
         "SELECT user_id, group_name, morning_at FROM users "
-        "WHERE COALESCE(morning, 0)=1 AND group_name IS NOT NULL "
+        "WHERE COALESCE(morning_off, 0)=0 AND group_name IS NOT NULL "
         "AND group_name<>''")]
 
 

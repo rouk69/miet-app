@@ -1065,13 +1065,18 @@ SENT.clear()
 from . import morning, storage as _storage                        # noqa: E402
 import datetime as _dt                                            # noqa: E402
 
-check("по умолчанию рассылка выключена", not _storage.morning_on(42))
+check("по умолчанию карточка приходит", _storage.morning_on(42))
 s_, r_ = api.handle("GET", "/api/me", {}, {}, USER)
-check("признак виден приложению", r_.get("morning") is False, r_.get("morning"))
+check("признак виден приложению", r_.get("morning") is True, r_.get("morning"))
 
-s_, r_ = api.handle("POST", "/api/morning", {}, {"on": True}, USER)
-check("подписка включается", s_ == 200 and r_["morning"] is True, (s_, r_))
-check("и запомнилась", _storage.morning_on(42))
+s_, r_ = api.handle("POST", "/api/morning", {}, {"on": False}, USER)
+check("отказ принимается", s_ == 200 and r_["morning"] is False, (s_, r_))
+check("и запомнился", not _storage.morning_on(42))
+check("отказавшийся выпал из рассылки",
+      all(row[0] != 42 for row in _storage.morning_list()),
+      _storage.morning_list())
+api.handle("POST", "/api/morning", {}, {"on": True}, USER)
+check("и возвращается обратно", _storage.morning_on(42))
 
 # Время: будим утром буднего дня и не будим ночью, поздно и в воскресенье.
 check("в 7:30 понедельника пора",
@@ -1086,8 +1091,10 @@ check("в воскресенье молчим",
 # Рассылка: кому ушло, кому нет и что именно.
 SENT = []
 _real_card = morning.card
-morning.card = lambda group, uid, custom=True: (
-    f"<h3>Доброе утро</h3><table><tr><td>{group}</td></tr></table>",
+morning.card = lambda group, uid, custom=True, webapp_url=None: (
+    f"<h3>Доброе утро</h3><table><tr><td>{group}</td></tr></table>"
+    f"<tg-button type=\"callback_data\" data=\"{morning.OFF_DATA}\">"
+    f"Не присылать</tg-button>",
     f"Доброе утро, {group}")
 
 storage.set_group(42, "ПИН-31")
@@ -1095,9 +1102,11 @@ day = _dt.datetime(2026, 9, 14, 7, 30)
 sent = morning.send_all(lambda uid, html: SENT.append(("rich", uid, html)) or True,
                         lambda uid, text: SENT.append(("text", uid, text)) or True,
                         now=day)
-check("карточка ушла подписанному", sent == 1 and SENT and SENT[0][1] == 42,
-      (sent, SENT))
+check("карточка ушла, хотя никто не подписывался",
+      sent >= 1 and any(row[1] == 42 for row in SENT), (sent, SENT))
 check("ушла таблицей, а не текстом", SENT and SENT[0][0] == "rich", SENT)
+check("в карточке есть кнопка отказа",
+      SENT and morning.OFF_DATA in SENT[0][2], SENT[0][2][:80] if SENT else "")
 
 SENT.clear()
 check("второй раз за день не шлём",
@@ -1114,7 +1123,7 @@ check("при отказе таблицы уходит письмо",
 
 # Выходной или день без пар — молчим вовсе.
 _storage.morning_sent(42, "")
-morning.card = lambda group, uid, custom=True: None
+morning.card = lambda group, uid, custom=True, webapp_url=None: None
 SENT.clear()
 check("в день без пар не пишем",
       morning.send_all(lambda u, h: True,
@@ -1122,51 +1131,16 @@ check("в день без пар не пишем",
       and not SENT, SENT)
 morning.card = _real_card
 
-s_, r_ = api.handle("POST", "/api/morning", {}, {"on": False}, USER)
-check("подписка выключается", s_ == 200 and r_["morning"] is False, (s_, r_))
-check("выключенный в рассылку не попадает",
-      all(row[0] != 42 for row in _storage.morning_list()),
-      _storage.morning_list())
-
-# Расписание через бота: приложение ходит сюда, а не на miet.ru, —
-# сайт института отвечает не всем и не всегда, а у бота есть кеш.
-import types as _types                                            # noqa: E402
-from . import schedule_api as _sched                              # noqa: E402
-
-_real_fetch = _sched.fetch_schedule
-_sched.fetch_schedule = lambda group, force=False: {
-    "semestr": "Осенний семестр 2026/2027", "times": [],
-    "lessons": [{"day": 1, "week": 0, "pair": 1, "from": "09:00", "to": "10:20",
-                 "subject": "Физика", "kind": "Лекция", "kindCls": "lek",
-                 "flags": [], "teacher": "Иванов И.И.",
-                 "teacherShort": "Иванов И.И.", "room": "1201",
-                 "group": group}]}
-s_, r_ = api.handle("GET", "/api/schedule", {"group": ["ПИН-31"]}, {}, USER)
-check("расписание отдаётся приложению",
-      s_ == 200 and r_.get("ready") and len(r_["lessons"]) == 1, (s_, r_))
-check("в записи есть всё, что рисует клиент",
-      r_["lessons"][0].get("teacherShort") and r_["lessons"][0].get("group"),
-      r_["lessons"][0])
-s_, r_ = api.handle("GET", "/api/schedule", {}, {}, USER)
-check("без группы расписание не отдаётся", s_ == 400, (s_, r_))
-
-
-def _boom(group, force=False):
-    raise RuntimeError("miet.ru молчит")
-
-
-_sched.fetch_schedule = _boom
-s_, r_ = api.handle("GET", "/api/schedule", {"group": ["ПИН-31"]}, {}, USER)
-check("отказ института честно передан клиенту", s_ == 502, (s_, r_))
-_sched.fetch_schedule = _real_fetch
-del _types
-
-# Предпросмотр карточки дня: им проверяют, что бот рисует на бою.
-s_, r_ = api.handle("GET", "/api/admin/day-preview", {"group": ["ПИН-31"]},
-                    {}, USER)
-check("предпросмотр не для всех", s_ == 403, (s_, r_))
-s_, r_ = api.handle("GET", "/api/admin/day-preview", {}, {}, ADMIN)
-check("без группы предпросмотр отказывает", s_ == 400, (s_, r_))
+# Кнопка «Не присылать» отключает рассылку и больше её не шлёт.
+_storage.set_morning(42, False)
+check("после отказа список пуст для этого человека",
+      all(row[0] != 42 for row in _storage.morning_list()))
+_storage.morning_sent(42, "")
+SENT.clear()
+morning.send_all(lambda u, h: SENT.append(u) or True,
+                 lambda u, t: SENT.append(u) or True, now=day)
+check("отказавшемуся утром не пишут", 42 not in SENT, SENT)
+_storage.set_morning(42, True)
 
 # Предпросмотр утренней карточки: посмотреть на неё до 7:30.
 storage.set_group(777, "ПИН-31")

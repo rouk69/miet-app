@@ -770,6 +770,14 @@ def on_callback(call: types.CallbackQuery) -> None:
         if action == "noop":
             return bot.answer_callback_query(call.id)
 
+        # Отказ от утренней карточки. Первой веткой и без лишних
+        # вопросов: человек нажал «не присылать» — значит не присылать,
+        # а не «вы уверены?» и не «загляните в настройки».
+        if call.data == morning.OFF_DATA:
+            storage.set_morning(uid, False)
+            bot.answer_callback_query(call.id, "Больше не пришлю")
+            return bot.send_message(uid, render.morning_off_text())
+
         # Кнопки под черновиком поста. Отдельной веткой до всего остального:
         # к расписанию они отношения не имеют, и группы в них нет.
         if call.data.startswith("post:"):
@@ -1063,7 +1071,8 @@ def main() -> None:
             log.info("утреннее письмо %s не ушло: %s", uid, e)
             return False
 
-    morning.run_in_background(morning_rich, morning_plain)
+    morning.run_in_background(morning_rich, morning_plain,
+                              webapp_url=WEBAPP_URL or None)
 
     # Объявления преподавателей в ОРИОКС: единственное место, где лежит
     # текст домашнего задания. Экран «Учёба» показывает их тому, кто
