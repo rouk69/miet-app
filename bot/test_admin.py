@@ -1168,6 +1168,20 @@ check("предпросмотр не для всех", s_ == 403, (s_, r_))
 s_, r_ = api.handle("GET", "/api/admin/day-preview", {}, {}, ADMIN)
 check("без группы предпросмотр отказывает", s_ == 400, (s_, r_))
 
+# Предпросмотр утренней карточки: посмотреть на неё до 7:30.
+storage.set_group(777, "ПИН-31")
+morning.card = lambda group, uid, custom=True: ("<h3>Утро</h3>", "Утро, " + group)
+s_, r_ = api.handle("GET", "/api/admin/day-preview",
+                    {"group": ["ПИН-31"], "morning": ["1"]}, {}, ADMIN)
+check("утренняя карточка показана",
+      s_ == 200 and r_.get("morning") and "Утро" in r_["rich"], (s_, r_))
+check("без просьбы не отправляется", r_.get("sent") is False, r_)
+morning.card = lambda group, uid, custom=True: None
+s_, r_ = api.handle("GET", "/api/admin/day-preview",
+                    {"group": ["ПИН-31"], "morning": ["1"]}, {}, ADMIN)
+check("в пустой день так и сказано", r_.get("empty") is True, r_)
+morning.card = _real_card
+
 # Разведка сторожа — только владельцу и только про него самого:
 # чужие объявления не сторожит никто, и посмотреть на них тоже нельзя.
 s_, r_ = api.handle("GET", "/api/admin/orioks-watch", {}, {}, USER)
