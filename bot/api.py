@@ -802,7 +802,7 @@ def _admin(path: str, method: str, query: dict, body: dict, uid: int, me: dict):
             # Адрес приложения нужен кнопке «Открыть расписание»: без
             # него предпросмотр показывал карточку без половины кнопок.
             made = morning.card(group, me["id"],
-                                webapp_url=os.environ.get("WEBAPP_URL", "").strip() or None)
+                                webapp_url=webapp_watch.app_url())
             if not made:
                 return 200, {"morning": True, "empty": True,
                              "why": "сегодня выходной или пар нет"}
