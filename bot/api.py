@@ -899,6 +899,56 @@ def _admin(path: str, method: str, query: dict, body: dict, uid: int, me: dict):
 
 # ─────────────────────────── сервер ───────────────────────────
 
+# Откуда раздаётся приложение и что из него можно отдавать наружу.
+SITE_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+PUBLIC_DIRS = {"css", "js", "fonts", "img", "data"}
+PUBLIC_FILES = {"index.html", "webapp.version", "favicon.ico"}
+
+MIME = {
+    ".html": "text/html; charset=utf-8",
+    ".css": "text/css; charset=utf-8",
+    ".js": "text/javascript; charset=utf-8",
+    ".json": "application/json; charset=utf-8",
+    ".woff2": "font/woff2",
+    ".svg": "image/svg+xml",
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".webp": "image/webp",
+    ".ico": "image/x-icon",
+    ".txt": "text/plain; charset=utf-8",
+    ".version": "text/plain; charset=utf-8",
+}
+
+
+def static_file(path: str):
+    """
+    Что отдать по этому адресу: (имя, содержимое, тип) или None.
+
+    Наружу уходит только то, что и так публично: разметка, стили,
+    скрипты, шрифты, картинки, собранные данные. Всё прочее — None,
+    даже если такой файл в репозитории есть. Отдельной функцией, чтобы
+    проверки могли дёрнуть её без поднятия сервера.
+    """
+    rel = path.lstrip("/") or "index.html"
+    top = rel.split("/", 1)[0]
+    if top not in PUBLIC_DIRS and rel not in PUBLIC_FILES:
+        return None
+
+    full = os.path.normpath(os.path.join(SITE_ROOT, rel.replace("/", os.sep)))
+    # Выход за пределы каталога — единственное, чего здесь можно добиться
+    # подбором адреса; закрываем прямой проверкой.
+    if not full.startswith(SITE_ROOT + os.sep) or not os.path.isfile(full):
+        return None
+    try:
+        blob = open(full, "rb").read()
+    except OSError:
+        return None
+    mime = MIME.get(os.path.splitext(full)[1].lower(),
+                    "application/octet-stream")
+    return rel, blob, mime
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "miet-api"
     protocol_version = "HTTP/1.1"
@@ -942,7 +992,50 @@ class Handler(BaseHTTPRequestHandler):
         url = urlparse(self.path)
         if url.path.startswith("/media/"):
             return self._media(url.path[len("/media/"):])
+        if not url.path.startswith("/api/"):
+            return self._static(url.path)
         self._run("GET")
+
+    def _static(self, path: str) -> None:
+        """
+        Раздача самого мини-приложения.
+
+        Приложение живёт на GitHub Pages, и это удобно ровно до тех пор,
+        пока Pages доступен. У части операторов соединение к github.io
+        рвётся (`ERR_CONNECTION_CLOSED`), и человек видит не приложение,
+        а ошибку загрузки. Сервер бота при этом отвечает — через него же
+        идут лента, ОРИОКС и расписание, — поэтому он и раздаёт статику:
+        одна точка отказа вместо двух.
+
+        Файлы берутся из репозитория рядом с кодом. Наружу отдаётся
+        только то, что и так публично: разметка, стили, скрипты, шрифты,
+        картинки, собранные данные. Всё прочее — 404, даже если такой
+        файл существует.
+        """
+        found = static_file(path)
+        if not found:
+            return self._send(404, {"error": "Нет такого файла"})
+        rel, blob, mime = found
+        encoding = None
+        if (len(blob) > 1400 and mime.split("/")[0] in ("text", "application")
+                and "gzip" in self.headers.get("Accept-Encoding", "")):
+            blob = gzip.compress(blob, 6)
+            encoding = "gzip"
+
+        self.send_response(200)
+        self.send_header("Content-Type", mime)
+        if encoding:
+            self.send_header("Content-Encoding", encoding)
+            self.send_header("Vary", "Accept-Encoding")
+        self.send_header("Content-Length", str(len(blob)))
+        # Адреса файлов несут метку выкладки (?v=…), кроме самой
+        # страницы: её держим свежей, иначе новая сборка не доедет.
+        fresh = rel == "index.html"
+        self.send_header("Cache-Control", "no-cache" if fresh
+                         else "public, max-age=604800")
+        self._cors()
+        self.end_headers()
+        self.wfile.write(blob)
 
     def _media(self, name: str) -> None:
         """

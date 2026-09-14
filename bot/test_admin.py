@@ -1142,15 +1142,31 @@ morning.send_all(lambda u, h: SENT.append(u) or True,
 check("отказавшемуся утром не пишут", 42 not in SENT, SENT)
 _storage.set_morning(42, True)
 
+# Раздача самого приложения: GitHub Pages у части операторов не
+# открывается, и клиент уезжает с того же сервера, что и API.
+got = api.static_file("/")
+check("страница приложения отдаётся",
+      bool(got) and got[0] == "index.html" and b"<!DOCTYPE html" in got[1],
+      got[0] if got else None)
+check("сборка отдаётся",
+      (api.static_file("/js/bundle.js") or [None])[0] == "js/bundle.js")
+check("шрифт отдаётся с нужным типом",
+      (api.static_file("/fonts/manrope-700-cyrillic.woff2")
+       or [None, None, None])[2] == "font/woff2")
+for closed in ("/.env", "/bot/main.py", "/../.env", "/js/../../.env",
+               "/tools/stamp.py", "/promo/post.md", "/bot/users.db"):
+    check(f"наружу не уходит {closed}", api.static_file(closed) is None, closed)
+
 # Предпросмотр утренней карточки: посмотреть на неё до 7:30.
 storage.set_group(777, "ПИН-31")
-morning.card = lambda group, uid, custom=True: ("<h3>Утро</h3>", "Утро, " + group)
+morning.card = lambda group, uid, custom=True, webapp_url=None: (
+    "<h3>Утро</h3>", "Утро, " + group)
 s_, r_ = api.handle("GET", "/api/admin/day-preview",
                     {"group": ["ПИН-31"], "morning": ["1"]}, {}, ADMIN)
 check("утренняя карточка показана",
       s_ == 200 and r_.get("morning") and "Утро" in r_["rich"], (s_, r_))
 check("без просьбы не отправляется", r_.get("sent") is False, r_)
-morning.card = lambda group, uid, custom=True: None
+morning.card = lambda group, uid, custom=True, webapp_url=None: None
 s_, r_ = api.handle("GET", "/api/admin/day-preview",
                     {"group": ["ПИН-31"], "morning": ["1"]}, {}, ADMIN)
 check("в пустой день так и сказано", r_.get("empty") is True, r_)

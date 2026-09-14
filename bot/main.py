@@ -107,7 +107,24 @@ def load_env(path: str = ".env") -> None:
 load_env()
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "").strip()
-WEBAPP_URL = os.environ.get("WEBAPP_URL", "").strip()
+# Адрес мини-приложения.
+#
+# Раньше это был GitHub Pages, и у части операторов он просто не
+# открывается: соединение к github.io рвётся, человек видит «Не удалось
+# загрузить, ERR_CONNECTION_CLOSED» вместо приложения. Сервер бота при
+# этом отвечает — через него идут лента, ОРИОКС и расписание, — поэтому
+# приложение раздаётся оттуда же. Одна точка отказа вместо двух.
+#
+# Переопределить можно переменной APP_URL; старая WEBAPP_URL осталась
+# запасным вариантом для тех, кто раздаёт клиент где-то ещё.
+SELF_URL = "https://miet-bot-rouk.amvera.io"
+WEBAPP_URL = ((os.environ.get("APP_URL", "").strip()
+               or os.environ.get("WEBAPP_URL", "").strip())
+              or SELF_URL)
+if "github.io" in WEBAPP_URL:
+    # Пока переменная в панели не обновлена, всё равно ведём на свой
+    # сервер: приложение важнее, чем настройка.
+    WEBAPP_URL = SELF_URL
 
 if not BOT_TOKEN:
     sys.exit("Не задан BOT_TOKEN. Получи токен у @BotFather и положи в переменную "
