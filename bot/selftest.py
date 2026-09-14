@@ -223,6 +223,27 @@ finally:
 # молчания бота из-за правки цвета кнопки.
 from . import webapp as webapp_watch                    # noqa: E402
 
+# Адрес приложения — один на всех: кнопку меню, клавиатуры и утреннюю
+# карточку. Разъехавшись, они вели бы на разные домены, и половина
+# людей открывала бы то, что у них не грузится.
+import os as _os                                        # noqa: E402
+
+_was = _os.environ.get("APP_URL"), _os.environ.get("WEBAPP_URL")
+_os.environ.pop("APP_URL", None)
+_os.environ["WEBAPP_URL"] = "https://rouk69.github.io/miet-app"
+check("на github.io больше не ведём",
+      webapp_watch.app_url() == webapp_watch.SELF_URL, webapp_watch.app_url())
+_os.environ["APP_URL"] = "https://example.org/app/"
+check("свой адрес переопределяет всё",
+      webapp_watch.app_url() == "https://example.org/app", webapp_watch.app_url())
+_os.environ.pop("APP_URL", None)
+_os.environ.pop("WEBAPP_URL", None)
+check("без переменных — свой сервер",
+      webapp_watch.app_url() == webapp_watch.SELF_URL)
+for _name, _val in zip(("APP_URL", "WEBAPP_URL"), _was):
+    if _val is not None:
+        _os.environ[_name] = _val
+
 check("метка берётся с диска, пока сеть молчит",
       webapp_watch.version() == paths.webapp_version(),
       webapp_watch.version())

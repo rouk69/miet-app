@@ -23,6 +23,7 @@ Telegram кеширует страницу мини-приложения по а
 from __future__ import annotations
 
 import logging
+import os
 import threading
 import time
 import urllib.error
@@ -41,6 +42,30 @@ TIMEOUT = 15
 # Метка, увиденная в сети. Пустая — значит ещё не спрашивали или не
 # ответили; тогда берём ту, что лежит на диске.
 _seen = {"version": "", "at": 0.0}
+
+
+# Где живёт приложение. Раньше это был GitHub Pages, но у части
+# операторов соединение к github.io рвётся — человек видит «не удалось
+# загрузить» вместо расписания. Теперь клиент раздаёт сам бот, и адрес
+# по умолчанию — его собственный.
+SELF_URL = "https://miet-bot-rouk.amvera.io"
+
+
+def app_url() -> str:
+    """
+    Адрес мини-приложения — один на бота, кнопки и рассылку.
+
+    Считается здесь, а не в каждом месте по-своему: разъехавшись, они
+    дают кнопку меню на одном домене и кнопку под утренней карточкой на
+    другом. Переопределяется переменной APP_URL; старая WEBAPP_URL
+    осталась для тех, кто раздаёт клиент где-то ещё, но на github.io мы
+    больше не ведём — именно от него и уходили.
+    """
+    for name in ("APP_URL", "WEBAPP_URL"):
+        got = (os.environ.get(name) or "").strip()
+        if got and "github.io" not in got:
+            return got.rstrip("/")
+    return SELF_URL
 
 
 def version() -> str:
