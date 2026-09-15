@@ -1,5 +1,5 @@
 /* Собрано tools/stamp.py из js/*.js — не правьте здесь.
-   Версия 32fa3308. Исходники лежат рядом и остаются модулями. */
+   Версия 5bbea5a0. Исходники лежат рядом и остаются модулями. */
 var __mod = {};
 /* ==== js\config.js ==== */
 __mod['js/config.js'] = (function () {
@@ -13,7 +13,28 @@ __mod['js/config.js'] = (function () {
 // Домен подставляется из логина и названия проекта на Amvera:
 // git.amvera.ru/rouk/miet-bot → miet-bot-rouk.amvera.io. Чтобы он отвечал,
 // в панели проекта должен быть включён внешний доступ на порт 80.
-const DEFAULT_BASE = 'https://miet-bot-rouk.amvera.io';
+const AMVERA = 'https://miet-bot-rouk.amvera.io';
+
+// Зеркало на GitHub Pages — единственное место, откуда страница
+// раздаётся, а сервера рядом нет: там спрашивать надо Amvera.
+const PAGES_HOST = 'rouk69.github.io';
+
+// Откуда открыли — тому и задаём вопросы. Иначе запасной вход не имеет
+// смысла: страница приехала бы через него, а данные всё равно ушли бы
+// прямиком на Amvera — то есть по тому самому пути, который у человека
+// и оборвался. Свой origin безопасен: страницу раздал тот, кого нам
+// назначил бот, чужим он стать не может.
+function here() {
+  try {
+    if (location.protocol !== 'https:' && location.protocol !== 'http:') return '';
+    if (location.hostname === PAGES_HOST) return '';
+    return location.origin || '';
+  } catch {
+    return '';
+  }
+}
+
+const DEFAULT_BASE = here() || AMVERA;
 
 // Локальная отладка: в консоли браузера
 //   localStorage.setItem('miet-api', 'http://localhost:8080')
@@ -34,7 +55,7 @@ const API_BASE = (stored() || DEFAULT_BASE).replace(/\/+$/, '');
 // свежую ли страницу открыл человек: Telegram кеширует мини-приложения
 // по своим правилам, и «у меня ничего не поменялось» разбирается
 // сравнением этой строки, а не на слово.
-const BUILD = '32fa3308';
+const BUILD = '5bbea5a0';
 
 return {'API_BASE': API_BASE, 'BUILD': BUILD};
 })();

@@ -678,6 +678,11 @@ def _admin(path: str, method: str, query: dict, body: dict, uid: int, me: dict):
         out["help"] = help_board.stats()
         out["hours"] = analytics.by_hours(days)
         out["weekdays"] = analytics.by_weekday()
+        # Сколько человек сидит на запасном входе. Число само по себе
+        # диагноз: пока оно единичное — у людей всё открывается, а если
+        # поползло вверх, значит прямой путь до нас портится, и об этом
+        # надо знать раньше, чем придут жаловаться.
+        out["mirror_users"] = storage.mirror_users()
         return 200, out
 
     if path == "/api/admin/settings":

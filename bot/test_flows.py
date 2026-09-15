@@ -578,6 +578,53 @@ check("после отмены текст снова ищет группу",
 analytics.set_role(UID, "none", [], [])
 
 
+print("\n19. Запасной вход в приложение")
+# Кнопка меню ставится по-человечески, а не всем сразу — ловим её.
+menu_set = []
+B.bot.set_chat_menu_button = lambda **kw: menu_set.append(kw)
+
+os.environ.pop("MIRROR_URL", None)
+tg.reset(); msg("/fix")
+check("без выложенного воркера лишнего не обещаем",
+      "Cloudflare" not in tg.sent[-1]["text"], tg.sent[-1]["text"][:60])
+check("но совет даём", "VPN" in tg.sent[-1]["text"], tg.sent[-1]["text"][:60])
+press("entry|mirror")
+check("включить нечего — предупреждаем", not storage.mirror_on(UID))
+
+MIRROR = "https://zapas.example.workers.dev"
+os.environ["MIRROR_URL"] = MIRROR
+tg.reset(); msg("/fix")
+check("с воркером объясняем, что это", "Cloudflare" in tg.sent[-1]["text"],
+      tg.sent[-1]["text"][:60])
+
+press("entry|mirror")
+check("запасной вход включился", storage.mirror_on(UID))
+check("адрес приложения стал запасным", B.app_url(UID) == MIRROR, B.app_url(UID))
+check("личная кнопка меню переставлена",
+      menu_set and menu_set[-1].get("chat_id") == UID,
+      menu_set[-1] if menu_set else None)
+check("и ведёт туда же", MIRROR in menu_set[-1]["menu_button"].web_app.url,
+      menu_set[-1]["menu_button"].web_app.url)
+
+# Самое важное: адрес меняется во ВСЕХ кнопках, а не только в этой.
+tg.reset(); msg("/today")
+# Карточка дня уходит либо rich-разметкой (адрес внутри html), либо
+# обычным сообщением с клавиатурой — проверяем оба пути сразу.
+markup = tg.sent[-1]["markup"]
+links = [b.web_app.url for row in (markup.keyboard if markup else [])
+         for b in row if getattr(b, "web_app", None)]
+links.append(tg.sent[-1]["text"])
+check("кнопка под расписанием ведёт запасным входом",
+      any(MIRROR in x for x in links), tg.sent[-1]["text"][:120])
+check("у соседа по чату вход остался обычным",
+      B.app_url(UID + 1) == B.WEBAPP_URL, B.app_url(UID + 1))
+
+press("entry|main")
+check("возврат на обычный вход работает", not storage.mirror_on(UID))
+check("и адрес вернулся", B.app_url(UID) == B.WEBAPP_URL, B.app_url(UID))
+os.environ.pop("MIRROR_URL", None)
+
+
 print("\n" + "=" * 58)
 print(f"пройдено {ok}, провалено {fail}")
 print("=" * 58)

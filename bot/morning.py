@@ -144,13 +144,20 @@ def buttons(group: str, webapp_url: str | None) -> str:
 
 
 def send_all(send_rich, send_plain, now: dt.datetime | None = None,
-             webapp_url: str | None = None) -> int:
+             webapp_url: str | None = None, url_for=None) -> int:
     """
     Один утренний круг. Возвращает, скольким ушло.
 
     Отправку передают снаружи: этот модуль не должен знать про Telegram,
     иначе его нельзя было бы прогнать в проверках.
+
+    url_for — адрес приложения для конкретного человека: у того, кто
+    переключился на запасной вход, кнопка под карточкой обязана вести
+    туда же, куда и все остальные его кнопки. Без него берётся общий
+    webapp_url, и проверки могут подставить свой.
     """
+    def link_for(uid: int) -> str | None:
+        return (url_for(uid) if url_for else webapp_url)
     now = now or msk_now()
     today = now.date().isoformat()
     sent = 0
@@ -158,7 +165,7 @@ def send_all(send_rich, send_plain, now: dt.datetime | None = None,
         if last == today:
             continue
         try:
-            made = card(group, uid, webapp_url=webapp_url)
+            made = card(group, uid, webapp_url=link_for(uid))
         except Exception as e:                          # noqa: BLE001
             log.info("расписание для %s не собралось: %s", group, e)
             continue
@@ -184,7 +191,7 @@ def send_all(send_rich, send_plain, now: dt.datetime | None = None,
             # Fragment, а расписание человеку нужно в любом виде.
             try:
                 simple = card(group, uid, custom=False,
-                              webapp_url=webapp_url)
+                              webapp_url=link_for(uid))
                 ok = bool(simple) and send_plain(uid, simple[1])
             except Exception as e:                      # noqa: BLE001
                 log.info("простая карточка %s не ушла: %s", uid, e)
@@ -197,15 +204,16 @@ def send_all(send_rich, send_plain, now: dt.datetime | None = None,
     return sent
 
 
-def run_in_background(send_rich, send_plain,
-                      webapp_url: str | None = None) -> threading.Thread:
+def run_in_background(send_rich, send_plain, webapp_url: str | None = None,
+                      url_for=None) -> threading.Thread:
     """Будильник. Просыпается раз в пять минут и смотрит на часы."""
     def loop():
         time.sleep(90)
         while True:
             try:
                 if time_to_send():
-                    send_all(send_rich, send_plain, webapp_url=webapp_url)
+                    send_all(send_rich, send_plain, webapp_url=webapp_url,
+                             url_for=url_for)
             except Exception:
                 log.exception("утренняя рассылка сорвалась")
             time.sleep(TICK)

@@ -112,6 +112,35 @@ def set_morning(user_id: int, on: bool) -> None:
         (user_id, 0 if on else 1))
 
 
+def mirror_on(user_id: int) -> bool:
+    """Открывает ли человек приложение запасным входом. По умолчанию — нет."""
+    row = conn().execute(
+        "SELECT COALESCE(entry_mirror, 0) FROM users WHERE user_id=?",
+        (user_id,)).fetchone()
+    return bool(row and row[0])
+
+
+def set_mirror(user_id: int, on: bool) -> None:
+    """
+    Переключает человека на запасной вход и обратно.
+
+    Здесь хранится согласие, а не отказ — в отличие от утренней
+    карточки: прямой путь работает у подавляющего большинства, и
+    отсутствие записи обязано означать именно его.
+    """
+    conn().execute(
+        "INSERT INTO users (user_id, entry_mirror) VALUES (?, ?) "
+        "ON CONFLICT(user_id) DO UPDATE SET entry_mirror=excluded.entry_mirror",
+        (user_id, 1 if on else 0))
+
+
+def mirror_users() -> int:
+    """Сколько человек сидит на запасном входе — видно в статистике."""
+    return conn().execute(
+        "SELECT COUNT(*) FROM users WHERE COALESCE(entry_mirror, 0) = 1"
+    ).fetchone()[0]
+
+
 def morning_list() -> list:
     """
     Кому слать: всем, у кого выбрана группа и кто не отказался.
