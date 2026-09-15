@@ -32,6 +32,35 @@ export function syncChrome(theme) {
   document.querySelector('meta[name="theme-color"]')?.setAttribute('content', color);
 }
 
+// Приложения, которые выглядят как часть Telegram, а не как страница в
+// рамке, просят полный экран: тогда клиент убирает свою полосу с
+// разделителем, а кнопки «закрыть», «свернуть» и «меню» рисует
+// накладными пилюлями поверх содержимого. Отступ под них приезжает в
+// contentSafeAreaInset — его уже складывает applySafeArea, поэтому
+// заголовок экрана под кнопки не залезет.
+//
+// Только мобильные клиенты: на десктопе мини-апп и так в своём окне, а
+// полноэкранный режим там либо не поддержан, либо разворачивает окно на
+// весь монитор — ни то ни другое не нужно.
+const DESKTOP = ['tdesktop', 'macos', 'web', 'weba', 'webk', 'unknown'];
+
+function goFullscreen() {
+  if (!supports('8.0') || !tg?.requestFullscreen) return;
+  if (DESKTOP.includes(tg.platform)) return;
+  try {
+    tg.requestFullscreen();
+  } catch { /* клиент отказал — остаёмся в обычном режиме */ }
+}
+
+// Чем стилям отличить один режим от другого: в полноэкранном кнопки
+// Telegram лежат поверх нашего первого экрана, и кое-что рядом с ними
+// приходится двигать.
+function markFullscreen() {
+  const on = Boolean(tg?.isFullscreen);
+  document.documentElement.classList.toggle('tg-fullscreen', on);
+  applySafeArea();
+}
+
 export function initTelegram(theme = 'light', onThemeChange = null) {
   if (!tg) return;
   try {
@@ -42,9 +71,13 @@ export function initTelegram(theme = 'light', onThemeChange = null) {
     tg.disableVerticalSwipes?.();
     syncChrome(theme);
     applySafeArea();
+    goFullscreen();
     tg.onEvent?.('safeAreaChanged', applySafeArea);
     tg.onEvent?.('contentSafeAreaChanged', applySafeArea);
-    tg.onEvent?.('fullscreenChanged', applySafeArea);
+    tg.onEvent?.('fullscreenChanged', markFullscreen);
+    // Отказ тоже событие: клиент старый или режим запрещён — тогда
+    // просто живём в обычном, и пометки на странице быть не должно.
+    tg.onEvent?.('fullscreenFailed', markFullscreen);
     // Человек может переключить тему Telegram, не закрывая мини-апп.
     // Кто на это откликается, решает вызывающий: у него настройки.
     if (onThemeChange) tg.onEvent?.('themeChanged', onThemeChange);

@@ -136,6 +136,16 @@ CASES = [
      "String(apiBase().indexOf('miet-bot-rouk.amvera.io') > 0)", "true"),
     ("с прямого адреса уходить некуда", "String(fallBackToHome())", "false"),
     ("и он не испортился", "String(apiBase().indexOf('https://') === 0)", "true"),
+    # Обновление страницы на свежую сборку: метка ставится, а параметры
+    # входа (группа, startapp) обязаны пережить перезагрузку.
+    ("метка попадает в адрес",
+     "String(freshUrl('https://m.ru/?group=%D0%9F-13', 'abc').indexOf('v=abc') > 0)",
+     "true"),
+    ("и группа не теряется",
+     "String(freshUrl('https://m.ru/?group=X', 'abc').indexOf('group=X') > 0)",
+     "true"),
+    ("старая метка заменяется, а не копится",
+     "freshUrl('https://m.ru/?v=old', 'new')", "https://m.ru/?v=new"),
     ("пустая дата не ломает разбор", "newsDate('').text", ""),
     ("кривая дата отдаётся как есть", "newsDate('позавчера').text", "позавчера"),
     ("пункт перечня распознан", "String(NUMBERED.test('1. Теории'))", "true"),
@@ -305,6 +315,10 @@ var subjectLook = _t.subjectLook, newsDate = _t.newsDate,
 // раздатчик страницы сервером не оказался.
 var _cfg = __mod['js/config.js'];
 var apiBase = _cfg.apiBase, fallBackToHome = _cfg.fallBackToHome;
+
+// Адрес той же страницы с новой меткой выкладки.
+var _fr = __mod['js/fresh.js'];
+var freshUrl = _fr.freshUrl;
 
 var _a = __mod['js/art.js'];
 var art = _a.art, artState = _a.artState;
