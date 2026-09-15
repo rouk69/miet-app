@@ -5,6 +5,7 @@ import { loadData, settings, save, applyTheme, resolveTheme } from './store.js';
 import { register, init as initRouter, switchTab, refresh } from './router.js';
 import { fetchSchedule } from './schedule.js';
 import { loadMe, account, track, syncGroup } from './api.js';
+import { checkFresh } from './fresh.js';
 
 import home from './screens/home.js';
 import schedule from './screens/schedule.js';
@@ -148,6 +149,11 @@ loadData()
       return;
     }
     track('open');
+    // Не открыл ли человек вчерашнюю сборку: у входа через главное
+    // мини-приложение метки в адресе нет, и без этой проверки он
+    // остался бы на ней до тех пор, пока Telegram не забудет кеш.
+    // После первой отрисовки — обновление не должно задерживать старт.
+    checkFresh();
     // Группа могла приехать из бота, пока рисовалась главная: без неё
     // экран показывает «выбери группу», и оставлять его так нельзя.
     const had = settings.group;

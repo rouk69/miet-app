@@ -1,5 +1,5 @@
 /* Собрано tools/stamp.py из js/*.js — не правьте здесь.
-   Версия 57b66cfc. Исходники лежат рядом и остаются модулями. */
+   Версия 49f20db2. Исходники лежат рядом и остаются модулями. */
 var __mod = {};
 /* ==== js\config.js ==== */
 __mod['js/config.js'] = (function () {
@@ -78,9 +78,91 @@ const API_BASE = base;
 // свежую ли страницу открыл человек: Telegram кеширует мини-приложения
 // по своим правилам, и «у меня ничего не поменялось» разбирается
 // сравнением этой строки, а не на слово.
-const BUILD = '57b66cfc';
+const BUILD = '49f20db2';
 
 return {'apiBase': apiBase, 'fallBackToHome': fallBackToHome, 'API_BASE': API_BASE, 'BUILD': BUILD};
+})();
+
+/* ==== js\fresh.js ==== */
+__mod['js/fresh.js'] = (function () {
+// Свежесть открытой страницы.
+//
+// Telegram кеширует мини-приложение по адресу и держит дольше, чем
+// просит HTTP. Лечилось это меткой выкладки в адресе кнопки: другой
+// адрес — другая страница. Но адрес есть не у всех входов: главное
+// мини-приложение (то, что даёт кнопку «Открыть» в списке чатов)
+// задаётся в BotFather один раз и метку не несёт, и человек может
+// открыть им прошлую сборку.
+//
+// Поэтому страница проверяет себя сама: спрашивает у того, кто её
+// раздал, какая выкладка считается текущей, и если своя старее —
+// перезагружается на новую. Спрашиваем именно раздатчика, а не сервер
+// API: у зеркала может быть своя, отставшая копия, и сравнивать надо с
+// ней, иначе перезагрузка ничего не изменит.
+
+var BUILD = __mod['js/config.js']['BUILD'];
+
+// Какую метку мы уже пытались получить. Иначе страница, которая почему-
+// то не обновилась (кеш посредника, отставшее зеркало), перезагружалась
+// бы по кругу.
+const TRIED = 'miet-fresh-tried';
+
+/**
+ * Адрес этой же страницы с новой меткой.
+ *
+ * Остальные параметры сохраняются: в них приходит группа и startapp, а
+ * терять их из-за обновления нельзя.
+ */
+function freshUrl(href, version) {
+  const hashAt = href.indexOf('#');
+  const hash = hashAt < 0 ? '' : href.slice(hashAt);
+  const body = hashAt < 0 ? href : href.slice(0, hashAt);
+  const askAt = body.indexOf('?');
+  const base = askAt < 0 ? body : body.slice(0, askAt);
+  const parts = (askAt < 0 ? '' : body.slice(askAt + 1))
+    .split('&')
+    .filter(p => p && p.slice(0, 2) !== 'v=');
+  parts.push('v=' + encodeURIComponent(version));
+  return base + '?' + parts.join('&') + hash;
+}
+
+function tried() {
+  try {
+    return sessionStorage.getItem(TRIED) || '';
+  } catch {
+    return '';
+  }
+}
+
+function remember(version) {
+  try {
+    sessionStorage.setItem(TRIED, version);
+  } catch { /* приватный режим — переживём */ }
+}
+
+/**
+ * Проверяет и, если надо, перезагружает страницу. Молча: человеку не о
+ * чем знать, а спрашивать «обновиться?» — значит предлагать выбор, в
+ * котором один ответ правильный.
+ */
+async function checkFresh() {
+  if (!BUILD) return false;
+  let live = '';
+  try {
+    const res = await fetch('webapp.version?t=' + Date.now(), { cache: 'no-store' });
+    if (!res.ok) return false;
+    live = (await res.text()).trim();
+  } catch {
+    return false;                      // сети нет — не наше дело
+  }
+  if (!live || live === BUILD || live.length > 40) return false;
+  if (tried() === live) return false;
+  remember(live);
+  location.replace(freshUrl(location.href, live));
+  return true;
+}
+
+return {'freshUrl': freshUrl, 'checkFresh': checkFresh};
 })();
 
 /* ==== js\icons.js ==== */
@@ -822,6 +904,35 @@ function syncChrome(theme) {
   document.querySelector('meta[name="theme-color"]')?.setAttribute('content', color);
 }
 
+// Приложения, которые выглядят как часть Telegram, а не как страница в
+// рамке, просят полный экран: тогда клиент убирает свою полосу с
+// разделителем, а кнопки «закрыть», «свернуть» и «меню» рисует
+// накладными пилюлями поверх содержимого. Отступ под них приезжает в
+// contentSafeAreaInset — его уже складывает applySafeArea, поэтому
+// заголовок экрана под кнопки не залезет.
+//
+// Только мобильные клиенты: на десктопе мини-апп и так в своём окне, а
+// полноэкранный режим там либо не поддержан, либо разворачивает окно на
+// весь монитор — ни то ни другое не нужно.
+const DESKTOP = ['tdesktop', 'macos', 'web', 'weba', 'webk', 'unknown'];
+
+function goFullscreen() {
+  if (!supports('8.0') || !tg?.requestFullscreen) return;
+  if (DESKTOP.includes(tg.platform)) return;
+  try {
+    tg.requestFullscreen();
+  } catch { /* клиент отказал — остаёмся в обычном режиме */ }
+}
+
+// Чем стилям отличить один режим от другого: в полноэкранном кнопки
+// Telegram лежат поверх нашего первого экрана, и кое-что рядом с ними
+// приходится двигать.
+function markFullscreen() {
+  const on = Boolean(tg?.isFullscreen);
+  document.documentElement.classList.toggle('tg-fullscreen', on);
+  applySafeArea();
+}
+
 function initTelegram(theme = 'light', onThemeChange = null) {
   if (!tg) return;
   try {
@@ -832,9 +943,13 @@ function initTelegram(theme = 'light', onThemeChange = null) {
     tg.disableVerticalSwipes?.();
     syncChrome(theme);
     applySafeArea();
+    goFullscreen();
     tg.onEvent?.('safeAreaChanged', applySafeArea);
     tg.onEvent?.('contentSafeAreaChanged', applySafeArea);
-    tg.onEvent?.('fullscreenChanged', applySafeArea);
+    tg.onEvent?.('fullscreenChanged', markFullscreen);
+    // Отказ тоже событие: клиент старый или режим запрещён — тогда
+    // просто живём в обычном, и пометки на странице быть не должно.
+    tg.onEvent?.('fullscreenFailed', markFullscreen);
     // Человек может переключить тему Telegram, не закрывая мини-апп.
     // Кто на это откликается, решает вызывающий: у него настройки.
     if (onThemeChange) tg.onEvent?.('themeChanged', onThemeChange);
@@ -7458,6 +7573,7 @@ var loadMe = __mod['js/api.js']['loadMe'];
 var account = __mod['js/api.js']['account'];
 var track = __mod['js/api.js']['track'];
 var syncGroup = __mod['js/api.js']['syncGroup'];
+var checkFresh = __mod['js/fresh.js']['checkFresh'];
 
 var home = __mod['js/screens/home.js']['default'];
 var schedule = __mod['js/screens/schedule.js']['default'];
@@ -7614,6 +7730,11 @@ loadData()
       return;
     }
     track('open');
+    // Не открыл ли человек вчерашнюю сборку: у входа через главное
+    // мини-приложение метки в адресе нет, и без этой проверки он
+    // остался бы на ней до тех пор, пока Telegram не забудет кеш.
+    // После первой отрисовки — обновление не должно задерживать старт.
+    checkFresh();
     // Группа могла приехать из бота, пока рисовалась главная: без неё
     // экран показывает «выбери группу», и оставлять его так нельзя.
     const had = settings.group;
