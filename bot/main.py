@@ -39,6 +39,7 @@ from . import render
 from . import rich
 from . import schedule_api as api
 from . import storage
+from . import uptime
 from . import webapp as webapp_watch
 
 logging.basicConfig(
@@ -1025,6 +1026,10 @@ def main() -> None:
         uid, text, disable_web_page_preview=True))
     notify.bind_rich(lambda uid, html: bot.send_rich_message(
         uid, types.InputRichMessage(html=html)))
+
+    # Отметка о запуске: по ней потом видно, поднимался ли контейнер в
+    # ту минуту, когда у человека «не открылось приложение».
+    uptime.note_start()
 
     web.serve_in_background()
     if not web.admin_ids():

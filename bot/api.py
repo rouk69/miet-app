@@ -32,7 +32,7 @@ from urllib.parse import parse_qs, urlparse
 from . import analytics, appconf, auth, directory, help_board, notify
 from . import orioks, orioks_watch, orioks_web, posts
 from . import morning
-from . import paths, render, storage
+from . import paths, render, storage, uptime
 from . import webapp as webapp_watch
 from . import rich
 from . import schedule_api as schedule
@@ -97,8 +97,15 @@ def handle(method: str, path: str, query: dict, body: dict, init_data: str):
         # подставляет в адрес кнопки меню. Рядом — та, что лежит у него
         # на диске: они расходятся, когда клиент выложили без выкладки
         # бота, и это нормальный, ожидаемый случай, а не поломка.
-        return 200, {"ok": True, "webapp": webapp_watch.version(),
-                     "webapp_on_disk": paths.webapp_version()}
+        # Рядом — здоровье самого процесса: сколько живём и сколько раз
+        # поднимались за сутки. Без этого жалоба «не открылось» не
+        # разбирается вовсе: закрытое соединение выглядит одинаково и
+        # когда перезапускался контейнер, и когда до нас не дошёл чужой
+        # VPN, а лечится это совершенно по-разному.
+        answer = {"ok": True, "webapp": webapp_watch.version(),
+                  "webapp_on_disk": paths.webapp_version()}
+        answer.update(uptime.state())
+        return 200, answer
 
     who = _actor(init_data)
     if not who:
