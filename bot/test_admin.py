@@ -31,6 +31,7 @@ from . import db                                                   # noqa: E402
 db.reset_for_tests(os.path.join(tempfile.mkdtemp(), "test-admin.db"))
 
 from . import analytics, api, storage                              # noqa: E402
+from . import uptime                                              # noqa: E402
 
 ok = fail = 0
 
@@ -75,8 +76,16 @@ check("подпись чужим токеном не проходит", s == 401
 s, _ = api.handle("GET", "/api/me", {}, {},
                   init_data(1, "Старый", "x", auth_date=int(time.time()) - 90000))
 check("просроченная initData отвергнута", s == 401, s)
-s, _ = api.handle("GET", "/api/health", {}, {}, "")
+s, h = api.handle("GET", "/api/health", {}, {}, "")
 check("проверка живости не требует подписи", s == 200, s)
+# Здоровье процесса отдаётся без подписи, и это осознанно: по нему
+# разбирают жалобу «не открылось приложение». Значит в ответе не должно
+# оказаться ничего личного — только числа про сам процесс.
+check("живость говорит, сколько бот живёт", "uptime" in h and "starts_24h" in h, h)
+uptime.note_start()
+s, h = api.handle("GET", "/api/health", {}, {}, "")
+check("запуск попал в историю", h["starts_24h"] >= 1 and h["started_at"], h)
+db.conn().execute("DELETE FROM starts")
 
 print("\n2. Кто админ, решает ADMIN_IDS, а не клиент")
 s, me = api.handle("GET", "/api/me", {}, {}, ADMIN)

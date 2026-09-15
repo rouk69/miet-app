@@ -194,6 +194,14 @@ SCHEMA = [
         token     TEXT NOT NULL,
         linked_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     )""",
+    # Когда поднимался процесс. Нужно, чтобы отличить «оборвалось у
+    # человека по дороге» от «в эту секунду перезапускался контейнер»:
+    # снаружи оба случая выглядят одинаково — закрытым соединением.
+    """CREATE TABLE IF NOT EXISTS starts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )""",
+    "CREATE INDEX IF NOT EXISTS starts_when ON starts(at)",
     # Какие объявления преподавателей человеку уже показывали. Память
     # нужна в базе, а не в счётчике «последнего id»: объявления приходят
     # по разным дисциплинам вперемешку, и «всё, что новее» о них сказать
