@@ -123,6 +123,21 @@ if WEBAPP_URL and not WEBAPP_URL.startswith("https://"):
     log.warning("WEBAPP_URL не https — кнопка мини-приложения показана не будет")
     WEBAPP_URL = ""
 
+
+def app_url(uid: int | None = None) -> str | None:
+    """
+    Адрес приложения для ЭТОГО человека — обычный или запасной.
+
+    Почти для всех он один и тот же, поэтому кнопка меню и inline-ссылки
+    по-прежнему собираются из общего WEBAPP_URL. Но тому, у кого прямой
+    путь до Amvera обрывается, кнопки должны вести через воркер
+    Cloudflare, иначе он жмёт их и не открывает ничего — и так каждый
+    день. Выбор человек делает сам командой /fix, хранится он в базе.
+    """
+    if not WEBAPP_URL:
+        return None
+    return webapp_watch.app_url_for(uid) or None
+
 # Через VPN связь с api.telegram.org рвётся раз в несколько минут. Опрос от
 # этого восстанавливается сам, а вот ответ пользователю — нет: запрос падал
 # с ConnectionError, обработчик умирал, и человек не получал ничего. Здесь
@@ -223,7 +238,7 @@ def build_rich_day(group: str, week: int | None = None, day: int | None = None,
     w = cur_week if week is None else week % 4
     d = today_day() if day is None else max(1, min(6, day))
     html = rich.day_html(group, sched, w, d, cur_week, custom=custom,
-                         webapp_url=(WEBAPP_URL or None) if webapp else None)
+                         webapp_url=app_url(uid) if webapp else None)
     return html, sched, cur_week
 
 
@@ -246,7 +261,7 @@ def build_day(group: str, week: int | None = None, day: int | None = None,
     d = today_day() if day is None else max(1, min(6, day))
     text = render.schedule_card(group, sched, w, d, cur_week, custom=custom)
     kb = kbs.day_keyboard(group, sched, w, d, cur_week,
-                          (WEBAPP_URL or None) if webapp else None)
+                          app_url(uid) if webapp else None)
     return text, kb, sched, cur_week
 
 
@@ -416,7 +431,7 @@ def cmd_start(m: types.Message) -> None:
                 m.chat.id, types.InputRichMessage(
                     html=rich.start_html(m.from_user.first_name, groups,
                                          ctx["group"], BOT_USERNAME,
-                                         WEBAPP_URL or None, custom=c))))
+                                         app_url(m.from_user.id), custom=c))))
             sent_rich = True
         except ApiTelegramException as e:
             _rich["direct"] = False
@@ -432,7 +447,7 @@ def cmd_start(m: types.Message) -> None:
             bot.send_message(
                 m.chat.id,
                 render.start_text(m.from_user.first_name),
-                reply_markup=kbs.start_keyboard(WEBAPP_URL or None,
+                reply_markup=kbs.start_keyboard(app_url(m.from_user.id),
                                                 BOT_USERNAME, ctx["group"]),
                 disable_web_page_preview=True)
             if not ctx["group"]:
@@ -494,13 +509,14 @@ def cmd_week(m: types.Message) -> None:
             return with_emoji_fallback(lambda c: bot.send_rich_message(
                 m.chat.id, types.InputRichMessage(
                     html=rich.week_html(ctx["group"], sched, cur, cur, custom=c,
-                                        webapp_url=WEBAPP_URL or None))))
+                                        webapp_url=app_url(m.from_user.id)))))
         except ApiTelegramException as e:
             _rich["direct"] = False
             log.warning("rich-свод недоступен (%s)", e)
     with_emoji_fallback(lambda c: bot.send_message(
         m.chat.id, render.week_card(ctx["group"], sched, cur, cur, custom=c),
-        reply_markup=kbs.week_keyboard(ctx["group"], cur, WEBAPP_URL or None),
+        reply_markup=kbs.week_keyboard(ctx["group"], cur,
+                                       app_url(m.from_user.id)),
         disable_web_page_preview=True))
 
 
@@ -513,7 +529,7 @@ def cmd_support(m: types.Message) -> None:
             return with_emoji_fallback(lambda c: bot.send_rich_message(
                 m.chat.id, types.InputRichMessage(
                     html=rich.support_html(custom=c,
-                                           webapp_url=WEBAPP_URL or None))))
+                                           webapp_url=app_url(m.from_user.id)))))
         except ApiTelegramException as e:
             _rich["direct"] = False
             log.warning("rich-поддержка недоступна (%s)", e)
@@ -522,6 +538,61 @@ def cmd_support(m: types.Message) -> None:
         "Написать автору", url=f"https://t.me/{render.OWNER}"))
     bot.send_message(m.chat.id, render.support_text(), reply_markup=kb,
                      disable_web_page_preview=True)
+
+
+@bot.message_handler(commands=["fix"])
+def cmd_fix(m: types.Message) -> None:
+    """
+    «Приложение не открывается» — и что с этим можно сделать.
+
+    Жалоба выглядит всегда одинаково: «Не удалось загрузить MIET,
+    ERR_CONNECTION_CLOSED». Это оборванное соединение, и рвётся оно по
+    дороге к нам, а не у нас (наш перезапуск человек увидел бы как 503).
+    Чаще всего дело в том, что Telegram у человека работает через VPN, и
+    до российского адреса Amvera трафик из-за рубежа доходит не всегда.
+    Помочь тут можно только вторым путём — через воркер Cloudflare.
+    """
+    if not seen(m.from_user, "/fix"):
+        return
+    uid = m.from_user.id
+    ctx = user_ctx(uid)
+    if not webapp_watch.mirror_url():
+        return bot.send_message(uid, render.fix_no_mirror_text(),
+                                disable_web_page_preview=True)
+    on = storage.mirror_on(uid)
+    kb = types.InlineKeyboardMarkup()
+    link = kbs.webapp_link(app_url(uid), ctx["group"])
+    if link:
+        kb.row(types.InlineKeyboardButton(
+            "📱 Открыть приложение", web_app=types.WebAppInfo(url=link)))
+    kb.row(types.InlineKeyboardButton(
+        ("• " if on else "") + "Запасной вход",
+        callback_data=kbs.cb("entry", "mirror")),
+        types.InlineKeyboardButton(
+        ("• " if not on else "") + "Обычный",
+        callback_data=kbs.cb("entry", "main")))
+    bot.send_message(uid, render.fix_text(on), reply_markup=kb,
+                     disable_web_page_preview=True)
+
+
+def point_menu_for(uid: int) -> None:
+    """
+    Личная кнопка меню — та, что слева от поля ввода.
+
+    Она ставится на человека отдельно от общей: у Telegram кнопка меню
+    задаётся либо всем сразу, либо конкретному чату, и человеку на
+    запасном входе нужна именно вторая. Без этого он переключился бы, а
+    самая заметная кнопка в чате вела бы его по-прежнему в никуда.
+    """
+    link = kbs.webapp_link(app_url(uid))
+    if not link:
+        return
+    try:
+        bot.set_chat_menu_button(chat_id=uid, menu_button=types.MenuButtonWebApp(
+            type="web_app", text="Приложение",
+            web_app=types.WebAppInfo(url=link)))
+    except ApiTelegramException as e:
+        log.info("личная кнопка меню для %s не встала: %s", uid, e)
 
 
 @bot.message_handler(commands=["group"])
@@ -782,6 +853,31 @@ def on_callback(call: types.CallbackQuery) -> None:
             bot.answer_callback_query(call.id, "Больше не пришлю")
             return bot.send_message(uid, render.morning_off_text())
 
+        # Выбор входа в приложение. До разбора расписания: группы в
+        # этих кнопках нет, а ведут они не в расписание вовсе.
+        if action == "entry":
+            want = len(parts) > 1 and parts[1] == "mirror"
+            if want and not webapp_watch.mirror_url():
+                return bot.answer_callback_query(
+                    call.id, "Запасной вход ещё не настроен", show_alert=True)
+            storage.set_mirror(uid, want)
+            point_menu_for(uid)
+            bot.answer_callback_query(
+                call.id, "Запасной вход включён" if want else "Обычный вход")
+            group = user_ctx(uid)["group"]
+            link = kbs.webapp_link(app_url(uid), group)
+            kb = types.InlineKeyboardMarkup()
+            if link:
+                kb.row(types.InlineKeyboardButton(
+                    "📱 Открыть приложение", web_app=types.WebAppInfo(url=link)))
+            kb.row(types.InlineKeyboardButton(
+                ("• " if want else "") + "Запасной вход",
+                callback_data=kbs.cb("entry", "mirror")),
+                types.InlineKeyboardButton(
+                ("• " if not want else "") + "Обычный",
+                callback_data=kbs.cb("entry", "main")))
+            return safe_edit(call, render.fix_text(want), kb)
+
         # Кнопки под черновиком поста. Отдельной веткой до всего остального:
         # к расписанию они отношения не имеют, и группы в них нет.
         if call.data.startswith("post:"):
@@ -803,7 +899,7 @@ def on_callback(call: types.CallbackQuery) -> None:
             week, group = int(parts[1]) % 4, parts[2]
             sched = api.fetch_schedule(group)
             cur = api.week_of_cycle(dt.date.today(), sched["semestr"], shift)
-            webapp = None if call.inline_message_id else (WEBAPP_URL or None)
+            webapp = None if call.inline_message_id else app_url(uid)
             if _rich[scope]:
                 try:
                     with_emoji_fallback(lambda c: safe_edit(
@@ -1080,7 +1176,8 @@ def main() -> None:
             return False
 
     morning.run_in_background(morning_rich, morning_plain,
-                              webapp_url=WEBAPP_URL or None)
+                              webapp_url=WEBAPP_URL or None,
+                              url_for=app_url)
 
     # Объявления преподавателей в ОРИОКС: единственное место, где лежит
     # текст домашнего задания. Экран «Учёба» показывает их тому, кто

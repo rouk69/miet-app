@@ -68,6 +68,38 @@ def app_url() -> str:
     return SELF_URL
 
 
+def mirror_url() -> str:
+    """
+    Запасной вход — воркер Cloudflare, проксирующий к нам же
+    (`mirror/worker.js`). Пусто, пока переменная MIRROR_URL не задана в
+    панели Amvera: без выложенного воркера предлагать человеку нечего.
+    """
+    got = (os.environ.get("MIRROR_URL") or "").strip()
+    return got.rstrip("/") if got.startswith("https://") else ""
+
+
+def app_url_for(user_id: int | None) -> str:
+    """
+    Каким адресом открывать приложение ЭТОМУ человеку.
+
+    Почти всем — прямым: он короче и работает. Но у кого прямой путь
+    оборвался (чужой VPN, оператор), тому одна и та же кнопка не
+    откроется и завтра, поэтому его выбор хранится в базе и кнопки
+    собираются под него. Импорт внутри функции намеренно: storage тянет
+    за собой базу, а адрес приложения спрашивают и там, где базы нет —
+    в проверках клиента и в setup_bot.
+    """
+    mirror = mirror_url()
+    if not mirror or not user_id:
+        return app_url()
+    try:
+        from .storage import mirror_on
+        return mirror if mirror_on(user_id) else app_url()
+    except Exception:                                   # noqa: BLE001
+        log.exception("не удалось узнать вход для %s", user_id)
+        return app_url()
+
+
 def version() -> str:
     """Что подставлять в адрес мини-приложения прямо сейчас."""
     return _seen["version"] or version_on_disk()
