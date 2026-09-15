@@ -10,7 +10,7 @@
 // всегда: с части мобильных сетей он недоступен вовсе, и это выглядело
 // как ошибка приложения.
 
-import { API_BASE } from './config.js';
+import { API_BASE, apiBase } from './config.js';
 
 const API = 'https://miet.ru/schedule/data';
 const CACHE_KEY = g => `miet-sched:${g}`;
@@ -135,7 +135,7 @@ async function fromBot(group) {
   const bell = setTimeout(() => stop.abort(), 8000);
   try {
     const res = await fetch(
-      `${API_BASE}/api/schedule?group=${encodeURIComponent(group)}`,
+      `${apiBase()}/api/schedule?group=${encodeURIComponent(group)}`,
       { signal: stop.signal, headers: initDataHeader() });
     if (!res.ok) return null;
     const data = await res.json();

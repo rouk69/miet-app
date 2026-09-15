@@ -1,5 +1,5 @@
 /* Собрано tools/stamp.py из js/*.js — не правьте здесь.
-   Версия 5bbea5a0. Исходники лежат рядом и остаются модулями. */
+   Версия 57b66cfc. Исходники лежат рядом и остаются модулями. */
 var __mod = {};
 /* ==== js\config.js ==== */
 __mod['js/config.js'] = (function () {
@@ -49,15 +49,38 @@ function stored() {
   }
 }
 
-const API_BASE = (stored() || DEFAULT_BASE).replace(/\/+$/, '');
+let base = (stored() || DEFAULT_BASE).replace(/\/+$/, '');
+
+/** Адрес серверной части прямо сейчас. */
+const apiBase = () => base;
+
+/**
+ * Возврат на прямой путь, если тот, кто раздал страницу, сервером не
+ * оказался.
+ *
+ * Такое бывает: приложение выложили ещё куда-нибудь статикой, человек
+ * открыл его оттуда — и остался без расписания, потому что спрашивать
+ * данные он стал у раздатчика, а там API нет. Прямой адрес известен
+ * всегда, так что лучше молча уйти на него, чем показать пустой экран.
+ *
+ * Возвращает false, если уходить некуда — мы уже там.
+ */
+function fallBackToHome() {
+  if (base === AMVERA) return false;
+  base = AMVERA;
+  return true;
+}
+
+// Совместимость: адрес, с которого начали. Для новых мест — apiBase().
+const API_BASE = base;
 
 // Метка выкладки. Значение подставляет tools/stamp.py — по нему видно,
 // свежую ли страницу открыл человек: Telegram кеширует мини-приложения
 // по своим правилам, и «у меня ничего не поменялось» разбирается
 // сравнением этой строки, а не на слово.
-const BUILD = '5bbea5a0';
+const BUILD = '57b66cfc';
 
-return {'API_BASE': API_BASE, 'BUILD': BUILD};
+return {'apiBase': apiBase, 'fallBackToHome': fallBackToHome, 'API_BASE': API_BASE, 'BUILD': BUILD};
 })();
 
 /* ==== js\icons.js ==== */
@@ -227,6 +250,7 @@ __mod['js/schedule.js'] = (function () {
 // как ошибка приложения.
 
 var API_BASE = __mod['js/config.js']['API_BASE'];
+var apiBase = __mod['js/config.js']['apiBase'];
 
 const API = 'https://miet.ru/schedule/data';
 const CACHE_KEY = g => `miet-sched:${g}`;
@@ -351,7 +375,7 @@ async function fromBot(group) {
   const bell = setTimeout(() => stop.abort(), 8000);
   try {
     const res = await fetch(
-      `${API_BASE}/api/schedule?group=${encodeURIComponent(group)}`,
+      `${apiBase()}/api/schedule?group=${encodeURIComponent(group)}`,
       { signal: stop.signal, headers: initDataHeader() });
     if (!res.ok) return null;
     const data = await res.json();
@@ -1162,6 +1186,8 @@ __mod['js/api.js'] = (function () {
 // сеть не трогаем вовсе и приложение работает как раньше, без учёта.
 
 var API_BASE = __mod['js/config.js']['API_BASE'];
+var apiBase = __mod['js/config.js']['apiBase'];
+var fallBackToHome = __mod['js/config.js']['fallBackToHome'];
 var tg = __mod['js/tg.js']['tg'];
 
 const initData = tg?.initData || '';
@@ -1187,7 +1213,7 @@ async function once(path, { method, body, timeout }) {
   const bell = setTimeout(() => stop.abort(), timeout);
   let res;
   try {
-    res = await fetch(API_BASE + path, {
+    res = await fetch(apiBase() + path, {
       method,
       headers: {
         'X-Init-Data': initData,
@@ -1212,6 +1238,10 @@ async function once(path, { method, body, timeout }) {
     // 502/503 — контейнер перезапускается после выкладки, это проходит
     // само за несколько секунд. Отказ по правам повторять бессмысленно.
     e.retriable = res.status >= 500;
+    // Наш сервер на /api/... так не отвечает: он либо пустит, либо
+    // откажет по подписи. 404 или 405 здесь означают, что страницу
+    // раздал кто-то другой — статика без сервера за спиной.
+    e.wrongHost = res.status === 404 || res.status === 405;
     throw e;
   }
   return data;
@@ -1234,6 +1264,13 @@ async function request(path, { method = 'GET', body, timeout = 12000,
       return await once(path, { method, body, timeout });
     } catch (err) {
       last = err;
+      // Раздатчик оказался не сервером — уходим на прямой адрес и
+      // пробуем ещё раз, не тратя попытку повтора.
+      if ((err.wrongHost || err.retriable) && fallBackToHome()) {
+        console.warn('API по адресу страницы не отвечает, идём напрямую');
+        attempt--;
+        continue;
+      }
       if (!err.retriable || attempt === retries) break;
       // Небольшая пауза: если сервер поднимается, мгновенный повтор
       // застанет его в том же состоянии.
@@ -1299,7 +1336,7 @@ function flush() {
   if (!events.length && !group) return;
   // keepalive: запрос переживает уход со страницы, иначе последний экран
   // перед закрытием мини-аппа терялся бы всегда.
-  fetch(API_BASE + '/api/track', {
+  fetch(apiBase() + '/api/track', {
     method: 'POST',
     headers: { 'X-Init-Data': initData, 'Content-Type': 'application/json' },
     body: JSON.stringify({ events, group }),
@@ -1922,7 +1959,7 @@ var get = __mod['js/api.js']['get'];
 var post = __mod['js/api.js']['post'];
 var account = __mod['js/api.js']['account'];
 var canTalk = __mod['js/api.js']['canTalk'];
-var API_BASE = __mod['js/config.js']['API_BASE'];
+var apiBase = __mod['js/config.js']['apiBase'];
 var data = __mod['js/store.js']['data'];
 var settings = __mod['js/store.js']['settings'];
 var go = __mod['js/router.js']['go'];
@@ -1934,7 +1971,7 @@ var openLink = __mod['js/tg.js']['openLink'];
 var screen = __mod['js/screens/common.js']['screen'];
 var pickGroup = __mod['js/screens/common.js']['pickGroup'];
 
-const mediaUrl = name => `${API_BASE}/media/${encodeURIComponent(name)}`;
+const mediaUrl = name => `${apiBase()}/media/${encodeURIComponent(name)}`;
 
 /**
  * Размеры картинки — из её же имени: сервер дописывает их при

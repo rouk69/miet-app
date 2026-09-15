@@ -9,13 +9,13 @@
 import { icon } from '../icons.js';
 import { esc, el, emptyState, toast, sheet, lightbox } from '../ui.js';
 import { get, post, account, canTalk } from '../api.js';
-import { API_BASE } from '../config.js';
+import { apiBase } from '../config.js';
 import { data, settings } from '../store.js';
 import { go, refresh } from '../router.js';
 import { haptic, hapticNotify, confirmDialog, openLink } from '../tg.js';
 import { screen, pickGroup } from './common.js';
 
-const mediaUrl = name => `${API_BASE}/media/${encodeURIComponent(name)}`;
+const mediaUrl = name => `${apiBase()}/media/${encodeURIComponent(name)}`;
 
 /**
  * Размеры картинки — из её же имени: сервер дописывает их при

@@ -130,6 +130,12 @@ CASES = [
     ("цвет предмета постоянный",
      "String(subjectLook('Начерталка').tone === subjectLook('Начерталка').tone)",
      "true"),
+    # Откат на прямой адрес. Вне браузера (и на Pages) база и так прямая,
+    # значит уходить некуда — это и проверяем: второй раз не дёргаемся.
+    ("адрес сервера известен",
+     "String(apiBase().indexOf('miet-bot-rouk.amvera.io') > 0)", "true"),
+    ("с прямого адреса уходить некуда", "String(fallBackToHome())", "false"),
+    ("и он не испортился", "String(apiBase().indexOf('https://') === 0)", "true"),
     ("пустая дата не ломает разбор", "newsDate('').text", ""),
     ("кривая дата отдаётся как есть", "newsDate('позавчера').text", "позавчера"),
     ("пункт перечня распознан", "String(NUMBERED.test('1. Теории'))", "true"),
@@ -295,6 +301,11 @@ var subjectLook = _t.subjectLook, newsDate = _t.newsDate,
     linkify = _t.linkify, NUMBERED = _t.NUMBERED, fileLook = _t.fileLook,
     weekMonday = _t.weekMonday, subjectKey = _t.subjectKey,
     lessonDay = _t.lessonDay, flatten = _t.flatten, pendingOf = _t.pendingOf;
+// Адрес серверной части: откуда спрашиваем данные и куда уходим, если
+// раздатчик страницы сервером не оказался.
+var _cfg = __mod['js/config.js'];
+var apiBase = _cfg.apiBase, fallBackToHome = _cfg.fallBackToHome;
+
 var _a = __mod['js/art.js'];
 var art = _a.art, artState = _a.artState;
 var _f = __mod['js/screens/feed.js'];

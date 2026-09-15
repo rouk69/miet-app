@@ -7,7 +7,7 @@
 // Вне Telegram (обычный браузер, локальная отладка) initData пустая — тогда
 // сеть не трогаем вовсе и приложение работает как раньше, без учёта.
 
-import { API_BASE } from './config.js';
+import { API_BASE, apiBase, fallBackToHome } from './config.js';
 import { tg } from './tg.js';
 
 const initData = tg?.initData || '';
@@ -33,7 +33,7 @@ async function once(path, { method, body, timeout }) {
   const bell = setTimeout(() => stop.abort(), timeout);
   let res;
   try {
-    res = await fetch(API_BASE + path, {
+    res = await fetch(apiBase() + path, {
       method,
       headers: {
         'X-Init-Data': initData,
@@ -58,6 +58,10 @@ async function once(path, { method, body, timeout }) {
     // 502/503 — контейнер перезапускается после выкладки, это проходит
     // само за несколько секунд. Отказ по правам повторять бессмысленно.
     e.retriable = res.status >= 500;
+    // Наш сервер на /api/... так не отвечает: он либо пустит, либо
+    // откажет по подписи. 404 или 405 здесь означают, что страницу
+    // раздал кто-то другой — статика без сервера за спиной.
+    e.wrongHost = res.status === 404 || res.status === 405;
     throw e;
   }
   return data;
@@ -80,6 +84,13 @@ async function request(path, { method = 'GET', body, timeout = 12000,
       return await once(path, { method, body, timeout });
     } catch (err) {
       last = err;
+      // Раздатчик оказался не сервером — уходим на прямой адрес и
+      // пробуем ещё раз, не тратя попытку повтора.
+      if ((err.wrongHost || err.retriable) && fallBackToHome()) {
+        console.warn('API по адресу страницы не отвечает, идём напрямую');
+        attempt--;
+        continue;
+      }
       if (!err.retriable || attempt === retries) break;
       // Небольшая пауза: если сервер поднимается, мгновенный повтор
       // застанет его в том же состоянии.
@@ -145,7 +156,7 @@ export function flush() {
   if (!events.length && !group) return;
   // keepalive: запрос переживает уход со страницы, иначе последний экран
   // перед закрытием мини-аппа терялся бы всегда.
-  fetch(API_BASE + '/api/track', {
+  fetch(apiBase() + '/api/track', {
     method: 'POST',
     headers: { 'X-Init-Data': initData, 'Content-Type': 'application/json' },
     body: JSON.stringify({ events, group }),
