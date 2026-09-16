@@ -1,8 +1,10 @@
 # -*- coding: utf-8 -*-
 """
 Разовая настройка бота: команды, описание, кнопка меню.
-Всё, что можно задать через Bot API, — здесь; включение inline-режима
-через API невозможно, его даёт только @BotFather командой /setinline.
+Всё, что можно задать через Bot API, — здесь. Две вещи задаются только
+у @BotFather, и обе тут проверяются по ответу getMe: inline-режим
+(/setinline) и главное мини-приложение — та самая кнопка «Открыть»
+в списке чатов рядом с ботом.
 
     python -m bot.setup_bot
 """
@@ -15,6 +17,7 @@ from telebot import types
 from telebot.apihelper import ApiTelegramException
 
 from .main import BOT_TOKEN, WEBAPP_URL
+from .webapp import app_url
 
 sys.stdout.reconfigure(encoding="utf-8")
 bot = telebot.TeleBot(BOT_TOKEN)
@@ -89,6 +92,20 @@ def main() -> None:
     for name, result in steps:
         mark = "✗" if result.startswith("ОШИБКА") else "✓"
         print(f"  {mark} {name:20} {result}")
+
+    print()
+    # Кнопка «Открыть» в строке бота в списке чатов — это «главное
+    # мини-приложение». Bot API его не задаёт, но getMe о нём
+    # рассказывает, поэтому хотя бы видно, включено оно или нет.
+    if me.has_main_web_app:
+        print("✓ главное мини-приложение включено — в списке чатов есть «Открыть»")
+    else:
+        print("✗ главное мини-приложение ВЫКЛЮЧЕНО — в списке чатов кнопки «Открыть» нет.")
+        print("  Через API его не включить. Открой @BotFather → /mybots → @" + (me.username or "бота"))
+        print("  → Bot Settings → Configure Mini App → Enable Mini App")
+        print(f"  → адрес: {WEBAPP_URL or app_url()}")
+        print("  Метка выкладки в этот адрес не попадёт — свежесть страница")
+        print("  стережёт сама (js/fresh.js), так что включать безопасно.")
 
     print()
     if me.supports_inline_queries:
