@@ -343,6 +343,29 @@ CASES = [
      "plural(11, 'день', 'дня', 'дней')", "дней"),
     ("двадцать один день", "plural(21, 'день', 'дня', 'дней')", "день"),
     ("подпись дня недели", "dayLabel('2026-09-16')", "ср"),
+
+    # Две группы: что считать общей парой и что — общим окном. Ошибка
+    # здесь тихая — экран покажет число, просто не то.
+    ("потоковая лекция — общая пара",
+     "String(sameLesson('Физика. Оптика', 'Физика.Оптика'))", "true"),
+    ("разные предметы в одном слоте — не вместе",
+     "String(sameLesson('Матанализ', 'Базы данных'))", "false"),
+    ("пустой предмет ничему не равен",
+     "String(sameLesson('', ''))", "false"),
+    ("общая пара засчитана", "String(CMP.together)", "1"),
+    ("у каждого своё — тоже", "String(CMP.both)", "1"),
+    ("окно считается только внутри дня", "String(CMP.free)", "1"),
+    ("слоты до начала дня в разбор не идут", "String(CMP.rows.length)", "4"),
+
+    # Свободные аудитории: слот по часам и подпись «до какого времени».
+    ("во время пары показываем её", "String(pairNow(new Date(2026, 8, 16, 9, 30)))", "1"),
+    ("в перерыв — следующую", "String(pairNow(new Date(2026, 8, 16, 10, 35)))", "2"),
+    ("поздно вечером — первую", "String(pairNow(new Date(2026, 8, 16, 23, 30)))", "1"),
+    ("свободна до конца дня", "untilText({ until_pair: null })", "до конца дня"),
+    ("свободна до времени",
+     "untilText({ until_pair: 4, until_time: '14:20' })", "до 14:20"),
+    ("аудитории собраны по корпусам",
+     "String(byBlock([{name:'3105'},{name:'4202'},{name:'3118'}]).length)", "2"),
     ("кривая дата подписи не даёт", "String(dayLabel('') === '')", "true"),
 ]
 
@@ -368,6 +391,11 @@ var _a = __mod['js/art.js'];
 var art = _a.art, artState = _a.artState;
 var _f = __mod['js/screens/feed.js'];
 var mediaSize = _f.mediaSize, mediaTag = _f.mediaTag;
+
+var _cm = __mod['js/screens/compare.js'];
+var sameLesson = _cm.sameLesson, compareDay = _cm.compareDay;
+var _fr2 = __mod['js/screens/free.js'];
+var pairNow = _fr2.pairNow, untilText = _fr2.untilText, byBlock = _fr2.byBlock;
 
 var _sj = __mod['js/subjects.js'];
 var hasColor = _sj.hasColor, subjectBadge = _sj.subjectBadge;
@@ -466,6 +494,15 @@ var VEDOMOST = { disciplines: [{ name: 'Физика. Механика', events:
   { name: 'А/П', type: 'Активность/Посещаемость', week: 8, max_grade: 24,
     done: false, task: false, session: false }
 ] }] };
+
+// День двух групп: первая пара общая (поток), вторая у каждого своя,
+// третья пустая у обоих (окно), четвёртая только у одного.
+var CMP = compareDay(
+  [{ pair: 1, subject: 'Физика', from: '9:00' },
+   { pair: 2, subject: 'Матанализ', from: '10:40' },
+   { pair: 4, subject: 'Базы данных', from: '14:20' }],
+  [{ pair: 1, subject: 'Физика', from: '9:00' },
+   { pair: 2, subject: 'Химия', from: '10:40' }]);
 
 var PLAN = flatten(VEDOMOST, SCHED, new Date(2026, 8, 1), 0);
 var TODO = pendingOf(PLAN);

@@ -263,6 +263,22 @@ def _directory(path: str, query: dict):
     if path == "/api/directory/rooms":
         return 200, {"rooms": directory.rooms(q), "meta": directory.meta()}
 
+    if path == "/api/directory/free":
+        # Слот считает клиент: он знает и время, и неделю цикла с личной
+        # поправкой человека. Сервер её не знает и знать не должен —
+        # поправка живёт у каждого своя.
+        def num(key, lo, hi, default):
+            raw = (query.get(key, [""])[0] or "").strip()
+            try:
+                return max(lo, min(hi, int(raw)))
+            except ValueError:
+                return default
+        return 200, {
+            **directory.free_rooms(num("week", 0, 3, 0), num("day", 1, 6, 1),
+                                   num("pair", 1, 8, 1)),
+            "meta": directory.meta(),
+        }
+
     if path == "/api/directory/room" and name:
         found = directory.room_schedule(name)
         if not found["slots"]:

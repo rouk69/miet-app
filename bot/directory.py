@@ -217,6 +217,62 @@ def now_teaching(week: int, day: int, pair: int) -> list:
     return _slots(rows)
 
 
+def free_rooms(week: int, day: int, pair: int) -> dict:
+    """
+    Какие аудитории свободны в этот слот звонков.
+
+    **Свободна здесь значит «в ней нет пары по расписанию»** — и ничего
+    больше. Открыта ли дверь, не идёт ли там пересдача, консультация или
+    собрание кружка, расписание не знает. Интерфейс обязан говорить об
+    этом прямо: обещание «свободна», из-за которого человек привёл туда
+    группу и уткнулся в замок, хуже отсутствия раздела.
+
+    Фонд считается по самому расписанию: список аудиторий МИЭТ нигде не
+    опубликован, и всё, что мы знаем, — это кабинеты, в которых хоть раз
+    что-то стоит. Значит аудитория, которую не занимают никогда, сюда не
+    попадёт вовсе, и это честнее, чем выдумывать нумерацию.
+
+    Рядом с каждой — до какой пары она свободна. Без этого список
+    отвечает на вопрос «где сесть сейчас», но не на «успеем ли мы
+    доделать»: а спрашивают обычно второе.
+    """
+    c = conn()
+    known = [r[0] for r in c.execute(
+        "SELECT DISTINCT room FROM lessons_index WHERE room <> '' ORDER BY room")]
+    busy = {r[0] for r in c.execute(
+        """SELECT DISTINCT room FROM lessons_index
+            WHERE week=? AND day=? AND pair=? AND room <> ''""",
+        (week, day, pair))}
+    # Ближайшая занятость после этой пары — по ней и считается, до
+    # какого времени в аудитории можно сидеть.
+    nxt = {r[0]: (r[1], r[2]) for r in c.execute(
+        """SELECT room, MIN(pair), MIN(t_from) FROM lessons_index
+            WHERE week=? AND day=? AND pair > ? AND room <> ''
+            GROUP BY room""", (week, day, pair))}
+    when = c.execute(
+        """SELECT t_from, t_to FROM lessons_index
+            WHERE week=? AND day=? AND pair=? LIMIT 1""",
+        (week, day, pair)).fetchone()
+
+    free = []
+    for room in known:
+        if room in busy:
+            continue
+        until_pair, until_time = nxt.get(room, (None, None))
+        free.append({
+            "name": room,
+            # None означает «до конца дня»: следующей пары в этой
+            # аудитории сегодня нет вовсе.
+            "until_pair": until_pair,
+            "until_time": until_time or "",
+        })
+    return {
+        "week": week, "day": day, "pair": pair,
+        "from": when[0] if when else "", "to": when[1] if when else "",
+        "total": len(known), "busy": len(busy), "free": free,
+    }
+
+
 # ─────────────────────────── фон ───────────────────────────
 
 def run_in_background() -> threading.Thread:

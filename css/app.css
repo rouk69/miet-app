@@ -2535,3 +2535,238 @@ textarea.field-input {
 }
 
 .now-head .now-title { margin: 0; min-width: 0; }
+
+/* ---------- Свободные аудитории ---------- */
+
+.free-pick { display: flex; flex-direction: column; gap: 10px; }
+
+.free-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  padding: 14px 16px;
+}
+
+.free-head-title { font-size: 16px; font-weight: 700; color: var(--text); }
+.free-head-note { font-size: 12px; color: var(--text-secondary); margin-top: 3px; }
+
+.free-head-num {
+  font-size: 30px;
+  font-weight: 800;
+  color: var(--primary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Плитками, а не списком: номер аудитории короткий, и в столбик из
+   двухсот строк его искать дольше, чем глазами по сетке. */
+.free-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+  gap: 8px;
+}
+
+.free-room {
+  background: var(--surface);
+  border-radius: var(--radius-md);
+  padding: 11px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: left;
+  box-shadow: var(--shadow-card);
+  transition: transform 0.12s ease;
+}
+
+.free-room:active { transform: scale(0.97); }
+.free-room-name { font-size: 16px; font-weight: 700; color: var(--text); }
+.free-room-until { font-size: 11px; color: var(--text-secondary); }
+
+.free-fineprint {
+  margin-top: 14px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-tertiary);
+}
+
+/* ---------- Две группы ---------- */
+
+.cmp-picks { display: flex; align-items: center; gap: 8px; }
+
+.cmp-pick {
+  flex: 1;
+  min-width: 0;
+  background: var(--surface);
+  border-radius: var(--radius-md);
+  padding: 11px 14px;
+  text-align: left;
+  box-shadow: var(--shadow-card);
+}
+
+.cmp-pick-label {
+  display: block;
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.cmp-pick-name {
+  display: block;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cmp-vs { color: var(--text-tertiary); flex-shrink: 0; display: flex; }
+
+.cmp-sum {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  padding: 16px;
+  margin: 12px 0;
+}
+
+.cmp-sum-num {
+  font-size: 34px;
+  font-weight: 800;
+  color: var(--primary);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.cmp-sum-text { font-size: 14px; color: var(--text); }
+.cmp-sum-text span {
+  display: block;
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-top: 2px;
+}
+
+/* Число общих пар вместо даты в полоске дней: дата здесь не решает
+   ничего, а «сколько вместе» — ровно тот вопрос, с которым пришли. */
+.cmp-day-num {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+
+.cmp-day-num.hot { color: var(--primary); }
+.week-day.active .cmp-day-num,
+.week-day.active .cmp-day-num.hot { color: #fff; }
+
+.cmp-counts {
+  display: flex;
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  padding: 12px 0;
+  margin-bottom: 12px;
+}
+
+.cmp-counts > div {
+  flex: 1;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.cmp-counts > div + div { border-left: 1px solid var(--border); }
+.cmp-counts b {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.cmp-counts span { font-size: 11px; color: var(--text-secondary); }
+
+.cmp-list { display: flex; flex-direction: column; gap: 8px; }
+
+.cmp-row {
+  background: var(--surface);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-card);
+  padding: 11px 13px;
+  display: flex;
+  gap: 11px;
+  align-items: flex-start;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Общая пара помечена полосой у края, а не заливкой всей карточки:
+   заливка спорит с цветным значком предмета внутри. */
+.cmp-row.together::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--primary);
+}
+
+.cmp-row.free { background: var(--surface-2); box-shadow: none; }
+
+.cmp-time {
+  flex-shrink: 0;
+  width: 42px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.cmp-time b {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.cmp-time span { font-size: 11px; color: var(--text-tertiary); }
+
+.cmp-pair { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+
+.cmp-cell { display: flex; gap: 9px; align-items: center; min-width: 0; }
+.cmp-cell.empty { font-size: 13px; color: var(--text-tertiary); }
+.cmp-cell-text { min-width: 0; }
+
+.cmp-subject {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cmp-where { font-size: 11px; color: var(--text-secondary); }
+
+.cmp-tag {
+  flex-shrink: 0;
+  align-self: center;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-2);
+  color: var(--text-secondary);
+  text-align: center;
+  max-width: 74px;
+}
+
+.cmp-tag.together { background: var(--primary-dim); color: var(--primary); }
+.cmp-tag.free { background: transparent; color: var(--text-tertiary); }
+
+/* Общая пара занимает строку целиком: две одинаковые ячейки рядом
+   говорили бы «у каждого своё», хотя пара одна на обе группы. */
+.cmp-cell.whole .cmp-subject { font-size: 15px; font-weight: 700; }
