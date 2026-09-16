@@ -29,6 +29,8 @@ import help from './screens/help.js';
 import adminDays, { dayScreen } from './screens/admin-days.js';
 import tasks from './screens/tasks.js';
 import raffle from './screens/raffle.js';
+import freeRooms from './screens/free.js';
+import compare from './screens/compare.js';
 
 // Тему уже поставил маленький скрипт в index.html — до первой отрисовки,
 // чтобы тёмный Telegram не мигал белым. Здесь она применяется ещё раз:
@@ -84,6 +86,8 @@ register('support', support);
 register('admin', admin);
 register('adminUser', adminUserScreen);
 register('raffle', raffle);
+register('free', freeRooms);
+register('compare', compare);
 
 const app = document.getElementById('app');
 const nav = document.getElementById('nav');

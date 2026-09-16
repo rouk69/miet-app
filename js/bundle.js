@@ -1,5 +1,5 @@
 /* Собрано tools/stamp.py из js/*.js — не правьте здесь.
-   Версия de78cf34. Исходники лежат рядом и остаются модулями. */
+   Версия 3b272332. Исходники лежат рядом и остаются модулями. */
 var __mod = {};
 /* ==== js\config.js ==== */
 __mod['js/config.js'] = (function () {
@@ -78,7 +78,7 @@ const API_BASE = base;
 // свежую ли страницу открыл человек: Telegram кеширует мини-приложения
 // по своим правилам, и «у меня ничего не поменялось» разбирается
 // сравнением этой строки, а не на слово.
-const BUILD = 'de78cf34';
+const BUILD = '3b272332';
 
 return {'apiBase': apiBase, 'fallBackToHome': fallBackToHome, 'API_BASE': API_BASE, 'BUILD': BUILD};
 })();
@@ -2233,6 +2233,300 @@ async function curatorsScreen() {
 return {'chatsScreen': chatsScreen, 'curatorsScreen': curatorsScreen};
 })();
 
+/* ==== js\screens\compare.js ==== */
+__mod['js/screens/compare.js'] = (function () {
+// Две группы рядом: где вы вместе, где разошлись и когда оба свободны.
+//
+// Спрашивают об этом по-разному, но вопрос один: «когда мы можем
+// встретиться». Поэтому экран считает не только общие пары (лекции
+// потока, куда идут обе группы), но и общие окна — слоты, в которые
+// свободны оба. Второе на практике нужнее первого: именно в окно можно
+// договориться, а на общей лекции и так увидитесь.
+//
+// Расписание берётся тем же путём, что и своё, — у бота, с откатом на
+// miet.ru и на вчерашнюю копию. Отдельной серверной части здесь нет: два
+// расписания сравниваются на месте, и лишний маршрут только добавил бы
+// точку отказа.
+
+var icon = __mod['js/icons.js']['icon'];
+var esc = __mod['js/ui.js']['esc'];
+var emptyState = __mod['js/ui.js']['emptyState'];
+var pillRow = __mod['js/ui.js']['pillRow'];
+var bindChoice = __mod['js/ui.js']['bindChoice'];
+var skeleton = __mod['js/ui.js']['skeleton'];
+var listCard = __mod['js/ui.js']['listCard'];
+var listRow = __mod['js/ui.js']['listRow'];
+var settings = __mod['js/store.js']['settings'];
+var save = __mod['js/store.js']['save'];
+var artState = __mod['js/art.js']['artState'];
+var screen = __mod['js/screens/common.js']['screen'];
+var pickGroup = __mod['js/screens/common.js']['pickGroup'];
+var subjectBadge = __mod['js/subjects.js']['subjectBadge'];
+var haptic = __mod['js/tg.js']['haptic'];
+var fetchSchedule = __mod['js/schedule.js']['fetchSchedule'];
+var weekOfCycle = __mod['js/schedule.js']['weekOfCycle'];
+var slotsOf = __mod['js/schedule.js']['slotsOf'];
+var DAY_SHORT = __mod['js/schedule.js']['DAY_SHORT'];
+var DAY_NAMES = __mod['js/schedule.js']['DAY_NAMES'];
+
+// С чем сравниваем. Живёт в модуле, а не в параметрах экрана: человек
+// возвращается сюда к той же паре групп, а не выбирает её каждый раз.
+let other = '';
+
+/**
+ * Одно ли это занятие у двух групп.
+ *
+ * Сверяются названия, а не аудитории: на потоковой лекции у групп
+ * совпадает всё, но в расписании МИЭТ у одной может стоять «3105», а у
+ * другой — «3105 / 3107», и сравнение по кабинету развалилось бы на
+ * ровном месте. Название чистится от регистра, пробелов и точек:
+ * «Физика. Оптика» и «Физика.Оптика» — один предмет.
+ */
+const sameLesson = (a, b) => norm(a) === norm(b) && Boolean(norm(a));
+
+const norm = s => String(s || '').toLowerCase().replace(/[\s.«»"'-]/g, '');
+
+/**
+ * День двух групп по слотам звонков.
+ *
+ * Слот попадает в разбор, если пара есть хоть у кого-то: пустые слоты до
+ * начала и после конца дня — это не «оба свободны», а «день ещё не
+ * начался». Окном считается только дырка ВНУТРИ занятого времени.
+ */
+function compareDay(mine, theirs) {
+  const pairs = [...new Set([...mine.map(s => s.pair), ...theirs.map(s => s.pair)])]
+    .sort((a, b) => a - b);
+  if (!pairs.length) return { rows: [], together: 0, both: 0, free: 0 };
+
+  const first = pairs[0];
+  const last = pairs[pairs.length - 1];
+  const byPair = (list, p) => list.find(s => s.pair === p) || null;
+
+  const rows = [];
+  let together = 0;
+  let both = 0;
+  let free = 0;
+  for (let p = first; p <= last; p++) {
+    const a = byPair(mine, p);
+    const b = byPair(theirs, p);
+    let state = 'one';
+    if (a && b) state = sameLesson(a.subject, b.subject) ? 'together' : 'both';
+    else if (!a && !b) state = 'free';
+    if (state === 'together') together++;
+    else if (state === 'both') both++;
+    else if (state === 'free') free++;
+    rows.push({ pair: p, a, b, state, from: (a || b)?.from, to: (a || b)?.to });
+  }
+  return { rows, together, both, free };
+}
+
+/** Сколько общих пар в каждый день недели — для полоски дней. */
+function weekTogether(mine, theirs, week) {
+  return [0, 1, 2, 3, 4, 5, 6].map(d => d === 0 ? null
+    : compareDay(slotsOf(mine, week, d), slotsOf(theirs, week, d)));
+}
+
+const STATE_NOTE = {
+  together: 'вместе',
+  both: 'у каждого своё',
+  one: 'у одного',
+  free: 'свободны оба',
+};
+
+function slotRow(row, mineName, otherName) {
+  const cell = (s, group) => s
+    ? `<div class="cmp-cell">
+         ${subjectBadge(s.subject || s.entries?.[0]?.subject, 26)}
+         <div class="cmp-cell-text">
+           <div class="cmp-subject">${esc(s.subject || s.entries?.[0]?.subject || '—')}</div>
+           <div class="cmp-where">${esc(s.entries?.[0]?.room || '')}</div>
+         </div>
+       </div>`
+    : `<div class="cmp-cell empty"><span>${esc(group)} — свободна</span></div>`;
+
+  return `
+    <div class="cmp-row ${row.state}">
+      <div class="cmp-time">
+        <b>${row.pair}</b>
+        <span>${esc(row.from || '')}</span>
+      </div>
+      <div class="cmp-pair">
+        ${row.state === 'together'
+    ? `<div class="cmp-cell whole">
+             ${subjectBadge(row.a.subject, 30)}
+             <div class="cmp-cell-text">
+               <div class="cmp-subject">${esc(row.a.subject)}</div>
+               <div class="cmp-where">
+                 ${esc(row.a.entries?.[0]?.room || '')} · обе группы
+               </div>
+             </div>
+           </div>`
+    : cell(row.a, mineName) + cell(row.b, otherName)}
+      </div>
+      <div class="cmp-tag ${row.state}">${STATE_NOTE[row.state]}</div>
+    </div>`;
+}
+
+async function compareScreen() {
+  const mineName = settings.group;
+  if (!mineName) {
+    const node = screen({
+      title: 'Две группы',
+      body: `<div class="card has-art" style="padding:20px">
+        <div class="has-art-body">
+          <div class="row-subtitle" style="margin-bottom:16px">
+            Сначала выбери свою группу — с ней и будем сравнивать.
+          </div>
+          <button class="btn-primary" id="pick">Выбрать группу</button>
+        </div>
+        ${artState('group', '', '')}
+      </div>`,
+    });
+    node.querySelector('#pick').addEventListener('click',
+      () => pickGroup(g => { save({ group: g }); location.reload(); }));
+    return node;
+  }
+
+  const now = new Date();
+  let week = 0;                      // уточним по расписанию, оно знает семестр
+  let day = Math.min(((now.getDay() + 6) % 7) + 1, 6);
+
+  const node = screen({
+    title: 'Две группы',
+    subtitle: 'Общие пары и общие окна',
+    body: `
+      <div class="cmp-picks">
+        <button class="cmp-pick" data-pick="mine">
+          <span class="cmp-pick-label">Моя группа</span>
+          <span class="cmp-pick-name">${esc(mineName)}</span>
+        </button>
+        <span class="cmp-vs">${icon('shuffle', 16)}</span>
+        <button class="cmp-pick" data-pick="other">
+          <span class="cmp-pick-label">Сравнить с</span>
+          <span class="cmp-pick-name">${other ? esc(other) : 'выбрать'}</span>
+        </button>
+      </div>
+      <div id="cmpbody" style="margin-top:14px"></div>`,
+  });
+
+  const body = node.querySelector('#cmpbody');
+  // Пока человек сам не выбрал неделю, она берётся из расписания. После
+  // выбора его не перебиваем: иначе переключатель отщёлкивал бы назад.
+  let weekPicked = false;
+
+  const drawEmpty = () => {
+    body.innerHTML = `<div class="card has-art" style="padding:20px">
+      <div class="has-art-body">
+        <div class="row-subtitle">
+          Выбери вторую группу — покажу, в какие дни у вас общие пары и
+          когда вы оба свободны.
+        </div>
+      </div>
+      ${artState('group', '', '')}
+    </div>`;
+  };
+
+  const drawAll = async () => {
+    body.innerHTML = skeleton(160);
+    let mine;
+    let theirs;
+    try {
+      // Оба запроса сразу: последовательно это два ожидания сети вместо
+      // одного, а расписание второй группы у бота обычно уже в кеше.
+      [mine, theirs] = await Promise.all([
+        fetchSchedule(mineName), fetchSchedule(other),
+      ]);
+    } catch (err) {
+      body.innerHTML = emptyState(err.message || 'Расписание не загрузилось', 'calendar');
+      return;
+    }
+
+    // Неделю цикла считает расписание: семестр известен только ему, а
+    // от него зависит, с какой недели цикл начался.
+    if (!weekPicked) {
+      week = weekOfCycle(now, mine.semestr, settings.weekShift);
+      weekPicked = true;
+    }
+    const perDay = weekTogether(mine, theirs, week);
+    const weekTotal = perDay.reduce((n, d) => n + (d ? d.together : 0), 0);
+    const cmp = perDay[day] || { rows: [], together: 0, both: 0, free: 0 };
+
+    body.innerHTML = `
+      ${pillRow([0, 1, 2, 3].map(w => ({ id: String(w), label: `${w + 1}-я неделя` })),
+    String(week), 'cmpweek')}
+
+      <div class="cmp-sum">
+        <div class="cmp-sum-num">${weekTotal}</div>
+        <div class="cmp-sum-text">
+          ${weekTotal ? 'общих пар на этой неделе цикла' : 'общих пар на этой неделе нет'}
+          <span>${esc(mineName)} и ${esc(other)}</span>
+        </div>
+      </div>
+
+      <div class="week-strip" id="cmpdays">
+        ${[1, 2, 3, 4, 5, 6].map(d => {
+    const c = perDay[d];
+    return `
+          <button class="week-day ${d === day ? 'active' : ''}" data-cmpday="${d}">
+            <span class="week-day-name">${DAY_SHORT[d]}</span>
+            <span class="cmp-day-num ${c && c.together ? 'hot' : ''}">
+              ${c && c.together ? c.together : '·'}
+            </span>
+          </button>`;
+  }).join('')}
+      </div>
+
+      <div class="section-head" style="margin-top:14px">
+        <div class="section-title">${DAY_NAMES[day]}</div>
+      </div>
+
+      ${cmp.rows.length ? `
+        <div class="cmp-counts">
+          <div><b>${cmp.together}</b><span>вместе</span></div>
+          <div><b>${cmp.both}</b><span>у каждого своё</span></div>
+          <div><b>${cmp.free}</b><span>окно у обоих</span></div>
+        </div>
+        <div class="cmp-list">
+          ${cmp.rows.map(r => slotRow(r, mineName, other)).join('')}
+        </div>`
+    : `<div class="card">${artState('free', 'В этот день пар нет ни у кого',
+      'Выбери другой день или неделю цикла')}</div>`}`;
+
+    bindChoice(node, 'cmpweek', id => { week = +id; weekPicked = true; drawAll(); });
+    body.querySelector('#cmpdays')?.addEventListener('click', e => {
+      const b = e.target.closest('[data-cmpday]');
+      if (!b) return;
+      day = +b.dataset.cmpday;
+      haptic('light');
+      drawAll();
+    });
+  };
+
+  node.addEventListener('click', e => {
+    const pick = e.target.closest('[data-pick]');
+    if (!pick) return;
+    haptic('light');
+    if (pick.dataset.pick === 'mine') {
+      // Своя группа меняется здесь же: сравнивать чужую с чужой можно, но
+      // тогда экран перестаёт отвечать на вопрос «когда МЫ встретимся».
+      pickGroup(g => { save({ group: g }); location.reload(); });
+      return;
+    }
+    pickGroup(g => {
+      other = g;
+      pick.querySelector('.cmp-pick-name').textContent = g;
+      drawAll();
+    });
+  });
+
+  if (other) drawAll();
+  else drawEmpty();
+  return node;
+}
+
+return {'default': compareScreen, 'sameLesson': sameLesson, 'compareDay': compareDay, 'weekTogether': weekTogether};
+})();
+
 /* ==== js\screens\feed.js ==== */
 __mod['js/screens/feed.js'] = (function () {
 // Лента: посты, написанные людьми, и свежие новости с miet.ru.
@@ -3006,6 +3300,248 @@ async function moderationScreen() {
 void settings;
 
 return {'default': feedScreen, 'mediaSize': mediaSize, 'mediaTag': mediaTag, 'excerpt': excerpt, 'postCard': postCard, 'feedRow': feedRow, 'moderationScreen': moderationScreen};
+})();
+
+/* ==== js\screens\free.js ==== */
+__mod['js/screens/free.js'] = (function () {
+// Свободные аудитории: где сесть с ноутбуком, доделать лабу, собраться
+// впятером перед защитой.
+//
+// Экран отвечает на вопрос «куда идти прямо сейчас», поэтому открывается
+// на текущем слоте звонков и текущем дне — без единого нажатия. Выбор
+// дня и пары есть, но он второй: планируют реже, чем ищут место сейчас.
+//
+// Честность важнее полноты. «Свободна» здесь значит ровно одно: в ней
+// нет пары по расписанию. Открыта ли дверь, не идёт ли там пересдача или
+// собрание кружка — расписание не знает, и экран говорит это прямо.
+// Обещание, из-за которого человек привёл группу и уткнулся в замок,
+// хуже отсутствующего раздела.
+
+var icon = __mod['js/icons.js']['icon'];
+var esc = __mod['js/ui.js']['esc'];
+var emptyState = __mod['js/ui.js']['emptyState'];
+var pillRow = __mod['js/ui.js']['pillRow'];
+var bindChoice = __mod['js/ui.js']['bindChoice'];
+var skeleton = __mod['js/ui.js']['skeleton'];
+var toast = __mod['js/ui.js']['toast'];
+var get = __mod['js/api.js']['get'];
+var settings = __mod['js/store.js']['settings'];
+var artState = __mod['js/art.js']['artState'];
+var screen = __mod['js/screens/common.js']['screen'];
+var go = __mod['js/router.js']['go'];
+var haptic = __mod['js/tg.js']['haptic'];
+var fetchSchedule = __mod['js/schedule.js']['fetchSchedule'];
+var weekOfCycle = __mod['js/schedule.js']['weekOfCycle'];
+var DAY_SHORT = __mod['js/schedule.js']['DAY_SHORT'];
+var DAY_NAMES = __mod['js/schedule.js']['DAY_NAMES'];
+
+// Слоты звонков МИЭТ. Время нужно до первого ответа сервера: экран
+// открывается на «сейчас», и вычислить текущую пару надо ещё до запроса.
+// Тот же список лежит у бота (`schedule_api`) — меняются вместе.
+const BELLS = [
+  { pair: 1, from: '9:00', to: '10:30' },
+  { pair: 2, from: '10:40', to: '12:10' },
+  { pair: 3, from: '12:20', to: '13:50' },
+  { pair: 4, from: '14:20', to: '15:50' },
+  { pair: 5, from: '16:00', to: '17:30' },
+  { pair: 6, from: '17:40', to: '19:10' },
+  { pair: 7, from: '19:20', to: '20:50' },
+  { pair: 8, from: '21:00', to: '22:30' },
+];
+
+const mins = t => {
+  const [h, m] = String(t || '0:0').split(':').map(Number);
+  return h * 60 + m;
+};
+
+/**
+ * Какую пару показывать при открытии.
+ *
+ * Идёт пара — её. Перерыв — следующую: сидеть между парами негде именно
+ * потому, что все аудитории сейчас пустуют, и полезен как раз следующий
+ * слот. После последней пары или до начала дня — первую: планировать с
+ * конца дня бессмысленно.
+ */
+function pairNow(now = new Date()) {
+  const m = now.getHours() * 60 + now.getMinutes();
+  for (const b of BELLS) {
+    if (m < mins(b.from)) return b.pair;
+    if (m < mins(b.to)) return b.pair;
+  }
+  return 1;
+}
+
+/** День недели в номерах расписания: 1 — понедельник, 7 — воскресенье. */
+const dayNow = (now = new Date()) => ((now.getDay() + 6) % 7) + 1;
+
+/**
+ * Аудитории одного корпуса вместе: номер начинается с его цифры.
+ *
+ * Подпись нейтральная («3xxx»), а не «третий корпус»: нумерация МИЭТ
+ * нигде не описана, и выдумывать ей смысл — значит уверенно наврать.
+ * Группировка всё равно помогает: в списке из двухсот номеров подряд не
+ * найти ничего.
+ */
+function byBlock(free) {
+  const groups = new Map();
+  for (const room of free) {
+    const head = /^\d/.test(room.name) ? `${room.name[0]}xxx` : 'Другие';
+    if (!groups.has(head)) groups.set(head, []);
+    groups.get(head).push(room);
+  }
+  return [...groups.entries()]
+    .sort((a, b) => (a[0] === 'Другие') - (b[0] === 'Другие')
+      || a[0].localeCompare(b[0], 'ru'));
+}
+
+/** «Свободна до 14:20» или «до конца дня» — то, что реально спрашивают. */
+function untilText(room) {
+  if (!room.until_pair) return 'до конца дня';
+  return room.until_time ? `до ${room.until_time}` : `до ${room.until_pair}-й пары`;
+}
+
+const roomCard = r => `
+  <button class="free-room" data-room="${esc(r.name)}">
+    <span class="free-room-name">${esc(r.name)}</span>
+    <span class="free-room-until">${esc(untilText(r))}</span>
+  </button>`;
+
+async function freeRoomsScreen(params = {}) {
+  const now = new Date();
+  let day = params.day || dayNow(now);
+  // Воскресенье в расписании пустое, и список «всё свободно» бесполезен.
+  if (day > 6) day = 1;
+  let pair = params.pair || pairNow(now);
+  let query = '';
+
+  const node = screen({
+    title: 'Свободные аудитории',
+    subtitle: 'Где никого нет по расписанию',
+    body: `
+      <div class="free-pick">
+        <div class="week-strip" id="fdays">
+          ${[1, 2, 3, 4, 5, 6].map(d => `
+            <button class="week-day ${d === day ? 'active' : ''} ${d === dayNow(now) ? 'today' : ''}"
+                    data-fday="${d}">
+              <span class="week-day-name">${DAY_SHORT[d]}</span>
+            </button>`).join('')}
+        </div>
+        ${pillRow(BELLS.map(b => ({ id: String(b.pair), label: `${b.pair} · ${b.from}` })),
+    String(pair), 'fpair')}
+      </div>
+      <div class="search-box" style="margin-top:12px">
+        ${icon('search', 19, 'muted')}
+        <input id="fq" type="search" placeholder="Номер аудитории"
+               autocomplete="off" enterkeyhint="search" spellcheck="false">
+      </div>
+      <div id="fbody" style="margin-top:14px">${skeleton(120)}</div>`,
+  });
+
+  const body = node.querySelector('#fbody');
+  let data = null;
+
+  const draw = () => {
+    if (!data) return;
+    const needle = query.trim().toLowerCase();
+    const free = needle
+      ? data.free.filter(r => r.name.toLowerCase().includes(needle))
+      : data.free;
+
+    if (!data.total) {
+      // Индекс собирается раз в сутки и через пять минут после старта
+      // контейнера: пустой он не «сломан», а ещё не построен.
+      body.innerHTML = artState('offline', 'Расписание вуза ещё не собрано',
+        'Бот обходит все 346 групп раз в сутки. Загляни через десять минут');
+      return;
+    }
+    if (!free.length) {
+      body.innerHTML = emptyState(needle
+        ? 'Такой аудитории нет или она занята'
+        : 'В этот слот свободных аудиторий не нашлось', 'door');
+      return;
+    }
+
+    const slot = BELLS.find(b => b.pair === pair);
+    body.innerHTML = `
+      <div class="free-head">
+        <div>
+          <div class="free-head-title">${DAY_NAMES[day]}, ${pair}-я пара</div>
+          <div class="free-head-note">
+            ${esc(slot ? `${slot.from}–${slot.to}` : '')} ·
+            ${weekKnown ? `${week + 1}-я неделя цикла · ` : ''}свободно
+            ${free.length} из ${data.total}
+          </div>
+        </div>
+        <div class="free-head-num">${free.length}</div>
+      </div>
+      ${byBlock(free).map(([head, list]) => `
+        <div class="section-head"><div class="section-title">${esc(head)}</div>
+          <span class="section-link">${list.length}</span></div>
+        <div class="free-grid">${list.map(roomCard).join('')}</div>`).join('')}
+      <p class="free-fineprint">
+        «Свободна» значит, что в ней нет пары по расписанию. Пересдачи,
+        консультации и собрания кружков в расписание не попадают, а дверь
+        может быть просто закрыта.
+      </p>`;
+  };
+
+  // Неделя цикла нужна, чтобы спросить верный слот, а знает семестр
+  // только расписание. Берём его у своей группы — оно почти всегда уже
+  // в кеше, его грузила главная. Нет группы — считаем первую неделю и
+  // честно пишем об этом в подписи.
+  let week = 0;
+  let weekKnown = false;
+  const findWeek = async () => {
+    if (weekKnown || !settings.group) return;
+    try {
+      const sched = await fetchSchedule(settings.group);
+      week = weekOfCycle(now, sched.semestr, settings.weekShift);
+      weekKnown = true;
+    } catch { /* без расписания остаёмся на первой неделе */ }
+  };
+
+  const load = async () => {
+    body.innerHTML = skeleton(120);
+    await findWeek();
+    try {
+      data = await get(`/api/directory/free?week=${week}&day=${day}&pair=${pair}`);
+      draw();
+    } catch (err) {
+      body.innerHTML = emptyState(err.message, 'door');
+    }
+  };
+
+  node.querySelector('#fdays').addEventListener('click', e => {
+    const b = e.target.closest('[data-fday]');
+    if (!b) return;
+    day = +b.dataset.fday;
+    node.querySelectorAll('[data-fday]').forEach(x =>
+      x.classList.toggle('active', +x.dataset.fday === day));
+    haptic('light');
+    load();
+  });
+
+  bindChoice(node, 'fpair', id => { pair = +id; load(); });
+
+  node.querySelector('#fq').addEventListener('input', e => {
+    query = e.target.value;
+    draw();
+  });
+
+  node.addEventListener('click', e => {
+    const b = e.target.closest('[data-room]');
+    if (!b) return;
+    haptic('light');
+    // Карточка аудитории уже есть в справочнике — там весь её день, а не
+    // одна пара. Второй такой экран был бы тем же самым.
+    go('room', { name: b.dataset.room });
+  });
+
+  load();
+  return node;
+}
+
+return {'default': freeRoomsScreen, 'BELLS': BELLS, 'pairNow': pairNow, 'dayNow': dayNow, 'byBlock': byBlock, 'untilText': untilText};
 })();
 
 /* ==== js\screens\guide.js ==== */
@@ -6219,6 +6755,10 @@ const SECTIONS = [
         sub: 'Кто, где и когда ведёт' },
       { id: 'rooms', ico: 'door', tone: 'blue', title: 'Аудитории',
         sub: 'Что идёт в кабинете' },
+      { id: 'free', ico: 'key', tone: 'blue', title: 'Свободные аудитории',
+        sub: 'Где сейчас никого нет' },
+      { id: 'compare', ico: 'shuffle', tone: 'blue', title: 'Две группы',
+        sub: 'Общие пары и общие окна' },
       { id: 'score', ico: 'chart', tone: 'blue', title: 'Баллы и БРС',
         sub: 'Сколько нужно набрать' },
       { id: 'dates', ico: 'calendar', tone: 'blue', title: 'Ключевые даты',
@@ -8259,6 +8799,8 @@ var dayScreen = __mod['js/screens/admin-days.js']['dayScreen'];
 var adminDays = __mod['js/screens/admin-days.js']['default'];
 var tasks = __mod['js/screens/tasks.js']['default'];
 var raffle = __mod['js/screens/raffle.js']['default'];
+var freeRooms = __mod['js/screens/free.js']['default'];
+var compare = __mod['js/screens/compare.js']['default'];
 
 // Тему уже поставил маленький скрипт в index.html — до первой отрисовки,
 // чтобы тёмный Telegram не мигал белым. Здесь она применяется ещё раз:
@@ -8314,6 +8856,8 @@ register('support', support);
 register('admin', admin);
 register('adminUser', adminUserScreen);
 register('raffle', raffle);
+register('free', freeRooms);
+register('compare', compare);
 
 const app = document.getElementById('app');
 const nav = document.getElementById('nav');

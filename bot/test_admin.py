@@ -389,6 +389,41 @@ check("несуществующей аудитории нет", s == 404, s)
 s, _ = api.handle("GET", "/api/directory/teachers", {}, {}, "мусор")
 check("без подписи справочник закрыт", s == 401, s)
 
+# Свободные аудитории. Фонд считается по самому расписанию: списка
+# кабинетов МИЭТ нигде нет, и всё, что известно, — где хоть раз стоит
+# пара. В фикстуре это 3105 и 3118.
+free = directory.free_rooms(0, 1, 1)
+check("занятая аудитория из свободных убрана",
+      all(r["name"] != "3105" for r in free["free"]), free)
+check("свободная — на месте",
+      any(r["name"] == "3118" for r in free["free"]), free)
+check("фонд считается по расписанию", free["total"] == 2, free)
+check("занятых в слоте одна", free["busy"] == 1, free)
+check("время слота взято из расписания",
+      free["from"] == "09:00" and free["to"] == "10:20", free)
+
+# «Свободна до» — главный вопрос: успеем ли доделать. В фикстуре 3105
+# занята первой парой и второй, дальше в этот день — нет.
+free2 = directory.free_rooms(0, 1, 3)
+room = next(r for r in free2["free"] if r["name"] == "3105")
+check("после последней пары — до конца дня", room["until_pair"] is None, room)
+free0 = directory.free_rooms(0, 1, 1)
+busy_later = next(r for r in free0["free"] if r["name"] == "3118")
+check("в другой день занятость не считается",
+      busy_later["until_pair"] is None, busy_later)
+
+s, r = api.handle("GET", "/api/directory/free",
+                  {"week": ["0"], "day": ["1"], "pair": ["1"]}, {}, USER)
+check("маршрут свободных аудиторий отвечает",
+      s == 200 and r["busy"] == 1, (s, r))
+s, r = api.handle("GET", "/api/directory/free",
+                  {"week": ["99"], "day": ["0"], "pair": ["77"]}, {}, USER)
+check("кривой слот не роняет, а зажимается в границы",
+      s == 200 and 0 <= r["week"] <= 3 and 1 <= r["day"] <= 6
+      and 1 <= r["pair"] <= 8, (s, r))
+s, _ = api.handle("GET", "/api/directory/free", {}, {}, "мусор")
+check("и без подписи закрыт", s == 401, s)
+
 # Пересборка не должна оставлять половину данных, если сайт отвалился.
 sched_api.fetch_schedule = lambda group, force=False: (_ for _ in ()).throw(
     RuntimeError("сайт недоступен"))
