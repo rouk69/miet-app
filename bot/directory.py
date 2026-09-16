@@ -217,6 +217,22 @@ def now_teaching(week: int, day: int, pair: int) -> list:
     return _slots(rows)
 
 
+# Одна и та же аудитория записана в расписании по-разному: «1202»,
+# «1202 м», «3102а л ПМТ», «3125 ВП СГН». Номер — это первый кусок, всё
+# остальное пометки кафедры и вида занятия. Найдено на живых данных:
+# без склейки кабинет, занятый под одним написанием, показывался
+# свободным под другим — то есть раздел врал ровно в том, ради чего он
+# сделан.
+ROOM_NUM = re.compile(r"^(\d+[а-яёa-z]?)", re.IGNORECASE)
+
+
+def room_key(name: str) -> str:
+    """Номер аудитории без пометок. Нечисловые имена остаются как есть."""
+    raw = str(name or "").strip()
+    m = ROOM_NUM.match(raw)
+    return m.group(1).lower() if m else raw.lower()
+
+
 def free_rooms(week: int, day: int, pair: int) -> dict:
     """
     Какие аудитории свободны в этот слот звонков.
@@ -237,35 +253,45 @@ def free_rooms(week: int, day: int, pair: int) -> dict:
     доделать»: а спрашивают обычно второе.
     """
     c = conn()
-    known = [r[0] for r in c.execute(
-        "SELECT DISTINCT room FROM lessons_index WHERE room <> '' ORDER BY room")]
-    busy = {r[0] for r in c.execute(
+    # Все написания сводятся к номеру: показываем номер, а занятость
+    # считаем по нему же — иначе «1202 м» и «1202» живут порознь.
+    known = {}
+    for (room,) in c.execute(
+            "SELECT DISTINCT room FROM lessons_index WHERE room <> '' ORDER BY room"):
+        known.setdefault(room_key(room), room.strip())
+    busy = {room_key(r[0]) for r in c.execute(
         """SELECT DISTINCT room FROM lessons_index
             WHERE week=? AND day=? AND pair=? AND room <> ''""",
         (week, day, pair))}
     # Ближайшая занятость после этой пары — по ней и считается, до
-    # какого времени в аудитории можно сидеть.
-    nxt = {r[0]: (r[1], r[2]) for r in c.execute(
-        """SELECT room, MIN(pair), MIN(t_from) FROM lessons_index
-            WHERE week=? AND day=? AND pair > ? AND room <> ''
-            GROUP BY room""", (week, day, pair))}
+    # какого времени в аудитории можно сидеть. Из нескольких написаний
+    # берётся самая ранняя: занята хоть под каким-то — значит занята.
+    nxt = {}
+    for room, p, t in c.execute(
+            """SELECT room, MIN(pair), MIN(t_from) FROM lessons_index
+                WHERE week=? AND day=? AND pair > ? AND room <> ''
+                GROUP BY room""", (week, day, pair)):
+        key = room_key(room)
+        if key not in nxt or (p or 99) < (nxt[key][0] or 99):
+            nxt[key] = (p, t)
     when = c.execute(
         """SELECT t_from, t_to FROM lessons_index
             WHERE week=? AND day=? AND pair=? LIMIT 1""",
         (week, day, pair)).fetchone()
 
     free = []
-    for room in known:
-        if room in busy:
+    for key, shown in known.items():
+        if key in busy:
             continue
-        until_pair, until_time = nxt.get(room, (None, None))
+        until_pair, until_time = nxt.get(key, (None, None))
         free.append({
-            "name": room,
+            "name": shown,
             # None означает «до конца дня»: следующей пары в этой
             # аудитории сегодня нет вовсе.
             "until_pair": until_pair,
             "until_time": until_time or "",
         })
+    free.sort(key=lambda r: r["name"])
     return {
         "week": week, "day": day, "pair": pair,
         "from": when[0] if when else "", "to": when[1] if when else "",
