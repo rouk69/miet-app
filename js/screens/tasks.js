@@ -10,6 +10,7 @@
 // задания мелко: человек ищет глазами «Матанализ», а не «ДЗ №2».
 // Сданное убрано вниз и свёрнуто — оно уже не дело.
 
+import { subjectLook, subjectArt } from '../subjects.js';
 import { icon } from '../icons.js';
 import { esc, emptyState, toast, sheet, toggle } from '../ui.js';
 import { get, post, account, canTalk } from '../api.js';
@@ -186,28 +187,11 @@ const taskRow = t => `
 // Значок предмета. Читать название дисциплины целиком в списке никто
 // не будет — глаз цепляется за цвет и форму, и уже по ним объявление
 // находится среди других.
-const SUBJECT_ICONS = [
-  [/физик|механик|термодинам/i, 'atom', 4],
-  [/матем|анализ|алгебр|геометр/i, 'sigma', 0],
-  [/информат|программ|вычислит/i, 'code', 5],
-  [/истори|философ|культур|право/i, 'landmark', 3],
-  [/язык|английск|лингв/i, 'languages', 2],
-  [/физическ.*культур|спорт/i, 'medal', 1],
-  [/командн|коммуникац|психолог/i, 'users', 2],
-  [/хими|биолог/i, 'microscope', 1],
-  [/эконом|менеджмент|финанс/i, 'wallet', 3],
-];
-
-export function subjectLook(name) {
-  for (const [re, glyph, tone] of SUBJECT_ICONS) {
-    if (re.test(name || '')) return { glyph, tone };
-  }
-  // Незнакомый предмет получает свой постоянный цвет, а не случайный:
-  // при следующем открытии он должен выглядеть так же.
-  let sum = 0;
-  for (const ch of String(name || '')) sum = (sum + ch.charCodeAt(0)) % 997;
-  return { glyph: 'bookOpen', tone: sum % 6 };
-}
+// Таблица предметов переехала в `js/subjects.js`: тот же предмет обязан
+// выглядеть одинаково и в расписании, и здесь, а две таблицы разошлись
+// бы на первом же новом предмете. Реэкспорт нужен проверкам клиента,
+// которые гоняют подбор значка через этот модуль.
+export { subjectLook };
 
 /** Дата ОРИОКС «03.09.2026 15:05» — в то, как о ней говорят вслух. */
 export function newsDate(raw) {
@@ -230,7 +214,7 @@ const newsRow = n => {
   const date = newsDate(n.date);
   return `
   <button class="notice-card tone-${look.tone}" data-news="${esc(n.href)}">
-    <div class="notice-badge">${icon(look.glyph, 20)}</div>
+    <div class="notice-badge">${subjectArt(look.glyph, 20)}</div>
     <div class="notice-main">
       <div class="notice-top">
         <span class="notice-subject">
@@ -746,7 +730,7 @@ function filesSheet(task) {
     body: `
       <div class="notice-head tone-${subjectLook(task.subject).tone}">
         <div class="notice-badge">
-          ${icon(subjectLook(task.subject).glyph, 22)}
+          ${subjectArt(subjectLook(task.subject).glyph, 22)}
         </div>
         <div class="notice-head-text">
           <div class="notice-subject">${esc(task.subject)}</div>
@@ -804,7 +788,7 @@ async function newsSheet(href, list) {
     title: known.title || 'Объявление',
     body: `
       <div class="notice-head tone-${look.tone}">
-        <div class="notice-badge">${icon(look.glyph, 22)}</div>
+        <div class="notice-badge">${subjectArt(look.glyph, 22)}</div>
         <div class="notice-head-text">
           <div class="notice-subject">
             ${esc(known.discipline || 'Объявление')}

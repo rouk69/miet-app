@@ -1,5 +1,5 @@
 /* Собрано tools/stamp.py из js/*.js — не правьте здесь.
-   Версия 4921c499. Исходники лежат рядом и остаются модулями. */
+   Версия de78cf34. Исходники лежат рядом и остаются модулями. */
 var __mod = {};
 /* ==== js\config.js ==== */
 __mod['js/config.js'] = (function () {
@@ -78,7 +78,7 @@ const API_BASE = base;
 // свежую ли страницу открыл человек: Telegram кеширует мини-приложения
 // по своим правилам, и «у меня ничего не поменялось» разбирается
 // сравнением этой строки, а не на слово.
-const BUILD = '4921c499';
+const BUILD = 'de78cf34';
 
 return {'apiBase': apiBase, 'fallBackToHome': fallBackToHome, 'API_BASE': API_BASE, 'BUILD': BUILD};
 })();
@@ -1713,6 +1713,199 @@ const depth = () => stack.length;
 
 
 return {'TABS': TABS, 'register': register, 'init': init, 'go': go, 'back': back, 'switchTab': switchTab, 'refresh': refresh, 'current': current, 'depth': depth, 'isTab': isTab};
+})();
+
+/* ==== js\subjects.js ==== */
+__mod['js/subjects.js'] = (function () {
+// Значок предмета: по чему пара — видно раньше, чем прочитано название.
+//
+// Расписание студента — это восемь строк подряд, отличающихся только
+// текстом. Глаз в таком списке ищет долго, а ищут в нём обычно одно:
+// «когда у меня физика». Цветной значок отвечает на это без чтения.
+//
+// Иконки здесь свои, а не из `icons.js`, и по одной причине: те
+// одноцветные и штриховые, как требует дизайн-кит, а тут нужен цвет.
+// Каждая собрана из двух слоёв — полупрозрачной заливки и обводки
+// поверх, оба берут `currentColor`. Получается цветная иконка, которая
+// остаётся одной краской: перекрасить её под тему — это поменять один
+// `color`, а не переписывать SVG.
+//
+// Цвет закреплён за предметом таблицей, а незнакомому считается из его
+// названия. Случайного цвета нет нигде: предмет обязан выглядеть
+// одинаково и сегодня, и завтра, и в расписании, и в заданиях.
+
+var icon = __mod['js/icons.js']['icon'];
+var esc = __mod['js/ui.js']['esc'];
+
+/**
+ * Предмет → значок и цвет. Порядок важен: первое совпадение побеждает,
+ * поэтому частные правила стоят выше общих («начертательная геометрия» —
+ * это черчение, а не математика, хотя слово «геометрия» есть в обоих).
+ *
+ * Тона — те же шесть, что у карточек заданий (`tone-0…5` в CSS), и
+ * посчитаны они на контраст в обеих темах. Заводить здесь седьмой цвет
+ * нельзя, не прогнав `tools/check_contrast.py`.
+ */
+const SUBJECTS = [
+  // Спорт стоит первым из-за «Индивидуальные виды спорта / Командные
+  // виды спорта»: слово «командн» ниже отдано деловым коммуникациям, и
+  // без этого порядка физкультура уезжала к психологии. Проверено на
+  // живом расписании, а не придумано.
+  [/спорт|физическ.*культур|плаван|атлетик|фитнес/i, 'dumbbell', 1],
+  [/военн.*подготов|военн.*кафедр/i, 'shieldc', 3],
+  [/начертат|инженерн.*графи|черчен|компьютерн.*графи/i, 'draft', 5],
+  [/теор.*вероятн|статистик|случайн.*процесс/i, 'stats', 0],
+  [/дискретн|матлог|математическ.*логик|теор.*графов/i, 'graph', 0],
+  // «Теория функций комплексной переменной» — тоже математика, но ни
+  // одного привычного слова в ней нет.
+  [/матем|матанализ|алгебр|геометр|уравнен|дифференц|интеграл|функц.*перемен/i,
+    'sigma', 0],
+  [/физик|механик|термодинам|оптик/i, 'atom', 4],
+  [/схемотехн|электротехн|электрон|цепей|микропроцес|микроэлектрон/i, 'chip', 4],
+  [/материаловед|метролог|измерен|сопромат/i, 'gauge', 4],
+  [/баз.*данн|сет[иь]|операционн.*систем|архитектур.*эвм|сетев/i, 'server', 5],
+  // «Основы теории информации и кодирования»: «информаци», а не
+  // «информат», — на это правило уже попадались.
+  [/информат|информаци|кодирован|программ|вычислит|алгоритм|веб|web|python|1с/i,
+    'code', 5],
+  [/хими|биолог|нанотех|материал.*наук/i, 'flaskc', 1],
+  [/эколог|природопольз|устойчив.*развит/i, 'leafc', 1],
+  [/безопасн.*жизнед|бжд|охран.*труд|гражданск.*оборон/i, 'shieldc', 3],
+  // Именно «право», а не «прав»: подстрока сидит внутри «управления», и
+  // «Основы управления проектами» уходили к истории.
+  [/правовед|право|права|юриспруд|конституц/i, 'column', 3],
+  [/истори|философ|культуролог|политолог|социолог|религиовед/i, 'column', 3],
+  [/эконом|менеджмент|финанс|бухгалт|маркетинг|управлен.*проект|предприним/i,
+    'coins', 3],
+  [/язык|английск|лингв|перевод/i, 'languages', 2],
+  [/психолог|командн|коммуникац|лидерств|самоопредел|деловое общение/i,
+    'brainc', 2],
+];
+
+/**
+ * Тела цветных значков. Первый path — заливка (она и даёт «цветность»),
+ * остальные — обводка поверх. Заливка полупрозрачная: сплошная в
+ * списке из восьми пар превращается в рябь.
+ *
+ * Ключи совпадают с именами в таблице выше. Чего здесь нет, то рисуется
+ * штриховой иконкой из `icons.js` — раздел не должен падать из-за
+ * ненарисованной картинки.
+ */
+const COLOR = {
+  sigma: '<path d="M4.5 3.5h15v17h-15z" opacity=".16"/>'
+       + '<path d="M17 6H8l5.5 6L8 18h9" fill="none"/>',
+  atom: '<circle cx="12" cy="12" r="3.2" opacity=".2"/>'
+      + '<circle cx="12" cy="12" r="2.1" fill="none"/>'
+      + '<ellipse cx="12" cy="12" rx="9.2" ry="3.9" fill="none"/>'
+      + '<ellipse cx="12" cy="12" rx="9.2" ry="3.9" fill="none" transform="rotate(60 12 12)"/>'
+      + '<ellipse cx="12" cy="12" rx="9.2" ry="3.9" fill="none" transform="rotate(120 12 12)"/>',
+  code: '<rect x="2.5" y="4.5" width="19" height="15" rx="3" opacity=".16"/>'
+      + '<path d="m9 9.5-3 2.5 3 2.5M15 9.5l3 2.5-3 2.5" fill="none"/>',
+  chip: '<rect x="6" y="6" width="12" height="12" rx="2.5" opacity=".18"/>'
+      + '<rect x="6.8" y="6.8" width="10.4" height="10.4" rx="2" fill="none"/>'
+      + '<path d="M10 3.5v3M14 3.5v3M10 17.5v3M14 17.5v3M3.5 10h3M3.5 14h3M17.5 10h3M17.5 14h3" fill="none"/>',
+  server: '<rect x="3" y="4" width="18" height="6.5" rx="2" opacity=".18"/>'
+        + '<rect x="3" y="13.5" width="18" height="6.5" rx="2" opacity=".18"/>'
+        + '<rect x="3" y="4" width="18" height="6.5" rx="2" fill="none"/>'
+        + '<rect x="3" y="13.5" width="18" height="6.5" rx="2" fill="none"/>'
+        + '<path d="M7 7.2h.01M7 16.8h.01" fill="none"/>',
+  stats: '<path d="M4 20V13h4v7zM10 20V8h4v12zM16 20v-9h4v9z" opacity=".18"/>'
+       + '<path d="M4 20V13h4v7zM10 20V8h4v12zM16 20v-9h4v9z" fill="none"/>'
+       + '<path d="M3 20.5h18" fill="none"/>',
+  graph: '<circle cx="6" cy="17" r="2.6" opacity=".2"/><circle cx="12" cy="7" r="2.6" opacity=".2"/>'
+       + '<circle cx="18" cy="16" r="2.6" opacity=".2"/>'
+       + '<circle cx="6" cy="17" r="2.6" fill="none"/><circle cx="12" cy="7" r="2.6" fill="none"/>'
+       + '<circle cx="18" cy="16" r="2.6" fill="none"/>'
+       + '<path d="m7.8 15.4 2.6-6.1M13.9 8.6l2.5 5.4M8.6 17.3h6.8" fill="none"/>',
+  draft: '<path d="M12 3.5 5 20.5h14z" opacity=".16"/>'
+       + '<path d="M12 4.2 5.6 19.8h12.8z" fill="none"/>'
+       + '<path d="M8.6 14h6.8" fill="none"/><circle cx="12" cy="4.2" r="1.3" fill="none"/>',
+  flaskc: '<path d="M9.5 3.5v5.8L5 17.2a2.4 2.4 0 0 0 2 3.6h10a2.4 2.4 0 0 0 2-3.6l-4.5-7.9V3.5z" opacity=".16"/>'
+        + '<path d="M9.5 3.5v5.8L5 17.2a2.4 2.4 0 0 0 2 3.6h10a2.4 2.4 0 0 0 2-3.6l-4.5-7.9V3.5" fill="none"/>'
+        + '<path d="M8 3.5h8M7.3 14.6h9.4" fill="none"/>',
+  leafc: '<path d="M20 4C10 4 4 8.5 4 15a5 5 0 0 0 5 5c7 0 11-6 11-16z" opacity=".18"/>'
+       + '<path d="M20 4C10 4 4 8.5 4 15a5 5 0 0 0 5 5c7 0 11-6 11-16Z" fill="none"/>'
+       + '<path d="M16 8c-4 1.5-7 5-8.5 10" fill="none"/>',
+  shieldc: '<path d="M12 3 5 5.8v6c0 4.4 3 7.6 7 9.2 4-1.6 7-4.8 7-9.2v-6z" opacity=".18"/>'
+         + '<path d="M12 3 5 5.8v6c0 4.4 3 7.6 7 9.2 4-1.6 7-4.8 7-9.2v-6L12 3Z" fill="none"/>'
+         + '<path d="m9 12 2.2 2.2L15.5 10" fill="none"/>',
+  column: '<path d="M5 9h14v9H5z" opacity=".16"/>'
+        + '<path d="M12 3 3.5 7.5h17L12 3Z" fill="none"/>'
+        + '<path d="M6.5 9.5v8M12 9.5v8M17.5 9.5v8M3.5 20.5h17" fill="none"/>',
+  coins: '<ellipse cx="12" cy="7" rx="7.5" ry="3.2" opacity=".18"/>'
+       + '<ellipse cx="12" cy="7" rx="7.5" ry="3.2" fill="none"/>'
+       + '<path d="M4.5 7v5c0 1.8 3.4 3.2 7.5 3.2s7.5-1.4 7.5-3.2V7" fill="none"/>'
+       + '<path d="M4.5 12v5c0 1.8 3.4 3.2 7.5 3.2s7.5-1.4 7.5-3.2v-5" fill="none"/>',
+  languages: '<circle cx="12" cy="12" r="9" opacity=".16"/>'
+           + '<circle cx="12" cy="12" r="9" fill="none"/>'
+           + '<path d="M3.2 12h17.6M12 3a15 15 0 0 1 0 18a15 15 0 0 1 0-18Z" fill="none"/>',
+  brainc: '<path d="M9 4a3.2 3.2 0 0 0-3.2 3.2A3 3 0 0 0 4 10a3 3 0 0 0 1.4 2.5A3 3 0 0 0 8 17.5h1z" opacity=".18"/>'
+        + '<path d="M9.2 3.8A3.2 3.2 0 0 0 6 7a3 3 0 0 0-1.8 2.8 3 3 0 0 0 1.4 2.5A3 3 0 0 0 8 17.3h1.2V3.8Z" fill="none"/>'
+        + '<path d="M14.8 3.8A3.2 3.2 0 0 1 18 7a3 3 0 0 1 1.8 2.8 3 3 0 0 1-1.4 2.5A3 3 0 0 1 16 17.3h-1.2V3.8Z" fill="none"/>'
+        + '<path d="M12 3.8v16.4" fill="none"/>',
+  dumbbell: '<rect x="2.5" y="8.5" width="4" height="7" rx="1.4" opacity=".2"/>'
+          + '<rect x="17.5" y="8.5" width="4" height="7" rx="1.4" opacity=".2"/>'
+          + '<rect x="2.5" y="8.5" width="4" height="7" rx="1.4" fill="none"/>'
+          + '<rect x="17.5" y="8.5" width="4" height="7" rx="1.4" fill="none"/>'
+          + '<path d="M6.5 12h11" fill="none"/>',
+  gauge: '<path d="M3.5 17a8.5 8.5 0 1 1 17 0z" opacity=".16"/>'
+       + '<path d="M3.5 17a8.5 8.5 0 1 1 17 0" fill="none"/>'
+       + '<path d="m12 17 4.2-5" fill="none"/><circle cx="12" cy="17" r="1.4" fill="none"/>',
+};
+
+/** Сколько всего тонов: незнакомый предмет раскладывается по ним же. */
+const TONES = 6;
+
+/**
+ * Значок и цвет для названия предмета.
+ *
+ * Незнакомому цвет считается из букв названия, а не берётся случайно:
+ * «Правоведение» должно выглядеть одинаково при каждом открытии, иначе
+ * цвет перестаёт что-либо значить и только мельтешит.
+ */
+function subjectLook(name) {
+  for (const [re, glyph, tone] of SUBJECTS) {
+    if (re.test(name || '')) return { glyph, tone };
+  }
+  let sum = 0;
+  for (const ch of String(name || '')) sum = (sum + ch.charCodeAt(0)) % 997;
+  return { glyph: 'bookOpen', tone: sum % TONES };
+}
+
+/** Есть ли у этого значка цветное тело (иначе рисуем штриховой). */
+const hasColor = glyph => Object.hasOwn(COLOR, glyph);
+
+/**
+ * Цветной значок предмета целиком, вместе с плашкой.
+ *
+ * Плашка и иконка красятся одним `color` от класса `tone-N`: заливка
+ * внутри SVG полупрозрачная и наследует его же. Поэтому тёмная тема
+ * ничего здесь не переопределяет — цвета тонов у неё свои, и этого
+ * достаточно.
+ */
+function subjectArt(glyph, size = 22) {
+  const body = COLOR[glyph];
+  // Незнакомый значок рисуем штриховым из icons.js: пустое место на
+  // экране хуже иконки не в том стиле.
+  if (!body) return icon(glyph, size);
+  return `<svg width="${size}" height="${size}" viewBox="0 0 24 24"
+    fill="currentColor" stroke="currentColor" stroke-width="1.6"
+    stroke-linecap="round" stroke-linejoin="round"
+    aria-hidden="true">${body}</svg>`;
+}
+
+function subjectBadge(name, size = 30, cls = '') {
+  const { glyph, tone } = subjectLook(name);
+  // На цветной подложке (синяя карточка «Сейчас идёт») тон предмета не
+  // читается: он рассчитан на светлый или тёмный фон карточки, а не на
+  // фирменный синий. Там значок берёт белый — узнаётся он по форме, и
+  // этого достаточно, а нечитаемый цвет хуже отсутствующего.
+  const tint = cls.includes('on-accent') ? '' : ` tone-${tone}`;
+  return `<span class="subject-badge${tint} ${cls}" style="--badge:${size}px"
+    title="${esc(name || '')}">${subjectArt(glyph, Math.round(size * 0.62))}</span>`;
+}
+
+return {'SUBJECTS': SUBJECTS, 'subjectLook': subjectLook, 'hasColor': hasColor, 'subjectArt': subjectArt, 'subjectBadge': subjectBadge};
 })();
 
 /* ==== js\screens\common.js ==== */
@@ -4132,6 +4325,7 @@ return {'default': raffleScreen, 'dayLabel': dayLabel, 'plural': plural};
 __mod['js/screens/schedule.js'] = (function () {
 // Расписание: неделя цикла → день → пары. Данные тянутся с miet.ru живьём.
 
+var subjectBadge = __mod['js/subjects.js']['subjectBadge'];
 var icon = __mod['js/icons.js']['icon'];
 var esc = __mod['js/ui.js']['esc'];
 var toast = __mod['js/ui.js']['toast'];
@@ -4230,6 +4424,11 @@ function lessonRow(l, now = null, showState = true) {
         <div class="lesson-name">${esc(e.subject)}</div>
         ${whereLine(e)}`).join('');
 
+  // Значок ставится по первому предмету слота: у пары с подгруппами
+  // предметы бывают разные, но плашка одна на строку — рисовать два
+  // значка в столбик значило бы спорить с собственной версткой.
+  const badge = subjectBadge(l.subject || entries[0].subject, 30);
+
   const kind = sameSubject ? l.kind || entries[0].kind : '';
   const kindCls = sameSubject ? l.kindCls || entries[0].kindCls : 'oth';
   const flags = (sameSubject ? l.flags : null) || [];
@@ -4240,6 +4439,7 @@ function lessonRow(l, now = null, showState = true) {
         <div class="lesson-from">${esc(l.from)}</div>
         <div class="lesson-to">${esc(l.to)}</div>
       </div>
+      ${badge}
       <div class="lesson-body">
         ${body}
         <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
@@ -4628,6 +4828,8 @@ __mod['js/screens/tasks.js'] = (function () {
 // задания мелко: человек ищет глазами «Матанализ», а не «ДЗ №2».
 // Сданное убрано вниз и свёрнуто — оно уже не дело.
 
+var subjectLook = __mod['js/subjects.js']['subjectLook'];
+var subjectArt = __mod['js/subjects.js']['subjectArt'];
 var icon = __mod['js/icons.js']['icon'];
 var esc = __mod['js/ui.js']['esc'];
 var emptyState = __mod['js/ui.js']['emptyState'];
@@ -4816,28 +5018,11 @@ const taskRow = t => `
 // Значок предмета. Читать название дисциплины целиком в списке никто
 // не будет — глаз цепляется за цвет и форму, и уже по ним объявление
 // находится среди других.
-const SUBJECT_ICONS = [
-  [/физик|механик|термодинам/i, 'atom', 4],
-  [/матем|анализ|алгебр|геометр/i, 'sigma', 0],
-  [/информат|программ|вычислит/i, 'code', 5],
-  [/истори|философ|культур|право/i, 'landmark', 3],
-  [/язык|английск|лингв/i, 'languages', 2],
-  [/физическ.*культур|спорт/i, 'medal', 1],
-  [/командн|коммуникац|психолог/i, 'users', 2],
-  [/хими|биолог/i, 'microscope', 1],
-  [/эконом|менеджмент|финанс/i, 'wallet', 3],
-];
+// Таблица предметов переехала в `js/subjects.js`: тот же предмет обязан
+// выглядеть одинаково и в расписании, и здесь, а две таблицы разошлись
+// бы на первом же новом предмете. Реэкспорт нужен проверкам клиента,
+// которые гоняют подбор значка через этот модуль.
 
-function subjectLook(name) {
-  for (const [re, glyph, tone] of SUBJECT_ICONS) {
-    if (re.test(name || '')) return { glyph, tone };
-  }
-  // Незнакомый предмет получает свой постоянный цвет, а не случайный:
-  // при следующем открытии он должен выглядеть так же.
-  let sum = 0;
-  for (const ch of String(name || '')) sum = (sum + ch.charCodeAt(0)) % 997;
-  return { glyph: 'bookOpen', tone: sum % 6 };
-}
 
 /** Дата ОРИОКС «03.09.2026 15:05» — в то, как о ней говорят вслух. */
 function newsDate(raw) {
@@ -4860,7 +5045,7 @@ const newsRow = n => {
   const date = newsDate(n.date);
   return `
   <button class="notice-card tone-${look.tone}" data-news="${esc(n.href)}">
-    <div class="notice-badge">${icon(look.glyph, 20)}</div>
+    <div class="notice-badge">${subjectArt(look.glyph, 20)}</div>
     <div class="notice-main">
       <div class="notice-top">
         <span class="notice-subject">
@@ -5376,7 +5561,7 @@ function filesSheet(task) {
     body: `
       <div class="notice-head tone-${subjectLook(task.subject).tone}">
         <div class="notice-badge">
-          ${icon(subjectLook(task.subject).glyph, 22)}
+          ${subjectArt(subjectLook(task.subject).glyph, 22)}
         </div>
         <div class="notice-head-text">
           <div class="notice-subject">${esc(task.subject)}</div>
@@ -5434,7 +5619,7 @@ async function newsSheet(href, list) {
     title: known.title || 'Объявление',
     body: `
       <div class="notice-head tone-${look.tone}">
-        <div class="notice-badge">${icon(look.glyph, 22)}</div>
+        <div class="notice-badge">${subjectArt(look.glyph, 22)}</div>
         <div class="notice-head-text">
           <div class="notice-subject">
             ${esc(known.discipline || 'Объявление')}
@@ -5503,7 +5688,7 @@ function linkify(text) {
 // пишут задания перечнем, и сплошным текстом он читается вдвое хуже.
 const NUMBERED = /^\s*(?:[0-9]{1,2}\s*[.)]|[А-Яа-яA-Za-z]\s*\)|[·•\-–])\s+/;
 
-return {'default': tasksScreen, 'weekMonday': weekMonday, 'subjectKey': subjectKey, 'lessonDay': lessonDay, 'subjectLook': subjectLook, 'newsDate': newsDate, 'fileLook': fileLook, 'flatten': flatten, 'pendingOf': pendingOf, 'linkify': linkify, 'NUMBERED': NUMBERED};
+return {'default': tasksScreen, 'weekMonday': weekMonday, 'subjectKey': subjectKey, 'lessonDay': lessonDay, 'newsDate': newsDate, 'fileLook': fileLook, 'flatten': flatten, 'pendingOf': pendingOf, 'linkify': linkify, 'NUMBERED': NUMBERED, 'subjectLook': subjectLook};
 })();
 
 /* ==== js\screens\teachers.js ==== */
@@ -7576,6 +7761,7 @@ var humanDate = __mod['js/screens/common.js']['humanDate'];
 var iconBtn = __mod['js/screens/common.js']['iconBtn'];
 var dayRows = __mod['js/screens/schedule.js']['dayRows'];
 var teacherOf = __mod['js/screens/schedule.js']['teacherOf'];
+var subjectBadge = __mod['js/subjects.js']['subjectBadge'];
 var feedRow = __mod['js/screens/feed.js']['feedRow'];
 var flatten = __mod['js/screens/tasks.js']['flatten'];
 var pendingOf = __mod['js/screens/tasks.js']['pendingOf'];
@@ -7874,7 +8060,10 @@ async function renderNow(slot, now) {
   const card = current
     ? `<div class="now-card">
          <div class="now-kicker">Сейчас идёт</div>
-         <div class="now-title">${esc(current.subject)}</div>
+         <div class="now-head">
+           ${subjectBadge(current.subject, 34, 'on-accent')}
+           <div class="now-title">${esc(current.subject)}</div>
+         </div>
          <div class="now-meta">
            <span>${icon('clock', 15)} ${esc(current.from)}–${esc(current.to)}</span>
            ${current.room ? `<span>${icon('door', 15)} ${esc(current.room)}</span>` : ''}
@@ -7885,7 +8074,10 @@ async function renderNow(slot, now) {
     : next
       ? `<div class="now-card">
            <div class="now-kicker">Следующая пара</div>
-           <div class="now-title">${esc(next.subject)}</div>
+           <div class="now-head">
+             ${subjectBadge(next.subject, 34, 'on-accent')}
+             <div class="now-title">${esc(next.subject)}</div>
+           </div>
            <div class="now-meta">
              <span>${icon('clock', 15)} в ${esc(next.from)}</span>
              ${next.room ? `<span>${icon('door', 15)} ${esc(next.room)}</span>` : ''}
