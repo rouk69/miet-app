@@ -32,7 +32,7 @@ from urllib.parse import parse_qs, urlparse
 from . import analytics, appconf, auth, directory, help_board, notify
 from . import orioks, orioks_watch, orioks_web, posts
 from . import morning
-from . import paths, render, storage, uptime
+from . import paths, raffle, render, storage, uptime
 from . import webapp as webapp_watch
 from . import rich
 from . import schedule_api as schedule
@@ -155,6 +155,14 @@ def handle(method: str, path: str, query: dict, body: dict, init_data: str):
             analytics.touch(user, source="app")
         return _help(path, method, query, body, uid, me)
 
+    if path == "/api/raffle" or path.startswith("/api/raffle/"):
+        # Ссылку человек отправляет от своего имени, и в таблице стоит его
+        # имя: профиль должен быть в базе к этому моменту, а не приехать
+        # потом вместе с событиями.
+        if not me["blocked"]:
+            analytics.touch(user, source="app")
+        return _raffle(path, method, query, body, uid, me)
+
     if path.startswith("/api/admin/"):
         return _admin(path, method, query, body, uid, me)
 
@@ -190,6 +198,14 @@ def _me(user: dict, me: dict) -> dict:
         "can_delete": analytics.can(me, "posts_delete"),
         "can_pin": analytics.can(me, "posts_pin"),
         "can_clean_comments": analytics.can(me, "comments_delete"),
+        # Видит ли человек розыгрыш. Решает сервер, а не клиент: плитка,
+        # спрятанная только в интерфейсе, всё равно осталась бы доступной
+        # тому, кто откроет экран по имени.
+        "raffle": _raffle_visible(me),
+        # Открыт ли он всем — отдельно от «видишь ли ты его»:
+        # владелец видит раздел и закрытым, и ему нужно знать,
+        # что людям он пока не показан.
+        "raffle_open": appconf.get("raffle_on"),
         "orioks": bool(orioks.token_of(me["id"])),
         "morning": storage.morning_on(me["id"]),
         "label": _label(me),
@@ -640,6 +656,95 @@ USER_PATH = re.compile(r"^/api/admin/users/(\d+)(/role|/block)?$")
 MOD_PATH = re.compile(r"^/api/admin/posts/(\d+)/(approve|reject)$")
 
 
+def _raffle_visible(me: dict) -> bool:
+    """
+    Видит ли человек раздел вообще.
+
+    Пока владелец не открыл розыгрыш всем, раздел существует только для
+    админов: так его можно собрать, пройти целиком самому и открыть,
+    когда он готов, а не «почти готов».
+    """
+    return bool(appconf.get("raffle_on") or me.get("is_admin"))
+
+
+def _raffle(path: str, method: str, query: dict, body: dict, uid: int, me: dict):
+    """
+    Розыгрыш: своя ссылка, свой счёт, общая таблица.
+
+    Закрытому разделу отвечаем 404, а не 403: «нет такого раздела» —
+    правда для всех, кому он не открыт, а 403 сообщал бы, что раздел
+    существует, и подсказывал бы, что скоро появится.
+    """
+    if not _raffle_visible(me):
+        return 404, {"error": "Нет такого раздела"}
+    if me["blocked"]:
+        return 403, {"error": "Доступ закрыт"}
+
+    if path == "/api/raffle" and method == "GET":
+        return 200, raffle.state_for(
+            uid, can_moderate=analytics.can(me, "users_block"))
+
+    if path == "/api/raffle/board" and method == "GET":
+        limit = int((query.get("limit", ["20"])[0] or "20").strip() or 20)
+        # Метки подозрительности видит только тот, кто разбирает спорные
+        # приглашения: рядом с чужим именем это обвинение, а не факт.
+        return 200, raffle.board(uid, limit,
+                                 with_marks=analytics.can(me, "users_block"))
+
+    if path == "/api/raffle/join" and method == "POST":
+        # Вход через мини-приложение: ссылку открыли кнопкой «Открыть»,
+        # и код приехал в start_param, а не в /start боту. Бот в этом
+        # случае человека не видел вовсе.
+        code = str(body.get("code") or "").strip().lower()
+        got = raffle.attach({
+            "id": uid,
+            "username": (body.get("username") or ""),
+            "premium": bool(body.get("premium")),
+            "photo": bool(body.get("photo")),
+        }, code, source="app")
+        # Ответ одинаковый и когда закрепили, и когда нет: приглашённому
+        # незачем знать, засчитали ли его очко кому-то другому.
+        return 200, {"ok": True, "attached": bool(got.get("ok"))}
+
+    return 404, {"error": "Нет такого маршрута"}
+
+
+def _admin_raffle(path: str, method: str, query: dict, body: dict, me: dict):
+    """
+    Розыгрыш глазами владельца: кого награждать и что посмотреть руками.
+
+    Права те же, что на блокировку людей (`users_block`): снять чужое
+    приглашение — это решение о человеке, а не просмотр статистики.
+    """
+    if not analytics.can(me, "users_block"):
+        return 403, {"error": "Нужно право управлять пользователями"}
+
+    if path == "/api/admin/raffle" and method == "GET":
+        who = (query.get("inviter", [""])[0] or "").strip()
+        if who.lstrip("-").isdigit():
+            return 200, {"invites": raffle.invites_of(int(who))}
+        return 200, raffle.overview()
+
+    if path == "/api/admin/raffle" and method == "POST":
+        action = str(body.get("action") or "").strip()
+        try:
+            if action == "decide":
+                return 200, raffle.decide(int(body.get("user_id") or 0),
+                                          str(body.get("verdict") or ""))
+            if action == "conf":
+                return 200, {"conf": raffle.set_conf(body.get("conf") or {})}
+            if action == "open":
+                # Открыть раздел всем — тот самый переключатель, ради
+                # которого весь раздел и собирался невидимым.
+                appconf.set_flag("raffle_on", bool(body.get("on")))
+                return 200, {"on": appconf.get("raffle_on")}
+        except raffle.Refused as e:
+            return 400, {"error": str(e)}
+        return 400, {"error": "Неизвестное действие"}
+
+    return 404, {"error": "Нет такого маршрута"}
+
+
 def _moderation(path: str, method: str, body: dict, uid: int, me: dict):
     """Очередь анонимных постов: одобрить или отклонить."""
     if not analytics.can(me, "posts_moderate"):
@@ -670,6 +775,9 @@ def _admin(path: str, method: str, query: dict, body: dict, uid: int, me: dict):
 
     if not analytics.can(me, "stats"):
         return 403, {"error": "Нет доступа"}
+
+    if path == "/api/admin/raffle":
+        return _admin_raffle(path, method, query, body, me)
 
     if path == "/api/admin/stats" and method == "GET":
         days = min(60, max(7, int(query.get("days", ["14"])[0] or 14)))

@@ -100,7 +100,7 @@ export default async function adminScreen() {
     body: `
       <div class="pill-row admin-tabs" id="atabs">
         ${[['stats', 'Статистика'], ['days', 'По дням'], ['users', 'Юзеры'],
-    ['roles', 'Роли'], ['flags', 'Настройки']]
+    ['roles', 'Роли'], ['raffle', 'Розыгрыш'], ['flags', 'Настройки']]
     .map(([id, label]) => `
           <button class="pill ${tab === id ? 'active' : ''}" data-atab="${id}">${label}</button>`).join('')}
       </div>
@@ -125,6 +125,7 @@ async function paint(pane) {
     if (tab === 'stats') pane.innerHTML = await statsPane();
     else if (tab === 'days') await daysPane(pane);
     else if (tab === 'users') await usersPane(pane);
+    else if (tab === 'raffle') await rafflePane(pane);
     else if (tab === 'flags') await flagsPane(pane);
     else await rolesPane(pane);
   } catch (err) {
@@ -422,6 +423,168 @@ async function flagsPane(pane) {
     } catch (err) {
       toast(err.message);
       t.classList.toggle('on', !value);
+    }
+  });
+}
+
+// ─────────────── вкладка «Розыгрыш» ───────────────
+
+const FLAG_NAMES = {
+  noname: 'без ника',
+  fresh: 'свежий аккаунт',
+  burst: 'пришёл в пачке',
+};
+
+/**
+ * Розыгрыш глазами владельца: кого награждать и что посмотреть руками.
+ *
+ * Награды выдаются вне бота, поэтому экран не «проводит розыгрыш», а
+ * отвечает на один вопрос — кому писать. Отсюда и порядок: сперва
+ * победители, потом спорное, и только затем условия.
+ */
+async function rafflePane(pane) {
+  const draw = async () => {
+    const d = await get('/api/admin/raffle');
+    const c = d.conf || {};
+    const t = d.totals || {};
+    const prizes = c.prizes || [];
+    const win = d.board.filter(p => p.place <= (prizes.length || 3));
+
+    pane.innerHTML = `
+      <div class="list-card">
+        <div class="list-row">
+          <div class="list-row-body">
+            <div class="row-title">Раздел виден всем</div>
+            <div class="row-subtitle">Пока выключено — розыгрыш открывается
+              только админам, а приглашения считаются всё равно</div>
+          </div>
+          ${toggle(Boolean(account.raffle_open), 'raffle_on')}
+        </div>
+      </div>
+
+      <div class="kpi-grid" style="margin-top:12px">
+        ${kpi(t.counted ?? 0, 'засчитано')}
+        ${kpi(t.waiting ?? 0, 'ждут группу')}
+        ${kpi(t.rejected ?? 0, 'не в зачёт')}
+        ${kpi(t.players ?? 0, 'приглашают')}
+      </div>
+
+      <div class="section-head"><div class="section-title">Кому награду</div></div>
+      ${win.length ? `<div class="list-card">${win.map(p => `
+        <div class="rafadm-item">
+          <div class="raffle-place">${p.place}</div>
+          <div class="rafadm-who">
+            <div class="row-title">${esc(p.name)}</div>
+            <div class="row-subtitle">${p.username ? '@' + esc(p.username) + ' · ' : ''}id ${p.user_id}${
+  prizes[p.place - 1] ? ' · ' + esc(prizes[p.place - 1].text) : ''}</div>
+            ${p.marked ? `<div class="rafadm-flags">спорных приглашений: ${p.marked}</div>` : ''}
+          </div>
+          <div class="raffle-score">${p.count}</div>
+        </div>`).join('')}</div>`
+    : `<div class="list-card"><div class="rafadm-head">
+         <div class="row-subtitle">Пока никто никого не привёл</div></div></div>`}
+
+      <div class="section-head"><div class="section-title">Посмотреть руками</div></div>
+      ${d.suspicious.length ? `<div class="list-card">${d.suspicious.map(s => `
+        <div class="rafadm-item" data-who="${s.user_id}">
+          <div class="rafadm-who">
+            <div class="row-title">${esc(s.name)}${s.username ? ' @' + esc(s.username) : ''}</div>
+            <div class="row-subtitle">привёл ${esc(s.inviter_name)} · ${
+  s.state === 'counted' ? 'зачтено' : 'ждёт группу'}</div>
+            <div class="rafadm-flags">${s.flags.map(f => esc(FLAG_NAMES[f] || f)).join(', ')}</div>
+          </div>
+          <button class="rafadm-act" data-verdict="ok">Оставить</button>
+          <button class="rafadm-act drop" data-verdict="no">Снять</button>
+        </div>`).join('')}</div>`
+    : `<div class="list-card"><div class="rafadm-head">
+         <div class="row-subtitle">Спорных приглашений нет</div></div></div>`}
+
+      <div class="section-head"><div class="section-title">Условия</div></div>
+      <div class="list-card" style="padding:14px 16px">
+        <div class="field-group">
+          <div class="field-label">Название</div>
+          <input class="field-input" id="rf-title" maxlength="200"
+                 value="${esc(c.title || '')}">
+        </div>
+        <div class="field-group">
+          <div class="field-label">Подпись</div>
+          <input class="field-input" id="rf-note" maxlength="200"
+                 value="${esc(c.note || '')}">
+        </div>
+        <div class="field-group">
+          <div class="field-label">Последний день — пусто, если без срока</div>
+          <input class="field-input" id="rf-ends" maxlength="10"
+                 placeholder="2026-10-01" value="${esc(c.ends || '')}">
+        </div>
+        <div class="field-group">
+          <div class="field-label">Призы — по строке на место, сверху первое</div>
+          <textarea class="field-input" id="rf-prizes" rows="4"
+            placeholder="200 Telegram Stars">${esc(prizes.map(p => p.text).join('\n'))}</textarea>
+        </div>
+        <button class="btn-primary" id="rf-save" style="margin-top:12px">Сохранить</button>
+      </div>
+      <p class="raffle-fineprint">Награды выдаются вне бота: здесь только счёт
+        и список победителей.</p>`;
+  };
+
+  await draw();
+
+  pane.addEventListener('click', async e => {
+    const flag = e.target.closest('[data-toggle="raffle_on"]');
+    if (flag) {
+      const value = !flag.classList.contains('on');
+      flag.classList.toggle('on', value);
+      haptic('light');
+      try {
+        const r = await post('/api/admin/raffle', { action: 'open', on: value });
+        account.raffle_open = r.on;
+        hapticNotify('success');
+        toast(r.on ? 'Розыгрыш открыт всем' : 'Розыгрыш снова только для админов');
+      } catch (err) {
+        toast(err.message);
+        flag.classList.toggle('on', !value);
+      }
+      return;
+    }
+
+    const verdict = e.target.closest('[data-verdict]');
+    if (verdict) {
+      const who = verdict.closest('[data-who]')?.dataset.who;
+      if (!who) return;
+      haptic('light');
+      try {
+        await post('/api/admin/raffle', {
+          action: 'decide', user_id: +who, verdict: verdict.dataset.verdict,
+        });
+        hapticNotify('success');
+        await draw();
+      } catch (err) {
+        toast(err.message);
+      }
+      return;
+    }
+
+    if (!e.target.closest('#rf-save')) return;
+    haptic('medium');
+    try {
+      await post('/api/admin/raffle', {
+        action: 'conf',
+        conf: {
+          title: pane.querySelector('#rf-title').value,
+          note: pane.querySelector('#rf-note').value,
+          ends: pane.querySelector('#rf-ends').value.trim(),
+          // Место — это номер строки: отдельного поля для него нет, иначе
+          // их пришлось бы держать согласованными руками.
+          prizes: pane.querySelector('#rf-prizes').value
+            .split('\n').map(s => s.trim()).filter(Boolean)
+            .map(text => ({ text })),
+        },
+      });
+      hapticNotify('success');
+      toast('Условия сохранены');
+      await draw();
+    } catch (err) {
+      toast(err.message);
     }
   });
 }

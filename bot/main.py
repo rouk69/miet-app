@@ -35,6 +35,7 @@ from . import notify
 from . import orioks_watch
 from . import posts as feed
 from . import publish
+from . import raffle
 from . import render
 from . import rich
 from . import schedule_api as api
@@ -391,6 +392,36 @@ def ask_group(chat_id: int, current: str | None = None) -> None:
 
 # ─────────────────────────── команды ───────────────────────────
 
+def catch_invite(user: types.User, code: str) -> None:
+    """
+    Человек пришёл по чужой ссылке. Записываем, кому он достанется.
+
+    Фото профиля бот спрашивает сам: в сообщении его нет, а без него
+    пустой аккаунт неотличим от живого студента без ника. Спрос
+    необязательный — Telegram может ответить отказом (закрытый профиль),
+    и это не повод терять приглашение: тогда считаем, что фото нет, а
+    решает всё равно наличие ника или премиума.
+
+    Всё завёрнуто в try: /start обязан ответить расписанием, даже если
+    учёт розыгрыша целиком лёг.
+    """
+    try:
+        photo = False
+        try:
+            got = bot.get_user_profile_photos(user.id, limit=1)
+            photo = bool(getattr(got, "total_count", 0))
+        except Exception as e:                              # noqa: BLE001
+            log.info("фото профиля %s не спросилось: %s", user.id, e)
+        raffle.attach({
+            "id": user.id,
+            "username": user.username,
+            "premium": getattr(user, "is_premium", False),
+            "photo": photo,
+        }, code, source="bot")
+    except Exception:                                       # noqa: BLE001
+        log.exception("приглашение по коду %s не записалось", code)
+
+
 @bot.message_handler(commands=["start"])
 def cmd_start(m: types.Message) -> None:
     if not seen(m.from_user, "/start"):
@@ -401,7 +432,15 @@ def cmd_start(m: types.Message) -> None:
     # в одно нажатие по присланной ссылке.
     parts = (m.text or "").split(maxsplit=1)
     payload = parts[1].strip() if len(parts) > 1 else ""
-    if payload:
+
+    # Приглашение по чужой ссылке разбирается ПЕРЕД группой: оно засчитается
+    # позже, когда человек группу выберет, и порядок здесь такой, чтобы
+    # ссылка «сразу с группой» тоже сработала — сперва закрепили, потом
+    # поставили группу, и settle внутри set_group увидит закрепление.
+    code = raffle.parse_code(payload)
+    if code:
+        catch_invite(m.from_user, code)
+    elif payload:
         # Названия групп кириллические, а в start-параметр Telegram пускает
         # только [A-Za-z0-9_-] — поэтому там лежит base64url, а не сам текст.
         wanted = kbs.decode_group(payload)
@@ -1061,6 +1100,9 @@ def main() -> None:
     global BOT_USERNAME
     me = bot.get_me()
     BOT_USERNAME = me.username or ""
+    # Реферальные ссылки собирает raffle, а имя бота знает только живой
+    # процесс: HTTP-API импортировать main не может, круг замкнётся.
+    raffle.set_bot_username(BOT_USERNAME)
     try:
         bot.set_my_commands([
             types.BotCommand("today", "Пары на сегодня"),

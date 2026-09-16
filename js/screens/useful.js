@@ -87,6 +87,14 @@ const SECTIONS = [
   },
 ];
 
+/**
+ * Открыт ли розыгрыш всем. Клиент знает об этом не напрямую: сервер
+ * отдаёт только «видишь ли ты раздел», а админ видит его и закрытым.
+ * Разница важна одному человеку — владельцу, и нужна ему затем, чтобы не
+ * забыть, что люди раздела ещё не видят.
+ */
+const appOpen = () => Boolean(account.raffle_open);
+
 const tile = t => `
   <button class="tile-card tone-${t.tone}" data-open="${t.id}">
     <span class="tile-ico">${icon(t.ico, 22)}</span>
@@ -103,7 +111,16 @@ export default async function usefulScreen() {
       <div class="section-head"><div class="section-title">${esc(s.title)}</div></div>
       ${s.note ? `<p class="section-note">${esc(s.note)}</p>` : ''}
       <div class="tile-grid">${s.tiles.map(tile).join('')}</div>
-    `).join('') + (account.can_stats ? `
+    `).join('') + (account.raffle ? `
+      <div class="section-head"><div class="section-title">Розыгрыш</div></div>
+      ${!appOpen() ? '<p class="section-note">Виден только админам, пока не открыт всем</p>' : ''}
+      <div class="tile-grid">
+        <button class="tile-card tone-violet" data-open="raffle">
+          <span class="tile-ico">${icon('medal', 22)}</span>
+          <span class="tile-name">Розыгрыш</span>
+          <span class="tile-note">Приглашай друзей — и в таблицу</span>
+        </button>
+      </div>` : '') + (account.can_stats ? `
       <div class="section-head"><div class="section-title">Управление</div></div>
       <div class="tile-grid">
         <button class="tile-card tone-blue" data-open="admin">
