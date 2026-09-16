@@ -10,6 +10,7 @@ import { tgUser, openLink } from '../tg.js';
 import { get, canTalk } from '../api.js';
 import { screen, pickGroup, newsRow, humanDate, iconBtn } from './common.js';
 import { dayRows, teacherOf } from './schedule.js';
+import { subjectBadge } from '../subjects.js';
 import { feedRow } from './feed.js';
 import { flatten, pendingOf, subjectLook } from './tasks.js';
 import { art, artState } from '../art.js';
@@ -305,7 +306,10 @@ async function renderNow(slot, now) {
   const card = current
     ? `<div class="now-card">
          <div class="now-kicker">Сейчас идёт</div>
-         <div class="now-title">${esc(current.subject)}</div>
+         <div class="now-head">
+           ${subjectBadge(current.subject, 34, 'on-accent')}
+           <div class="now-title">${esc(current.subject)}</div>
+         </div>
          <div class="now-meta">
            <span>${icon('clock', 15)} ${esc(current.from)}–${esc(current.to)}</span>
            ${current.room ? `<span>${icon('door', 15)} ${esc(current.room)}</span>` : ''}
@@ -316,7 +320,10 @@ async function renderNow(slot, now) {
     : next
       ? `<div class="now-card">
            <div class="now-kicker">Следующая пара</div>
-           <div class="now-title">${esc(next.subject)}</div>
+           <div class="now-head">
+             ${subjectBadge(next.subject, 34, 'on-accent')}
+             <div class="now-title">${esc(next.subject)}</div>
+           </div>
            <div class="now-meta">
              <span>${icon('clock', 15)} в ${esc(next.from)}</span>
              ${next.room ? `<span>${icon('door', 15)} ${esc(next.room)}</span>` : ''}

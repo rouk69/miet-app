@@ -1,5 +1,6 @@
 // Расписание: неделя цикла → день → пары. Данные тянутся с miet.ru живьём.
 
+import { subjectBadge } from '../subjects.js';
 import { icon } from '../icons.js';
 import { esc, toast } from '../ui.js';
 import { art, artState } from '../art.js';
@@ -85,6 +86,11 @@ export function lessonRow(l, now = null, showState = true) {
         <div class="lesson-name">${esc(e.subject)}</div>
         ${whereLine(e)}`).join('');
 
+  // Значок ставится по первому предмету слота: у пары с подгруппами
+  // предметы бывают разные, но плашка одна на строку — рисовать два
+  // значка в столбик значило бы спорить с собственной версткой.
+  const badge = subjectBadge(l.subject || entries[0].subject, 30);
+
   const kind = sameSubject ? l.kind || entries[0].kind : '';
   const kindCls = sameSubject ? l.kindCls || entries[0].kindCls : 'oth';
   const flags = (sameSubject ? l.flags : null) || [];
@@ -95,6 +101,7 @@ export function lessonRow(l, now = null, showState = true) {
         <div class="lesson-from">${esc(l.from)}</div>
         <div class="lesson-to">${esc(l.to)}</div>
       </div>
+      ${badge}
       <div class="lesson-body">
         ${body}
         <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
