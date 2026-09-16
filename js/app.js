@@ -1,10 +1,10 @@
 // Точка входа: тема → Telegram → данные → роутер.
 
-import { initTelegram, syncChrome, guardTaps } from './tg.js';
+import { initTelegram, syncChrome, guardTaps, tg } from './tg.js';
 import { loadData, settings, save, applyTheme, resolveTheme } from './store.js';
 import { register, init as initRouter, switchTab, refresh } from './router.js';
 import { fetchSchedule } from './schedule.js';
-import { loadMe, account, track, syncGroup } from './api.js';
+import { loadMe, account, track, syncGroup, post } from './api.js';
 import { checkFresh } from './fresh.js';
 
 import home from './screens/home.js';
@@ -28,6 +28,7 @@ import { chatsScreen, curatorsScreen } from './screens/community.js';
 import help from './screens/help.js';
 import adminDays, { dayScreen } from './screens/admin-days.js';
 import tasks from './screens/tasks.js';
+import raffle from './screens/raffle.js';
 
 // Тему уже поставил маленький скрипт в index.html — до первой отрисовки,
 // чтобы тёмный Telegram не мигал белым. Здесь она применяется ещё раз:
@@ -82,6 +83,7 @@ register('links', links);
 register('support', support);
 register('admin', admin);
 register('adminUser', adminUserScreen);
+register('raffle', raffle);
 
 const app = document.getElementById('app');
 const nav = document.getElementById('nav');
@@ -97,6 +99,27 @@ const blockedScreen = () => `
       </div>
     </div>
   </div>`;
+
+/**
+ * Приглашение, приехавшее вместе с запуском приложения.
+ *
+ * Отправляем и уходим: закрепление касается не того, кто смотрит на
+ * экран, а того, кто прислал ссылку, — и ждать ответа, тем более
+ * показывать его, здесь не нужно. Отказ (раздел закрыт, ссылка своя,
+ * человек уже закреплён) — обычное дело, поэтому ошибка глотается.
+ */
+function joinByLink() {
+  const raw = tg?.initDataUnsafe?.start_param || '';
+  const code = /^r_[a-z2-9]{4,12}$/.test(raw) ? raw.slice(2) : '';
+  if (!code) return;
+  const who = tg?.initDataUnsafe?.user || {};
+  post('/api/raffle/join', {
+    code,
+    username: who.username || '',
+    premium: Boolean(who.is_premium),
+    photo: Boolean(who.photo_url),
+  }).catch(() => { /* не закрепили — значит уже закреплён или раздел закрыт */ });
+}
 
 /**
  * Группа знает два дома: localStorage приложения и база бота. Своя — та,
@@ -149,6 +172,10 @@ loadData()
       return;
     }
     track('open');
+    // Пришёл по чужой реферальной ссылке кнопкой «Открыть»: код приехал
+    // в start_param, и бота человек мог не видеть вовсе. Тем же концом
+    // это ловит /start, но только когда открыли именно бота.
+    joinByLink();
     // Не открыл ли человек вчерашнюю сборку: у входа через главное
     // мини-приложение метки в адресе нет, и без этой проверки он
     // остался бы на ней до тех пор, пока Telegram не забудет кеш.

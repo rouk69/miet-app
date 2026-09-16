@@ -10,7 +10,11 @@ SQLite, а не JSON-файл: бот отвечает в нескольких �
 """
 from __future__ import annotations
 
+import logging
+
 from .db import conn
+
+log = logging.getLogger("miet.storage")
 
 
 def get_user(user_id: int) -> dict:
@@ -52,6 +56,16 @@ def set_group(user_id: int, group: str, username: str | None = None) -> None:
                    updated_at=CURRENT_TIMESTAMP""",
               (user_id, group, username))
     c.commit()
+    # Выбор группы — это и есть момент, когда пришедший по чужой ссылке
+    # начал пользоваться приложением. До него приглашение висит в
+    # ожидании: переход, после которого человек сразу ушёл, очка не
+    # приносит. Сбой учёта не должен помешать сохранить группу — за этим
+    # он и завёрнут: расписание важнее розыгрыша.
+    try:
+        from .raffle import settle
+        settle(user_id)
+    except Exception:                                       # noqa: BLE001
+        log.exception("не удалось зачесть приглашение для %s", user_id)
 
 
 def set_shift(user_id: int, shift: int, semestr: str | None = None) -> None:

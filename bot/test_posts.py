@@ -548,7 +548,12 @@ s, _ = api.handle("POST", "/api/posts", {}, {"text": "Проба"}, PIN)
 check("и сервер отказывает", s == 403, s)
 
 s, flags = api.handle("GET", "/api/admin/settings", {}, {}, ADMIN)
-check("настройки отдаются", s == 200 and len(flags["flags"]) == 2, flags)
+# Проверяем, что ленточные настройки на месте, а не сколько их всего:
+# счёт флагов растёт от чужих разделов, и такая проверка краснела бы на
+# каждом новом переключателе, ничего не говоря про ленту.
+keys = {f["key"] for f in flags["flags"]}
+check("настройки отдаются",
+      s == 200 and {"posts_open", "posts_premoderate"} <= keys, flags)
 check("по умолчанию всё выключено",
       all(not f["value"] for f in flags["flags"]), flags["flags"])
 

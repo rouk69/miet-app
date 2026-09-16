@@ -300,6 +300,17 @@ CASES = [
     ("у дела есть срок и предмет",
      "String(TODO[0].due instanceof Date && TODO[0].subject.length > 0)",
      "true"),
+
+    # Розыгрыш: склонение и подписи дней. И то, и другое стоит рядом с
+    # числом приглашённых, где «5 человека» бросается в глаза сразу.
+    ("один человек", "plural(1, 'человек', 'человека', 'человек')", "человек"),
+    ("двое", "plural(2, 'человек', 'человека', 'человек')", "человека"),
+    ("пятеро", "plural(5, 'человек', 'человека', 'человек')", "человек"),
+    ("одиннадцать — исключение",
+     "plural(11, 'день', 'дня', 'дней')", "дней"),
+    ("двадцать один день", "plural(21, 'день', 'дня', 'дней')", "день"),
+    ("подпись дня недели", "dayLabel('2026-09-16')", "ср"),
+    ("кривая дата подписи не даёт", "String(dayLabel('') === '')", "true"),
 ]
 
 
@@ -324,6 +335,9 @@ var _a = __mod['js/art.js'];
 var art = _a.art, artState = _a.artState;
 var _f = __mod['js/screens/feed.js'];
 var mediaSize = _f.mediaSize, mediaTag = _f.mediaTag;
+
+var _rf = __mod['js/screens/raffle.js'];
+var plural = _rf.plural, dayLabel = _rf.dayLabel;
 
 var __scr = __mod['js/screens/schedule.js'];
 var _sc = __mod['js/schedule.js'];

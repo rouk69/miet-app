@@ -1,5 +1,5 @@
 /* Собрано tools/stamp.py из js/*.js — не правьте здесь.
-   Версия 5fdeab27. Исходники лежат рядом и остаются модулями. */
+   Версия 4921c499. Исходники лежат рядом и остаются модулями. */
 var __mod = {};
 /* ==== js\config.js ==== */
 __mod['js/config.js'] = (function () {
@@ -78,7 +78,7 @@ const API_BASE = base;
 // свежую ли страницу открыл человек: Telegram кеширует мини-приложения
 // по своим правилам, и «у меня ничего не поменялось» разбирается
 // сравнением этой строки, а не на слово.
-const BUILD = '5fdeab27';
+const BUILD = '4921c499';
 
 return {'apiBase': apiBase, 'fallBackToHome': fallBackToHome, 'API_BASE': API_BASE, 'BUILD': BUILD};
 })();
@@ -3840,6 +3840,294 @@ void icon;
 return {'default': profileScreen};
 })();
 
+/* ==== js\screens\raffle.js ==== */
+__mod['js/screens/raffle.js'] = (function () {
+// Розыгрыш: своя ссылка, свой счёт, общая таблица.
+//
+// Экран собран вокруг одного действия — отправить ссылку. Поэтому кнопка
+// «Поделиться» стоит выше объяснений: тот, кто уже всё понял, не должен
+// пролистывать правила, чтобы до неё добраться.
+//
+// Правила показаны целиком и до участия, а не мелким шрифтом после.
+// Человек, который привёл двадцать друзей и узнал в конце, что половина
+// не засчиталась, справедливо считает себя обманутым.
+
+var icon = __mod['js/icons.js']['icon'];
+var esc = __mod['js/ui.js']['esc'];
+var el = __mod['js/ui.js']['el'];
+var segmented = __mod['js/ui.js']['segmented'];
+var bindChoice = __mod['js/ui.js']['bindChoice'];
+var emptyState = __mod['js/ui.js']['emptyState'];
+var toast = __mod['js/ui.js']['toast'];
+var skeleton = __mod['js/ui.js']['skeleton'];
+var get = __mod['js/api.js']['get'];
+var screen = __mod['js/screens/common.js']['screen'];
+var haptic = __mod['js/tg.js']['haptic'];
+var hapticNotify = __mod['js/tg.js']['hapticNotify'];
+var openLink = __mod['js/tg.js']['openLink'];
+var tg = __mod['js/tg.js']['tg'];
+
+// Правила лежат в клиенте, а не приезжают с сервером: это описание того,
+// как считает сервер, и расходиться они не должны. Менять их вместе с
+// логикой в bot/raffle.py.
+const RULES = [
+  ['Отправь свою ссылку',
+   'Она у каждого своя и лежит выше. Кидай в чат группы, потока, друзьям'],
+  ['Человек открывает бота по ней',
+   'Именно по твоей ссылке — она закрепляет его за тобой навсегда'],
+  ['И выбирает свою группу',
+   'Только после этого переход идёт в зачёт: заглянуть и уйти не считается'],
+  ['В счёт идут живые люди',
+   'Аккаунт без ника, без фото и без премиума в зачёт не попадает'],
+  ['Один человек — одно очко',
+   'Повторные заходы, вторые аккаунты и те, кто уже пользовался приложением, не считаются'],
+];
+
+const DAYS = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'];
+
+/** Подпись дня для полоски: из «2026-09-16» в «ср». */
+function dayLabel(iso) {
+  const [y, m, d] = String(iso || '').split('-').map(Number);
+  if (!y || !m || !d) return '';
+  return DAYS[new Date(Date.UTC(y, m - 1, d)).getUTCDay()] || '';
+}
+
+/**
+ * Полоска переходов за неделю.
+ *
+ * Высота столбика считается от максимума за ту же неделю, а не от общего
+ * рекорда: сравнивать сегодня хочется со вчера. Нулевой день рисуется
+ * чёрточкой, а не пустотой, — иначе непонятно, был день или его данные
+ * не приехали.
+ */
+function weekBars(week = []) {
+  const max = Math.max(1, ...week.map(d => d.count || 0));
+  return `<div class="raffle-week">${week.map(d => `
+    <div class="raffle-day" title="${esc(d.date)}: ${d.count}">
+      ${d.count ? `<div class="raffle-day-num">${d.count}</div>` : ''}
+      <div class="raffle-bar" style="height:${d.count ? Math.round(6 + 54 * d.count / max) : 3}px"></div>
+      <div class="raffle-day-name">${esc(dayLabel(d.date))}</div>
+    </div>`).join('')}</div>`;
+}
+
+const PLACE_TONE = ['gold', 'silver', 'bronze'];
+
+/** Карточка розыгрыша: название, срок и призовые места. */
+function banner(s) {
+  const left = s.days_left;
+  return `
+    <div class="raffle-banner">
+      ${left === null || left === undefined ? '' : `
+        <div class="raffle-left">${icon('clock', 14)} ${left === 0
+          ? 'последний день' : `осталось ${left} ${plural(left, 'день', 'дня', 'дней')}`}</div>`}
+      <div class="raffle-banner-title">${esc(s.title || 'Розыгрыш')}</div>
+      ${s.note ? `<div class="raffle-banner-note">${esc(s.note)}</div>` : ''}
+      ${s.prizes?.length ? `<div class="raffle-prizes">${s.prizes.map(p => `
+        <div class="raffle-prize ${PLACE_TONE[p.place - 1] || ''}">
+          <div class="raffle-prize-place">${p.place} место</div>
+          <div class="raffle-prize-text">${p.emoji ? `${esc(p.emoji)} ` : ''}${esc(p.text)}</div>
+        </div>`).join('')}</div>` : ''}
+    </div>`;
+}
+
+function plural(n, one, few, many) {
+  const a = Math.abs(n) % 100;
+  const b = a % 10;
+  if (a > 10 && a < 20) return many;
+  if (b > 1 && b < 5) return few;
+  return b === 1 ? one : many;
+}
+
+/** Три числа наверху: что засчитано, что ещё ждёт и какое место. */
+function counters(s) {
+  return `
+    <div class="raffle-counts">
+      <div class="raffle-count"><b>${s.counted}</b><span>засчитано</span></div>
+      <div class="raffle-count"><b>${s.waiting}</b><span>ждут группу</span></div>
+      <div class="raffle-count"><b>${s.place || '—'}</b><span>место</span></div>
+    </div>`;
+}
+
+function mainTab(s) {
+  return `
+    ${banner(s)}
+    <div class="raffle-card">
+      ${counters(s)}
+      <div class="raffle-week-head">приходят по твоей ссылке</div>
+      ${weekBars(s.week)}
+    </div>
+    <button class="btn-primary raffle-share" data-act="share">Поделиться ссылкой</button>
+    <button class="raffle-copy" data-act="copy">${icon('clipboard', 16)} Скопировать ссылку</button>
+    <div class="section-head"><div class="section-title">Как это работает</div></div>
+    <div class="list-card">
+      ${RULES.map(([title, note], i) => `
+        <div class="raffle-rule">
+          <div class="raffle-rule-num">${i + 1}</div>
+          <div>
+            <div class="raffle-rule-title">${esc(title)}</div>
+            <div class="raffle-rule-note">${esc(note)}</div>
+          </div>
+        </div>`).join('')}
+    </div>
+    ${s.rules_note ? `<p class="raffle-fineprint">${esc(s.rules_note)}</p>` : ''}`;
+}
+
+/** Первое место посередине и выше — так пьедестал читается без подписей. */
+function podium(top) {
+  const [first, second, third] = [top[0], top[1], top[2]];
+  const step = (p, cls) => !p ? `<div class="raffle-step ${cls} empty"></div>` : `
+    <div class="raffle-step ${cls}">
+      <div class="raffle-face ${cls}">${avatar(p)}</div>
+      <div class="raffle-step-name">${esc(p.name)}</div>
+      <div class="raffle-step-count">${p.count} ${plural(p.count, 'человек', 'человека', 'человек')}</div>
+      <div class="raffle-podium-block ${cls}">${p.place}</div>
+    </div>`;
+  return `<div class="raffle-podium">
+    ${step(second, 'silver')}${step(first, 'gold')}${step(third, 'bronze')}</div>`;
+}
+
+/**
+ * Аватар: картинка, если Telegram её отдал, иначе первая буква имени.
+ * Ссылки на фото живут недолго, поэтому падение картинки заменяется
+ * буквой прямо на месте, а не оставляет дыру.
+ */
+function avatar(p) {
+  const letter = esc((p.name || '?').trim().charAt(0).toUpperCase());
+  if (!p.photo) return `<span class="raffle-letter">${letter}</span>`;
+  return `<img src="${esc(p.photo)}" alt="" loading="lazy"
+    onerror="this.replaceWith(Object.assign(document.createElement('span'),
+      {className:'raffle-letter',textContent:'${letter}'}))">`;
+}
+
+function boardRows(list) {
+  return list.map(p => `
+    <div class="raffle-row ${p.me ? 'me' : ''}">
+      <div class="raffle-place">${p.place}</div>
+      <div class="raffle-face small">${avatar(p)}</div>
+      <div class="raffle-who">
+        <div class="raffle-name">${esc(p.name)}</div>
+        ${p.username ? `<div class="raffle-nick">@${esc(p.username)}</div>` : ''}
+      </div>
+      ${p.marked ? `<div class="raffle-mark" title="Спорных приглашений: ${p.marked}">⚠ ${p.marked}</div>` : ''}
+      <div class="raffle-score">${p.count}</div>
+    </div>`).join('');
+}
+
+function boardTab(b) {
+  if (!b.top.length) {
+    return emptyState('Пока никто никого не привёл — можешь стать первым', 'medal');
+  }
+  // Списком идёт всё, что не поместилось на пьедестал, — считаем по
+  // ПОРЯДКУ, а не по месту: при равном счёте место общее, и пятеро
+  // первых с одним очком вырезали бы друг друга из списка.
+  const rest = b.top.slice(3);
+  const me = b.me || {};
+  return `
+    ${podium(b.top)}
+    ${rest.length ? `<div class="list-card raffle-list">${boardRows(rest)}</div>` : ''}
+    ${me.count && !me.in_top ? `
+      <div class="raffle-mine-head">Ты</div>
+      <div class="list-card raffle-list">${boardRows([{
+        place: me.place, name: 'Ты', username: '', photo: '',
+        count: me.count, me: true,
+      }])}</div>` : ''}
+    <p class="raffle-fineprint">Участников: ${b.players}. При равном счёте выше тот,
+      кто набрал его раньше</p>`;
+}
+
+async function raffleScreen() {
+  const node = screen({
+    title: 'Розыгрыш',
+    subtitle: 'Приглашай друзей — и поднимайся в таблице',
+    body: `${segmented([
+      { id: 'main', label: 'Главное' },
+      { id: 'board', label: 'Лидерборд' },
+    ], 'main', 'raffle')}
+    <div class="raffle-body">${skeleton(140)}</div>`,
+  });
+
+  const body = node.querySelector('.raffle-body');
+  let state = null;
+  let board = null;
+
+  // Ссылка нужна и на вкладке таблицы (кнопка «Поделиться» никуда не
+  // девается), поэтому состояние грузится один раз и держится здесь.
+  const loadMain = async () => {
+    if (!state) state = await get('/api/raffle');
+    return state;
+  };
+
+  const show = async tab => {
+    body.innerHTML = skeleton(140);
+    try {
+      if (tab === 'board') {
+        board = board || await get('/api/raffle/board');
+        body.innerHTML = boardTab(board);
+      } else {
+        body.innerHTML = mainTab(await loadMain());
+      }
+    } catch (err) {
+      // 404 здесь означает «раздел закрыт»: владелец ещё не открыл его
+      // всем. Это не поломка, и пугать человека ошибкой незачем.
+      body.innerHTML = emptyState(
+        /404/.test(err.message) ? 'Розыгрыш пока не начался' : err.message, 'medal');
+    }
+  };
+
+  bindChoice(node, 'raffle', show, 'seg');
+  show('main');
+
+  node.addEventListener('click', e => {
+    const btn = e.target.closest('[data-act]');
+    if (!btn || !state?.link) return;
+    haptic('medium');
+    if (btn.dataset.act === 'share') {
+      // Через t.me/share Telegram сам показывает выбор чата. Свой список
+      // чатов нарисовать нельзя: мини-приложение их не видит.
+      const text = state.title
+        ? `${state.title} — расписание МИЭТ в одном приложении`
+        : 'Расписание МИЭТ в одном приложении';
+      openLink(`https://t.me/share/url?url=${encodeURIComponent(state.link)}`
+        + `&text=${encodeURIComponent(text)}`);
+      return;
+    }
+    copy(state.link);
+  });
+
+  return node;
+}
+
+/**
+ * Копирование в буфер. В WebView Telegram clipboard-API бывает закрыт,
+ * поэтому есть запасной путь через скрытое поле: иначе кнопка молча
+ * ничего не делала бы.
+ */
+function copy(text) {
+  const done = () => { hapticNotify('success'); toast('Ссылка скопирована'); };
+  if (navigator.clipboard?.writeText) {
+    navigator.clipboard.writeText(text).then(done, () => fallback(text, done));
+    return;
+  }
+  fallback(text, done);
+}
+
+function fallback(text, done) {
+  const field = el(`<textarea style="position:fixed;opacity:0;pointer-events:none"></textarea>`);
+  field.value = text;
+  document.body.appendChild(field);
+  field.select();
+  let ok = false;
+  try { ok = document.execCommand('copy'); } catch { ok = false; }
+  field.remove();
+  if (ok) return done();
+  // Совсем не вышло — показываем ссылку, чтобы её можно было выделить
+  // руками. Пустая кнопка хуже некрасивого решения.
+  tg?.showAlert?.(text) ?? toast(text);
+}
+
+return {'default': raffleScreen, 'dayLabel': dayLabel, 'plural': plural};
+})();
+
 /* ==== js\screens\schedule.js ==== */
 __mod['js/screens/schedule.js'] = (function () {
 // Расписание: неделя цикла → день → пары. Данные тянутся с miet.ru живьём.
@@ -5803,6 +6091,14 @@ const SECTIONS = [
   },
 ];
 
+/**
+ * Открыт ли розыгрыш всем. Клиент знает об этом не напрямую: сервер
+ * отдаёт только «видишь ли ты раздел», а админ видит его и закрытым.
+ * Разница важна одному человеку — владельцу, и нужна ему затем, чтобы не
+ * забыть, что люди раздела ещё не видят.
+ */
+const appOpen = () => Boolean(account.raffle_open);
+
 const tile = t => `
   <button class="tile-card tone-${t.tone}" data-open="${t.id}">
     <span class="tile-ico">${icon(t.ico, 22)}</span>
@@ -5819,7 +6115,16 @@ async function usefulScreen() {
       <div class="section-head"><div class="section-title">${esc(s.title)}</div></div>
       ${s.note ? `<p class="section-note">${esc(s.note)}</p>` : ''}
       <div class="tile-grid">${s.tiles.map(tile).join('')}</div>
-    `).join('') + (account.can_stats ? `
+    `).join('') + (account.raffle ? `
+      <div class="section-head"><div class="section-title">Розыгрыш</div></div>
+      ${!appOpen() ? '<p class="section-note">Виден только админам, пока не открыт всем</p>' : ''}
+      <div class="tile-grid">
+        <button class="tile-card tone-violet" data-open="raffle">
+          <span class="tile-ico">${icon('medal', 22)}</span>
+          <span class="tile-name">Розыгрыш</span>
+          <span class="tile-note">Приглашай друзей — и в таблицу</span>
+        </button>
+      </div>` : '') + (account.can_stats ? `
       <div class="section-head"><div class="section-title">Управление</div></div>
       <div class="tile-grid">
         <button class="tile-card tone-blue" data-open="admin">
@@ -6232,7 +6537,7 @@ async function adminScreen() {
     body: `
       <div class="pill-row admin-tabs" id="atabs">
         ${[['stats', 'Статистика'], ['days', 'По дням'], ['users', 'Юзеры'],
-    ['roles', 'Роли'], ['flags', 'Настройки']]
+    ['roles', 'Роли'], ['raffle', 'Розыгрыш'], ['flags', 'Настройки']]
     .map(([id, label]) => `
           <button class="pill ${tab === id ? 'active' : ''}" data-atab="${id}">${label}</button>`).join('')}
       </div>
@@ -6257,6 +6562,7 @@ async function paint(pane) {
     if (tab === 'stats') pane.innerHTML = await statsPane();
     else if (tab === 'days') await daysPane(pane);
     else if (tab === 'users') await usersPane(pane);
+    else if (tab === 'raffle') await rafflePane(pane);
     else if (tab === 'flags') await flagsPane(pane);
     else await rolesPane(pane);
   } catch (err) {
@@ -6554,6 +6860,168 @@ async function flagsPane(pane) {
     } catch (err) {
       toast(err.message);
       t.classList.toggle('on', !value);
+    }
+  });
+}
+
+// ─────────────── вкладка «Розыгрыш» ───────────────
+
+const FLAG_NAMES = {
+  noname: 'без ника',
+  fresh: 'свежий аккаунт',
+  burst: 'пришёл в пачке',
+};
+
+/**
+ * Розыгрыш глазами владельца: кого награждать и что посмотреть руками.
+ *
+ * Награды выдаются вне бота, поэтому экран не «проводит розыгрыш», а
+ * отвечает на один вопрос — кому писать. Отсюда и порядок: сперва
+ * победители, потом спорное, и только затем условия.
+ */
+async function rafflePane(pane) {
+  const draw = async () => {
+    const d = await get('/api/admin/raffle');
+    const c = d.conf || {};
+    const t = d.totals || {};
+    const prizes = c.prizes || [];
+    const win = d.board.filter(p => p.place <= (prizes.length || 3));
+
+    pane.innerHTML = `
+      <div class="list-card">
+        <div class="list-row">
+          <div class="list-row-body">
+            <div class="row-title">Раздел виден всем</div>
+            <div class="row-subtitle">Пока выключено — розыгрыш открывается
+              только админам, а приглашения считаются всё равно</div>
+          </div>
+          ${toggle(Boolean(account.raffle_open), 'raffle_on')}
+        </div>
+      </div>
+
+      <div class="kpi-grid" style="margin-top:12px">
+        ${kpi(t.counted ?? 0, 'засчитано')}
+        ${kpi(t.waiting ?? 0, 'ждут группу')}
+        ${kpi(t.rejected ?? 0, 'не в зачёт')}
+        ${kpi(t.players ?? 0, 'приглашают')}
+      </div>
+
+      <div class="section-head"><div class="section-title">Кому награду</div></div>
+      ${win.length ? `<div class="list-card">${win.map(p => `
+        <div class="rafadm-item">
+          <div class="raffle-place">${p.place}</div>
+          <div class="rafadm-who">
+            <div class="row-title">${esc(p.name)}</div>
+            <div class="row-subtitle">${p.username ? '@' + esc(p.username) + ' · ' : ''}id ${p.user_id}${
+  prizes[p.place - 1] ? ' · ' + esc(prizes[p.place - 1].text) : ''}</div>
+            ${p.marked ? `<div class="rafadm-flags">спорных приглашений: ${p.marked}</div>` : ''}
+          </div>
+          <div class="raffle-score">${p.count}</div>
+        </div>`).join('')}</div>`
+    : `<div class="list-card"><div class="rafadm-head">
+         <div class="row-subtitle">Пока никто никого не привёл</div></div></div>`}
+
+      <div class="section-head"><div class="section-title">Посмотреть руками</div></div>
+      ${d.suspicious.length ? `<div class="list-card">${d.suspicious.map(s => `
+        <div class="rafadm-item" data-who="${s.user_id}">
+          <div class="rafadm-who">
+            <div class="row-title">${esc(s.name)}${s.username ? ' @' + esc(s.username) : ''}</div>
+            <div class="row-subtitle">привёл ${esc(s.inviter_name)} · ${
+  s.state === 'counted' ? 'зачтено' : 'ждёт группу'}</div>
+            <div class="rafadm-flags">${s.flags.map(f => esc(FLAG_NAMES[f] || f)).join(', ')}</div>
+          </div>
+          <button class="rafadm-act" data-verdict="ok">Оставить</button>
+          <button class="rafadm-act drop" data-verdict="no">Снять</button>
+        </div>`).join('')}</div>`
+    : `<div class="list-card"><div class="rafadm-head">
+         <div class="row-subtitle">Спорных приглашений нет</div></div></div>`}
+
+      <div class="section-head"><div class="section-title">Условия</div></div>
+      <div class="list-card" style="padding:14px 16px">
+        <div class="field-group">
+          <div class="field-label">Название</div>
+          <input class="field-input" id="rf-title" maxlength="200"
+                 value="${esc(c.title || '')}">
+        </div>
+        <div class="field-group">
+          <div class="field-label">Подпись</div>
+          <input class="field-input" id="rf-note" maxlength="200"
+                 value="${esc(c.note || '')}">
+        </div>
+        <div class="field-group">
+          <div class="field-label">Последний день — пусто, если без срока</div>
+          <input class="field-input" id="rf-ends" maxlength="10"
+                 placeholder="2026-10-01" value="${esc(c.ends || '')}">
+        </div>
+        <div class="field-group">
+          <div class="field-label">Призы — по строке на место, сверху первое</div>
+          <textarea class="field-input" id="rf-prizes" rows="4"
+            placeholder="200 Telegram Stars">${esc(prizes.map(p => p.text).join('\n'))}</textarea>
+        </div>
+        <button class="btn-primary" id="rf-save" style="margin-top:12px">Сохранить</button>
+      </div>
+      <p class="raffle-fineprint">Награды выдаются вне бота: здесь только счёт
+        и список победителей.</p>`;
+  };
+
+  await draw();
+
+  pane.addEventListener('click', async e => {
+    const flag = e.target.closest('[data-toggle="raffle_on"]');
+    if (flag) {
+      const value = !flag.classList.contains('on');
+      flag.classList.toggle('on', value);
+      haptic('light');
+      try {
+        const r = await post('/api/admin/raffle', { action: 'open', on: value });
+        account.raffle_open = r.on;
+        hapticNotify('success');
+        toast(r.on ? 'Розыгрыш открыт всем' : 'Розыгрыш снова только для админов');
+      } catch (err) {
+        toast(err.message);
+        flag.classList.toggle('on', !value);
+      }
+      return;
+    }
+
+    const verdict = e.target.closest('[data-verdict]');
+    if (verdict) {
+      const who = verdict.closest('[data-who]')?.dataset.who;
+      if (!who) return;
+      haptic('light');
+      try {
+        await post('/api/admin/raffle', {
+          action: 'decide', user_id: +who, verdict: verdict.dataset.verdict,
+        });
+        hapticNotify('success');
+        await draw();
+      } catch (err) {
+        toast(err.message);
+      }
+      return;
+    }
+
+    if (!e.target.closest('#rf-save')) return;
+    haptic('medium');
+    try {
+      await post('/api/admin/raffle', {
+        action: 'conf',
+        conf: {
+          title: pane.querySelector('#rf-title').value,
+          note: pane.querySelector('#rf-note').value,
+          ends: pane.querySelector('#rf-ends').value.trim(),
+          // Место — это номер строки: отдельного поля для него нет, иначе
+          // их пришлось бы держать согласованными руками.
+          prizes: pane.querySelector('#rf-prizes').value
+            .split('\n').map(s => s.trim()).filter(Boolean)
+            .map(text => ({ text })),
+        },
+      });
+      hapticNotify('success');
+      toast('Условия сохранены');
+      await draw();
+    } catch (err) {
+      toast(err.message);
     }
   });
 }
@@ -7546,6 +8014,7 @@ __mod['js/app.js'] = (function () {
 var initTelegram = __mod['js/tg.js']['initTelegram'];
 var syncChrome = __mod['js/tg.js']['syncChrome'];
 var guardTaps = __mod['js/tg.js']['guardTaps'];
+var tg = __mod['js/tg.js']['tg'];
 var loadData = __mod['js/store.js']['loadData'];
 var settings = __mod['js/store.js']['settings'];
 var save = __mod['js/store.js']['save'];
@@ -7560,6 +8029,7 @@ var loadMe = __mod['js/api.js']['loadMe'];
 var account = __mod['js/api.js']['account'];
 var track = __mod['js/api.js']['track'];
 var syncGroup = __mod['js/api.js']['syncGroup'];
+var post = __mod['js/api.js']['post'];
 var checkFresh = __mod['js/fresh.js']['checkFresh'];
 
 var home = __mod['js/screens/home.js']['default'];
@@ -7596,6 +8066,7 @@ var help = __mod['js/screens/help.js']['default'];
 var dayScreen = __mod['js/screens/admin-days.js']['dayScreen'];
 var adminDays = __mod['js/screens/admin-days.js']['default'];
 var tasks = __mod['js/screens/tasks.js']['default'];
+var raffle = __mod['js/screens/raffle.js']['default'];
 
 // Тему уже поставил маленький скрипт в index.html — до первой отрисовки,
 // чтобы тёмный Telegram не мигал белым. Здесь она применяется ещё раз:
@@ -7650,6 +8121,7 @@ register('links', links);
 register('support', support);
 register('admin', admin);
 register('adminUser', adminUserScreen);
+register('raffle', raffle);
 
 const app = document.getElementById('app');
 const nav = document.getElementById('nav');
@@ -7665,6 +8137,27 @@ const blockedScreen = () => `
       </div>
     </div>
   </div>`;
+
+/**
+ * Приглашение, приехавшее вместе с запуском приложения.
+ *
+ * Отправляем и уходим: закрепление касается не того, кто смотрит на
+ * экран, а того, кто прислал ссылку, — и ждать ответа, тем более
+ * показывать его, здесь не нужно. Отказ (раздел закрыт, ссылка своя,
+ * человек уже закреплён) — обычное дело, поэтому ошибка глотается.
+ */
+function joinByLink() {
+  const raw = tg?.initDataUnsafe?.start_param || '';
+  const code = /^r_[a-z2-9]{4,12}$/.test(raw) ? raw.slice(2) : '';
+  if (!code) return;
+  const who = tg?.initDataUnsafe?.user || {};
+  post('/api/raffle/join', {
+    code,
+    username: who.username || '',
+    premium: Boolean(who.is_premium),
+    photo: Boolean(who.photo_url),
+  }).catch(() => { /* не закрепили — значит уже закреплён или раздел закрыт */ });
+}
 
 /**
  * Группа знает два дома: localStorage приложения и база бота. Своя — та,
@@ -7717,6 +8210,10 @@ loadData()
       return;
     }
     track('open');
+    // Пришёл по чужой реферальной ссылке кнопкой «Открыть»: код приехал
+    // в start_param, и бота человек мог не видеть вовсе. Тем же концом
+    // это ловит /start, но только когда открыли именно бота.
+    joinByLink();
     // Не открыл ли человек вчерашнюю сборку: у входа через главное
     // мини-приложение метки в адресе нет, и без этой проверки он
     // остался бы на ней до тех пор, пока Telegram не забудет кеш.

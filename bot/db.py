@@ -206,6 +206,25 @@ SCHEMA = [
     # нужна в базе, а не в счётчике «последнего id»: объявления приходят
     # по разным дисциплинам вперемешку, и «всё, что новее» о них сказать
     # нельзя. Хранится один номер — ни заголовка, ни текста.
+    # Приглашения по реферальной ссылке. Строка на ПРИГЛАШЁННОГО, а не
+    # на пару: человек закрепляется за тем, по чьей ссылке пришёл первым,
+    # и второй ссылкой его уже не перетянуть — иначе двое приглашающих
+    # могли бы перекидывать одного и того же друг у друга. Зачёт отложен:
+    # переход считается, только когда человек дошёл до выбора группы,
+    # поэтому состояние живёт здесь, а не выводится из users.
+    """CREATE TABLE IF NOT EXISTS raffle_invites (
+        user_id    INTEGER PRIMARY KEY,
+        inviter_id INTEGER NOT NULL,
+        source     TEXT NOT NULL DEFAULT 'bot',
+        state      TEXT NOT NULL DEFAULT 'waiting',
+        reason     TEXT,
+        flags      TEXT NOT NULL DEFAULT '',
+        manual     TEXT,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        counted_at TEXT
+    )""",
+    "CREATE INDEX IF NOT EXISTS raffle_by_inviter ON raffle_invites(inviter_id, state)",
+    "CREATE INDEX IF NOT EXISTS raffle_when ON raffle_invites(created_at)",
     """CREATE TABLE IF NOT EXISTS orioks_seen (
         user_id INTEGER NOT NULL,
         news_id TEXT NOT NULL,
@@ -247,6 +266,11 @@ ADDED_COLUMNS = {
         # оборвётся и завтра, а спрашивать об этом каждый раз — значит
         # не починить ничего.
         ("entry_mirror", "INTEGER DEFAULT 0"),
+        # Код в реферальной ссылке. Не user_id: тот светил бы в каждом
+        # сообщении, которое человек кидает в чат группы, а по нему в
+        # Telegram ищется аккаунт. Заводится при первом открытии раздела
+        # розыгрыша и дальше не меняется — ссылку уже разослали.
+        ("ref_code", "TEXT"),
     ],
     # Ответ на комментарий. Ветка ровно одна: ответ на ответ прикрепляется
     # к тому же корню — дерево произвольной глубины в ленте объявлений
@@ -267,6 +291,20 @@ ADDED_COLUMNS = {
         ("notify", "INTEGER DEFAULT 1"),
     ],
 }
+
+
+# Индексы по столбцам из ADDED_COLUMNS. Отдельным списком потому, что
+# SCHEMA выполняется раньше ALTER TABLE: на базе, созданной прошлой
+# версией, столбца в этот момент ещё не существует, и CREATE INDEX упал
+# бы на каждом запуске.
+LATE_INDEXES = [
+    # Код в реферальной ссылке обязан быть один на весь бот: совпадение
+    # означало бы, что приглашённые уходят чужому человеку. Проверять это
+    # запросом мало — два одновременных открытия раздела разошлись бы
+    # между проверкой и вставкой.
+    "CREATE UNIQUE INDEX IF NOT EXISTS users_ref_code ON users(ref_code) "
+    "WHERE ref_code IS NOT NULL",
+]
 
 
 def _lower_ru(value):
@@ -345,6 +383,8 @@ class Shared:
                     if name not in have:
                         self._raw.execute(
                             f"ALTER TABLE {table} ADD COLUMN {name} {decl}")
+            for stmt in LATE_INDEXES:
+                self._raw.execute(stmt)
 
     def execute(self, sql: str, args=()) -> Rows:
         with self._lock:
