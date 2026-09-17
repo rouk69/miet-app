@@ -28,8 +28,15 @@ export const iconBtn = (name, action) =>
 /**
  * Шторка выбора учебной группы: поиск по 346 группам с моментальной
  * фильтрацией. onPick получает название группы.
+ *
+ * `remember` — записать ли выбор своей группой. По умолчанию да: почти
+ * везде шторка именно для этого. Но там, где группу выбирают ДЛЯ
+ * СРАВНЕНИЯ, запись всё ломала: человек смотрел расписание соседнего
+ * потока, а у него молча менялась группа в профиле и в боте. Такой
+ * вызов передаёт `{ remember: false }` и распоряжается выбором сам.
  */
-export function pickGroup(onPick) {
+export function pickGroup(onPick, { remember = true, title = 'Выбор группы',
+  current = null } = {}) {
   const groups = data.groups || [];
   const body = `
     <div class="search-box" style="margin-bottom:12px">
@@ -40,7 +47,7 @@ export function pickGroup(onPick) {
     <div class="sheet-list" id="glist"></div>`;
 
   sheet({
-    title: 'Выбор группы',
+    title,
     body,
     onMount(root, close) {
       const input = root.querySelector('#gq');
@@ -65,7 +72,9 @@ export function pickGroup(onPick) {
           title: g,
           id: g,
           cls: 'tap',
-          value: g === settings.group ? '✓' : '',
+          // Галочка показывает то, что выбрано ЗДЕСЬ: в шторке
+          // сравнения своя группа ни при чём.
+          value: g === (current ?? settings.group) ? '✓' : '',
         })));
       };
 
@@ -75,10 +84,12 @@ export function pickGroup(onPick) {
         const row = e.target.closest('[data-id]');
         if (!row) return;
         haptic('medium');
-        save({ group: row.dataset.id });
-        // Единственное место, где группу выбирают руками, — отсюда и
-        // сообщаем её боту, чтобы в личке было то же расписание.
-        syncGroup(row.dataset.id);
+        if (remember) {
+          save({ group: row.dataset.id });
+          // Место, где группу выбирают СВОЕЙ, — отсюда и сообщаем её
+          // боту, чтобы в личке было то же расписание.
+          syncGroup(row.dataset.id);
+        }
         close();
         onPick?.(row.dataset.id);
       });

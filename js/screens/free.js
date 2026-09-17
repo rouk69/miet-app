@@ -1,18 +1,22 @@
 // Свободные аудитории: где сесть с ноутбуком, доделать лабу, собраться
 // впятером перед защитой.
 //
-// Экран отвечает на вопрос «куда идти прямо сейчас», поэтому открывается
-// на текущем слоте звонков и текущем дне — без единого нажатия. Выбор
-// дня и пары есть, но он второй: планируют реже, чем ищут место сейчас.
+// Экран отвечает на один вопрос — «куда идти прямо сейчас», и потому
+// открывается на текущем дне и текущей паре, без единого нажатия. Всё
+// управление сведено в одну строку-шапку: она же показывает, про какое
+// время сейчас речь, и она же открывает выбор другого. Раньше здесь
+// стояли три ряда — дни, восемь пар и поиск, — и экран начинался с
+// настроек вместо ответа.
 //
-// Честность важнее полноты. «Свободна» здесь значит ровно одно: в ней
-// нет пары по расписанию. Открыта ли дверь, не идёт ли там пересдача или
+// Честность важнее полноты. «Свободна» значит ровно одно: в ней нет
+// пары по расписанию. Открыта ли дверь, не идёт ли там пересдача или
 // собрание кружка — расписание не знает, и экран говорит это прямо.
 // Обещание, из-за которого человек привёл группу и уткнулся в замок,
 // хуже отсутствующего раздела.
 
 import { icon } from '../icons.js';
-import { esc, emptyState, pillRow, bindChoice, skeleton, toast } from '../ui.js';
+import { esc, emptyState, pillRow, bindChoice, skeleton, sheet, listCard,
+  listRow } from '../ui.js';
 import { get } from '../api.js';
 import { settings } from '../store.js';
 import { artState } from '../art.js';
@@ -23,7 +27,6 @@ import { fetchSchedule, weekOfCycle, DAY_SHORT, DAY_NAMES } from '../schedule.js
 
 // Слоты звонков МИЭТ. Время нужно до первого ответа сервера: экран
 // открывается на «сейчас», и вычислить текущую пару надо ещё до запроса.
-// Тот же список лежит у бота (`schedule_api`) — меняются вместе.
 export const BELLS = [
   { pair: 1, from: '9:00', to: '10:30' },
   { pair: 2, from: '10:40', to: '12:10' },
@@ -44,9 +47,8 @@ const mins = t => {
  * Какую пару показывать при открытии.
  *
  * Идёт пара — её. Перерыв — следующую: сидеть между парами негде именно
- * потому, что все аудитории сейчас пустуют, и полезен как раз следующий
- * слот. После последней пары или до начала дня — первую: планировать с
- * конца дня бессмысленно.
+ * потому, что все аудитории в этот момент пустуют, и полезен как раз
+ * следующий слот. Поздно вечером и до начала дня — первую.
  */
 export function pairNow(now = new Date()) {
   const m = now.getHours() * 60 + now.getMinutes();
@@ -61,26 +63,23 @@ export function pairNow(now = new Date()) {
 export const dayNow = (now = new Date()) => ((now.getDay() + 6) % 7) + 1;
 
 /**
- * Аудитории одного корпуса вместе: номер начинается с его цифры.
+ * По какой цифре начинается номер. Ею и фильтруем.
  *
- * Подпись нейтральная («3xxx»), а не «третий корпус»: нумерация МИЭТ
- * нигде не описана, и выдумывать ей смысл — значит уверенно наврать.
- * Группировка всё равно помогает: в списке из двухсот номеров подряд не
- * найти ничего.
+ * Раньше список делился заголовками «3xxx», и это ничего не объясняло:
+ * что означает первая цифра в нумерации МИЭТ, нигде не написано, а
+ * выдуманное «третий корпус» было бы уверенным враньём. Фильтр честнее
+ * заголовка: он не обещает смысла, а просто сокращает список до тех
+ * номеров, которые человек и так ищет глазами.
  */
-export function byBlock(free) {
-  const groups = new Map();
-  for (const room of free) {
-    const head = /^\d/.test(room.name) ? `${room.name[0]}xxx` : 'Другие';
-    if (!groups.has(head)) groups.set(head, []);
-    groups.get(head).push(room);
-  }
-  return [...groups.entries()]
-    .sort((a, b) => (a[0] === 'Другие') - (b[0] === 'Другие')
-      || a[0].localeCompare(b[0], 'ru'));
+export const blockOf = name => (/^\d/.test(name) ? name[0] : '#');
+
+/** Какие фильтры вообще показывать — только те, что есть в ответе. */
+export function blocksOf(free) {
+  const seen = [...new Set(free.map(r => blockOf(r.name)))];
+  return seen.sort((a, b) => (a === '#') - (b === '#') || a.localeCompare(b, 'ru'));
 }
 
-/** «Свободна до 14:20» или «до конца дня» — то, что реально спрашивают. */
+/** «до 14:20» или «до конца дня» — то, что реально спрашивают. */
 export function untilText(room) {
   if (!room.until_pair) return 'до конца дня';
   return room.until_time ? `до ${room.until_time}` : `до ${room.until_pair}-й пары`;
@@ -95,44 +94,49 @@ const roomCard = r => `
 export default async function freeRoomsScreen(params = {}) {
   const now = new Date();
   let day = params.day || dayNow(now);
-  // Воскресенье в расписании пустое, и список «всё свободно» бесполезен.
+  // Воскресенье в расписании пустое, и список «свободно всё» бесполезен.
   if (day > 6) day = 1;
   let pair = params.pair || pairNow(now);
+  let block = 'all';
   let query = '';
+  let data = null;
+  let week = 0;
+  let weekKnown = false;
 
   const node = screen({
     title: 'Свободные аудитории',
     subtitle: 'Где никого нет по расписанию',
-    body: `
-      <div class="free-pick">
-        <div class="week-strip" id="fdays">
-          ${[1, 2, 3, 4, 5, 6].map(d => `
-            <button class="week-day ${d === day ? 'active' : ''} ${d === dayNow(now) ? 'today' : ''}"
-                    data-fday="${d}">
-              <span class="week-day-name">${DAY_SHORT[d]}</span>
-            </button>`).join('')}
-        </div>
-        ${pillRow(BELLS.map(b => ({ id: String(b.pair), label: `${b.pair} · ${b.from}` })),
-    String(pair), 'fpair')}
-      </div>
-      <div class="search-box" style="margin-top:12px">
-        ${icon('search', 19, 'muted')}
-        <input id="fq" type="search" placeholder="Номер аудитории"
-               autocomplete="off" enterkeyhint="search" spellcheck="false">
-      </div>
-      <div id="fbody" style="margin-top:14px">${skeleton(120)}</div>`,
+    body: '<div id="fbody">' + skeleton(150) + '</div>',
   });
-
   const body = node.querySelector('#fbody');
-  let data = null;
+
+  const atNow = () => day === dayNow(now) && pair === pairNow(now);
+
+  /** Шапка: сколько свободно и когда. Она же — кнопка выбора времени. */
+  const headCard = free => {
+    const slot = BELLS.find(b => b.pair === pair) || {};
+    return `
+      <button class="free-when" data-act="when">
+        <div class="free-when-main">
+          <div class="free-when-num">${free.length}</div>
+          <div class="free-when-text">
+            <div class="free-when-title">
+              ${free.length === 1 ? 'аудитория свободна'
+    : free.length >= 2 && free.length <= 4 ? 'аудитории свободны' : 'аудиторий свободно'}
+            </div>
+            <div class="free-when-sub">
+              ${atNow() ? 'сейчас' : DAY_NAMES[day]} ·
+              ${pair}-я пара ${esc(slot.from || '')}–${esc(slot.to || '')}
+              ${weekKnown ? ` · ${week + 1}-я неделя` : ''}
+            </div>
+          </div>
+        </div>
+        <span class="free-when-go">${icon('clock', 15)} другое время</span>
+      </button>`;
+  };
 
   const draw = () => {
     if (!data) return;
-    const needle = query.trim().toLowerCase();
-    const free = needle
-      ? data.free.filter(r => r.name.toLowerCase().includes(needle))
-      : data.free;
-
     if (!data.total) {
       // Индекс собирается раз в сутки и через пять минут после старта
       // контейнера: пустой он не «сломан», а ещё не построен.
@@ -140,43 +144,51 @@ export default async function freeRoomsScreen(params = {}) {
         'Бот обходит все 346 групп раз в сутки. Загляни через десять минут');
       return;
     }
-    if (!free.length) {
-      body.innerHTML = emptyState(needle
-        ? 'Такой аудитории нет или она занята'
-        : 'В этот слот свободных аудиторий не нашлось', 'door');
-      return;
-    }
 
-    const slot = BELLS.find(b => b.pair === pair);
+    const needle = query.trim().toLowerCase();
+    const all = data.free;
+    const shown = all.filter(r =>
+      (block === 'all' || blockOf(r.name) === block)
+      && (!needle || r.name.toLowerCase().includes(needle)));
+    const blocks = blocksOf(all);
+
     body.innerHTML = `
-      <div class="free-head">
-        <div>
-          <div class="free-head-title">${DAY_NAMES[day]}, ${pair}-я пара</div>
-          <div class="free-head-note">
-            ${esc(slot ? `${slot.from}–${slot.to}` : '')} ·
-            ${weekKnown ? `${week + 1}-я неделя цикла · ` : ''}свободно
-            ${free.length} из ${data.total}
-          </div>
-        </div>
-        <div class="free-head-num">${free.length}</div>
+      ${headCard(all)}
+      ${blocks.length > 1 ? pillRow(
+    [{ id: 'all', label: 'Все' },
+      ...blocks.map(b => ({ id: b, label: b === '#' ? 'Прочие' : `${b}…` }))],
+    block, 'fblock') : ''}
+      <div class="search-box" style="margin-top:10px">
+        ${icon('search', 19, 'muted')}
+        <input id="fq" type="search" placeholder="Номер аудитории" value="${esc(query)}"
+               autocomplete="off" enterkeyhint="search" spellcheck="false">
       </div>
-      ${byBlock(free).map(([head, list]) => `
-        <div class="section-head"><div class="section-title">${esc(head)}</div>
-          <span class="section-link">${list.length}</span></div>
-        <div class="free-grid">${list.map(roomCard).join('')}</div>`).join('')}
+      <div class="free-grid" id="fgrid">${shown.map(roomCard).join('')}</div>
+      ${shown.length ? '' : emptyState(needle
+    ? 'Такой аудитории нет или она занята'
+    : 'В этот слот здесь всё занято', 'door')}
       <p class="free-fineprint">
         «Свободна» значит, что в ней нет пары по расписанию. Пересдачи,
         консультации и собрания кружков в расписание не попадают, а дверь
         может быть просто закрыта.
       </p>`;
+
+    bindChoice(node, 'fblock', id => { block = id; draw(); });
+    const input = body.querySelector('#fq');
+    input.addEventListener('input', e => {
+      query = e.target.value;
+      // Перерисовываем только сетку: полная перерисовка забирала бы
+      // фокус у поля на каждой букве.
+      const list = data.free.filter(r =>
+        (block === 'all' || blockOf(r.name) === block)
+        && r.name.toLowerCase().includes(query.trim().toLowerCase()));
+      body.querySelector('#fgrid').innerHTML = list.map(roomCard).join('');
+    });
   };
 
-  // Неделя цикла нужна, чтобы спросить верный слот, а знает семестр
+  // Неделя цикла нужна, чтобы спросить верный слот, а семестр знает
   // только расписание. Берём его у своей группы — оно почти всегда уже
-  // в кеше, его грузила главная. Нет группы — считаем первую неделю и
-  // честно пишем об этом в подписи.
-  let week = 0;
-  let weekKnown = false;
+  // в кеше, его грузила главная.
   const findWeek = async () => {
     if (weekKnown || !settings.group) return;
     try {
@@ -187,7 +199,7 @@ export default async function freeRoomsScreen(params = {}) {
   };
 
   const load = async () => {
-    body.innerHTML = skeleton(120);
+    body.innerHTML = skeleton(150);
     await findWeek();
     try {
       data = await get(`/api/directory/free?week=${week}&day=${day}&pair=${pair}`);
@@ -197,30 +209,64 @@ export default async function freeRoomsScreen(params = {}) {
     }
   };
 
-  node.querySelector('#fdays').addEventListener('click', e => {
-    const b = e.target.closest('[data-fday]');
-    if (!b) return;
-    day = +b.dataset.fday;
-    node.querySelectorAll('[data-fday]').forEach(x =>
-      x.classList.toggle('active', +x.dataset.fday === day));
-    haptic('light');
-    load();
-  });
-
-  bindChoice(node, 'fpair', id => { pair = +id; load(); });
-
-  node.querySelector('#fq').addEventListener('input', e => {
-    query = e.target.value;
-    draw();
-  });
+  /** Выбор дня и пары — в шторке, а не рядами на экране. */
+  const pickWhen = () => {
+    sheet({
+      title: 'Когда',
+      body: `
+        <div class="week-strip" id="wdays">
+          ${[1, 2, 3, 4, 5, 6].map(d => `
+            <button class="week-day ${d === day ? 'active' : ''} ${d === dayNow(now) ? 'today' : ''}"
+                    data-wday="${d}">
+              <span class="week-day-name">${DAY_SHORT[d]}</span>
+            </button>`).join('')}
+        </div>
+        <div class="sheet-list" style="margin-top:12px">
+          ${listCard(BELLS.map(b => listRow({
+    title: `${b.pair}-я пара`,
+    sub: `${b.from}–${b.to}`,
+    id: String(b.pair),
+    cls: 'tap',
+    value: b.pair === pair ? '✓' : '',
+  })))}
+        </div>`,
+      onMount(root, close) {
+        root.querySelector('#wdays').addEventListener('click', e => {
+          const b = e.target.closest('[data-wday]');
+          if (!b) return;
+          day = +b.dataset.wday;
+          root.querySelectorAll('[data-wday]').forEach(x =>
+            x.classList.toggle('active', +x.dataset.wday === day));
+          haptic('light');
+          // Грузим сразу, не дожидаясь выбора пары: иначе человек,
+          // сменивший день и закрывший шторку, не увидел бы никакой
+          // разницы — и решил бы, что кнопка не работает.
+          load();
+        });
+        root.addEventListener('click', e => {
+          const row = e.target.closest('[data-id]');
+          if (!row) return;
+          pair = +row.dataset.id;
+          haptic('medium');
+          close();
+          load();
+        });
+      },
+    });
+  };
 
   node.addEventListener('click', e => {
-    const b = e.target.closest('[data-room]');
-    if (!b) return;
+    if (e.target.closest('[data-act="when"]')) {
+      haptic('light');
+      pickWhen();
+      return;
+    }
+    const room = e.target.closest('[data-room]');
+    if (!room) return;
     haptic('light');
     // Карточка аудитории уже есть в справочнике — там весь её день, а не
     // одна пара. Второй такой экран был бы тем же самым.
-    go('room', { name: b.dataset.room });
+    go('room', { name: room.dataset.room });
   });
 
   load();
