@@ -78,8 +78,53 @@ export const data = {
 // данные, а не «что-то старое».
 const DATA_KEY = 'miet-data-cache';
 
+// Длинные тексты карточек: полные новости, описания кружков, рассказы
+// про кампус и институты. Раньше они лежали в общем файле, и приложение
+// ждало их все, прежде чем нарисовать первый экран, — 107 КБ ради
+// содержимого, которое читают, только открыв конкретную карточку.
+// Теперь они приезжают фоном, после первого экрана.
+const texts = {};
+let textsGoing = null;
+
 /**
- * Тянет `data/app.json`.
+ * Грузит тексты один раз и отдаёт тот же промис всем, кто спросит.
+ *
+ * Зовётся дважды: фоном сразу после запуска — чтобы к моменту, когда
+ * человек откроет карточку, всё уже лежало, — и самим экраном карточки,
+ * который на всякий случай дожидается. Отказ не страшен: без текста
+ * карточка покажет заголовок и ссылку на источник, а не белый экран.
+ */
+export function loadTexts() {
+  if (textsGoing) return textsGoing;
+  textsGoing = fetch('data/texts.json', { cache: 'no-cache' })
+    .then(r => (r.ok ? r.json() : {}))
+    .then(got => {
+      Object.assign(texts, got || {});
+      return texts;
+    })
+    .catch(err => {
+      console.warn('тексты не загрузились:', err.message);
+      // Обнуляем, чтобы следующая попытка была настоящей, а не
+      // повторным отказом из закешированного промиса.
+      textsGoing = null;
+      return texts;
+    });
+  return textsGoing;
+}
+
+/**
+ * Длинное поле записи. Сначала смотрим в самой записи — в запасном
+ * `app.json` тексты лежат внутри, — и только потом в отдельном файле.
+ */
+export function textOf(kind, item, field = 'text') {
+  if (!item) return '';
+  if (item[field]) return item[field];
+  const id = item.id ?? '';
+  return texts[`${kind}:${id}:${field}`] || '';
+}
+
+/**
+ * Тянет справочник.
  *
  * Раньше отказ этого запроса валил всё приложение: человек видел
  * «Данные не загрузились» вместо расписания — хотя расписание с
@@ -91,17 +136,23 @@ const DATA_KEY = 'miet-data-cache';
  * без справочника. Приложение обязано открыться в любом случае.
  */
 export async function loadData() {
-  try {
-    const res = await fetch('data/app.json', { cache: 'no-cache' });
-    if (!res.ok) throw new Error(`сервер ответил ${res.status}`);
-    const fresh = await res.json();
-    Object.assign(data, fresh, { stale: false, missing: false });
+  // core.json — тот же справочник без длинных текстов: с ним первый
+  // экран открывается вчетверо меньшим весом. app.json остаётся
+  // запасным путём: он старше, полнее и лежит там же, так что клиент,
+  // которому core не отдали, откроется как раньше.
+  for (const src of ['data/core.json', 'data/app.json']) {
     try {
-      localStorage.setItem(DATA_KEY, JSON.stringify(fresh));
-    } catch { /* хранилище переполнено — переживём, просто без копии */ }
-    return data;
-  } catch (err) {
-    console.warn('справочные данные не загрузились:', err.message);
+      const res = await fetch(src, { cache: 'no-cache' });
+      if (!res.ok) throw new Error(`сервер ответил ${res.status}`);
+      const fresh = await res.json();
+      Object.assign(data, fresh, { stale: false, missing: false });
+      try {
+        localStorage.setItem(DATA_KEY, JSON.stringify(fresh));
+      } catch { /* хранилище переполнено — переживём, просто без копии */ }
+      return data;
+    } catch (err) {
+      console.warn(`${src} не загрузился:`, err.message);
+    }
   }
 
   try {

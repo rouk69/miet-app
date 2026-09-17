@@ -6,7 +6,7 @@
 
 import { icon } from '../icons.js';
 import { esc, emptyState, lightbox } from '../ui.js';
-import { data, markRead } from '../store.js';
+import { data, loadTexts, textOf, markRead } from '../store.js';
 import { go } from '../router.js';
 import { openLink } from '../tg.js';
 import { screen, newsCard, iconBtn } from './common.js';
@@ -90,7 +90,11 @@ export async function articleScreen({ id }) {
   if (!n) return screen({ title: 'Новость', body: emptyState('Новость не найдена', 'helpCircle') });
   markRead(n.id);
 
-  const paragraphs = (n.text || '')
+  // Полный текст приезжает отдельным файлом и обычно уже здесь: его
+  // грузит фоном сам запуск. Дожидаемся на случай, когда карточку
+  // открыли раньше, чем он успел приехать.
+  await loadTexts();
+  const paragraphs = textOf('news', n)
     .split(/\n{2,}/)
     .map(p => p.trim())
     .filter(Boolean);

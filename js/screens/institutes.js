@@ -2,7 +2,7 @@
 
 import { icon } from '../icons.js';
 import { esc, emptyState, contactRows, listCard, listRow } from '../ui.js';
-import { data } from '../store.js';
+import { data, loadTexts, textOf } from '../store.js';
 import { go } from '../router.js';
 import { openLink } from '../tg.js';
 import { screen } from './common.js';
@@ -43,6 +43,12 @@ export async function instituteScreen({ id }) {
   const i = (data.institutes || []).find(x => x.id === id);
   if (!i) return screen({ title: 'Институт', body: emptyState('Институт не найден', 'helpCircle') });
 
+  // Описание вынесено из стартового файла: в списке институтов оно не
+  // нужно, а весит половину их веса. Обычно уже приехало фоном, но
+  // карточку могли открыть и раньше.
+  await loadTexts();
+  const about = textOf('institutes', i, 'about');
+
   const node = screen({
     body: `
       ${i.photo ? `<div class="hero">
@@ -56,8 +62,8 @@ export async function instituteScreen({ id }) {
         </div>
       </div>
 
-      ${i.about ? `<div class="article-text" style="font-size:15px;margin-bottom:6px">
-        <p>${esc(i.about)}</p></div>` : ''}
+      ${about ? `<div class="article-text" style="font-size:15px;margin-bottom:6px">
+        <p>${esc(about)}</p></div>` : ''}
 
       <div class="section-head"><div class="section-title">Контакты</div></div>
       ${contactRows(i) || emptyState('Контакты — на сайте института', 'phone')}

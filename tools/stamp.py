@@ -37,6 +37,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import bundle                                           # noqa: E402
+import split_texts                                      # noqa: E402
 
 sys.stdout.reconfigure(encoding="utf-8")
 
@@ -92,6 +93,16 @@ def write_if_changed(path: str, text: str) -> bool:
 
 
 def main() -> int:
+    # Разрез справочника — до подсчёта версии: core.json и texts.json
+    # уезжают вместе со сборкой, и отстать от данных они не должны.
+    # Отдельной командой это рано или поздно забылось бы, и клиент
+    # получил бы старые тексты к новым карточкам.
+    try:
+        split_texts.main()
+    except Exception as e:                              # noqa: BLE001
+        print(f"  ! справочник не разрезан: {e}")
+        return 1
+
     mods = bundle.modules()
     styles = [os.path.join(ROOT, "css", n)
               for n in sorted(os.listdir(os.path.join(ROOT, "css")))

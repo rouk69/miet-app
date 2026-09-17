@@ -367,6 +367,15 @@ CASES = [
     # Фильтр по первой цифре заменил заголовки «3xxx»: что эта цифра
     # значит в нумерации МИЭТ, нигде не написано, и подпись обещала
     # смысл, которого нет.
+    # Длинные тексты вынесены в отдельный файл: карточка берёт их
+    # оттуда, но обязана уметь и старый формат — в запасном app.json
+    # текст лежит внутри записи.
+    ("текст из самой записи",
+     "textOf('news', { id: '1', text: 'внутри' })", "внутри"),
+    ("пустая запись не роняет", "String(textOf('news', null) === '')", "true"),
+    ("нет текста — пустая строка",
+     "String(textOf('news', { id: 'нетакого' }) === '')", "true"),
+
     ("номер относится к своей цифре", "blockOf('3105')", "3"),
     ("нечисловое имя — в «прочие»", "blockOf('Спорткомплекс')", "#"),
     ("фильтры собраны без повторов",
@@ -404,6 +413,9 @@ var sameLesson = _cm.sameLesson, compareDay = _cm.compareDay;
 var _fr2 = __mod['js/screens/free.js'];
 var pairNow = _fr2.pairNow, untilText = _fr2.untilText,
     blockOf = _fr2.blockOf, blocksOf = _fr2.blocksOf;
+
+var _st = __mod['js/store.js'];
+var textOf = _st.textOf;
 
 var _sj = __mod['js/subjects.js'];
 var hasColor = _sj.hasColor, subjectBadge = _sj.subjectBadge;
