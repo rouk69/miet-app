@@ -364,8 +364,15 @@ CASES = [
     ("свободна до конца дня", "untilText({ until_pair: null })", "до конца дня"),
     ("свободна до времени",
      "untilText({ until_pair: 4, until_time: '14:20' })", "до 14:20"),
-    ("аудитории собраны по корпусам",
-     "String(byBlock([{name:'3105'},{name:'4202'},{name:'3118'}]).length)", "2"),
+    # Фильтр по первой цифре заменил заголовки «3xxx»: что эта цифра
+    # значит в нумерации МИЭТ, нигде не написано, и подпись обещала
+    # смысл, которого нет.
+    ("номер относится к своей цифре", "blockOf('3105')", "3"),
+    ("нечисловое имя — в «прочие»", "blockOf('Спорткомплекс')", "#"),
+    ("фильтры собраны без повторов",
+     "blocksOf([{name:'3105'},{name:'4202'},{name:'3118'}]).join(',')", "3,4"),
+    ("«прочие» уходят в конец",
+     "blocksOf([{name:'Спорткомплекс'},{name:'3105'}]).join(',')", "3,#"),
     ("кривая дата подписи не даёт", "String(dayLabel('') === '')", "true"),
 ]
 
@@ -395,7 +402,8 @@ var mediaSize = _f.mediaSize, mediaTag = _f.mediaTag;
 var _cm = __mod['js/screens/compare.js'];
 var sameLesson = _cm.sameLesson, compareDay = _cm.compareDay;
 var _fr2 = __mod['js/screens/free.js'];
-var pairNow = _fr2.pairNow, untilText = _fr2.untilText, byBlock = _fr2.byBlock;
+var pairNow = _fr2.pairNow, untilText = _fr2.untilText,
+    blockOf = _fr2.blockOf, blocksOf = _fr2.blocksOf;
 
 var _sj = __mod['js/subjects.js'];
 var hasColor = _sj.hasColor, subjectBadge = _sj.subjectBadge;

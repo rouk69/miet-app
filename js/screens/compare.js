@@ -13,7 +13,7 @@
 
 import { icon } from '../icons.js';
 import { esc, emptyState, pillRow, bindChoice, skeleton, listCard, listRow } from '../ui.js';
-import { settings, save } from '../store.js';
+import { settings } from '../store.js';
 import { artState } from '../art.js';
 import { screen, pickGroup } from './common.js';
 import { subjectBadge } from '../subjects.js';
@@ -136,7 +136,7 @@ export default async function compareScreen() {
       </div>`,
     });
     node.querySelector('#pick').addEventListener('click',
-      () => pickGroup(g => { save({ group: g }); location.reload(); }));
+      () => pickGroup(() => location.reload()));
     return node;
   }
 
@@ -262,14 +262,17 @@ export default async function compareScreen() {
     if (pick.dataset.pick === 'mine') {
       // Своя группа меняется здесь же: сравнивать чужую с чужой можно, но
       // тогда экран перестаёт отвечать на вопрос «когда МЫ встретимся».
-      pickGroup(g => { save({ group: g }); location.reload(); });
+      pickGroup(() => location.reload());
       return;
     }
+    // Вторая группа — чужая: запоминать её своей нельзя. Раньше шторка
+    // делала это сама, и человек, сравнив расписание с соседним
+    // потоком, обнаруживал в профиле его группу.
     pickGroup(g => {
       other = g;
       pick.querySelector('.cmp-pick-name').textContent = g;
       drawAll();
-    });
+    }, { remember: false, title: 'С кем сравнить', current: other });
   });
 
   if (other) drawAll();
