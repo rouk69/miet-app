@@ -1,5 +1,5 @@
 /* Собрано tools/stamp.py из js/*.js — не правьте здесь.
-   Версия 4cada2c1. Исходники лежат рядом и остаются модулями. */
+   Версия 2689585c. Исходники лежат рядом и остаются модулями. */
 var __mod = {};
 /* ==== js\config.js ==== */
 __mod['js/config.js'] = (function () {
@@ -78,7 +78,7 @@ const API_BASE = base;
 // свежую ли страницу открыл человек: Telegram кеширует мини-приложения
 // по своим правилам, и «у меня ничего не поменялось» разбирается
 // сравнением этой строки, а не на слово.
-const BUILD = '4cada2c1';
+const BUILD = '2689585c';
 
 return {'apiBase': apiBase, 'fallBackToHome': fallBackToHome, 'API_BASE': API_BASE, 'BUILD': BUILD};
 })();
@@ -803,8 +803,53 @@ const data = {
 // данные, а не «что-то старое».
 const DATA_KEY = 'miet-data-cache';
 
+// Длинные тексты карточек: полные новости, описания кружков, рассказы
+// про кампус и институты. Раньше они лежали в общем файле, и приложение
+// ждало их все, прежде чем нарисовать первый экран, — 107 КБ ради
+// содержимого, которое читают, только открыв конкретную карточку.
+// Теперь они приезжают фоном, после первого экрана.
+const texts = {};
+let textsGoing = null;
+
 /**
- * Тянет `data/app.json`.
+ * Грузит тексты один раз и отдаёт тот же промис всем, кто спросит.
+ *
+ * Зовётся дважды: фоном сразу после запуска — чтобы к моменту, когда
+ * человек откроет карточку, всё уже лежало, — и самим экраном карточки,
+ * который на всякий случай дожидается. Отказ не страшен: без текста
+ * карточка покажет заголовок и ссылку на источник, а не белый экран.
+ */
+function loadTexts() {
+  if (textsGoing) return textsGoing;
+  textsGoing = fetch('data/texts.json', { cache: 'no-cache' })
+    .then(r => (r.ok ? r.json() : {}))
+    .then(got => {
+      Object.assign(texts, got || {});
+      return texts;
+    })
+    .catch(err => {
+      console.warn('тексты не загрузились:', err.message);
+      // Обнуляем, чтобы следующая попытка была настоящей, а не
+      // повторным отказом из закешированного промиса.
+      textsGoing = null;
+      return texts;
+    });
+  return textsGoing;
+}
+
+/**
+ * Длинное поле записи. Сначала смотрим в самой записи — в запасном
+ * `app.json` тексты лежат внутри, — и только потом в отдельном файле.
+ */
+function textOf(kind, item, field = 'text') {
+  if (!item) return '';
+  if (item[field]) return item[field];
+  const id = item.id ?? '';
+  return texts[`${kind}:${id}:${field}`] || '';
+}
+
+/**
+ * Тянет справочник.
  *
  * Раньше отказ этого запроса валил всё приложение: человек видел
  * «Данные не загрузились» вместо расписания — хотя расписание с
@@ -816,17 +861,23 @@ const DATA_KEY = 'miet-data-cache';
  * без справочника. Приложение обязано открыться в любом случае.
  */
 async function loadData() {
-  try {
-    const res = await fetch('data/app.json', { cache: 'no-cache' });
-    if (!res.ok) throw new Error(`сервер ответил ${res.status}`);
-    const fresh = await res.json();
-    Object.assign(data, fresh, { stale: false, missing: false });
+  // core.json — тот же справочник без длинных текстов: с ним первый
+  // экран открывается вчетверо меньшим весом. app.json остаётся
+  // запасным путём: он старше, полнее и лежит там же, так что клиент,
+  // которому core не отдали, откроется как раньше.
+  for (const src of ['data/core.json', 'data/app.json']) {
     try {
-      localStorage.setItem(DATA_KEY, JSON.stringify(fresh));
-    } catch { /* хранилище переполнено — переживём, просто без копии */ }
-    return data;
-  } catch (err) {
-    console.warn('справочные данные не загрузились:', err.message);
+      const res = await fetch(src, { cache: 'no-cache' });
+      if (!res.ok) throw new Error(`сервер ответил ${res.status}`);
+      const fresh = await res.json();
+      Object.assign(data, fresh, { stale: false, missing: false });
+      try {
+        localStorage.setItem(DATA_KEY, JSON.stringify(fresh));
+      } catch { /* хранилище переполнено — переживём, просто без копии */ }
+      return data;
+    } catch (err) {
+      console.warn(`${src} не загрузился:`, err.message);
+    }
   }
 
   try {
@@ -865,7 +916,7 @@ function applyTheme(theme = settings.theme) {
   document.documentElement.dataset.theme = resolveTheme(theme);
 }
 
-return {'settings': settings, 'save': save, 'toggleFavorite': toggleFavorite, 'isFavorite': isFavorite, 'markRead': markRead, 'data': data, 'loadData': loadData, 'resolveTheme': resolveTheme, 'applyTheme': applyTheme};
+return {'settings': settings, 'save': save, 'toggleFavorite': toggleFavorite, 'isFavorite': isFavorite, 'markRead': markRead, 'data': data, 'loadTexts': loadTexts, 'textOf': textOf, 'loadData': loadData, 'resolveTheme': resolveTheme, 'applyTheme': applyTheme};
 })();
 
 /* ==== js\tg.js ==== */
@@ -1578,6 +1629,132 @@ const artState = (name, title, note = '') => `
 return {'art': art, 'hasArt': hasArt, 'artNames': artNames, 'artState': artState};
 })();
 
+/* ==== js\oops.js ==== */
+__mod['js/oops.js'] = (function () {
+// Приложение рассказывает о своих поломках само.
+//
+// До этого сломанное у человека было видно ровно ему: белый экран,
+// пустая лента, не нажимающаяся кнопка — он закрывал приложение и
+// уходил. Узнавали мы об этом, только если он писал в поддержку, и
+// каждый найденный так баг находился случайно. Браузера в среде
+// разработки нет, посмотреть глазами нельзя — значит спросить можно
+// только сам клиент.
+//
+// Правила здесь ровно об одном: отчёт об ошибке не должен стать второй
+// ошибкой. Поэтому всё завёрнуто, ничего не ждёт ответа, и поток
+// одинаковых сообщений придерживается на месте, а не отправляется
+// сотней запросов подряд.
+
+var post = __mod['js/api.js']['post'];
+var canTalk = __mod['js/api.js']['canTalk'];
+var BUILD = __mod['js/config.js']['BUILD'];
+var tg = __mod['js/tg.js']['tg'];
+
+// Что уже отправляли в эту сессию. Одна и та же поломка в цикле
+// перерисовки способна выстрелить сотню раз за секунду, и слать это
+// целиком значит устроить себе же отказ в обслуживании.
+const sent = new Set();
+
+// Сколько разных поломок отправляем за сессию. Если их больше десятка,
+// приложение сломано целиком, и одиннадцатая ничего не добавит.
+const MAX_KINDS = 10;
+
+/** Короткий отпечаток: тот же принцип, что на сервере. */
+const keyOf = (message, source, line) =>
+  `${String(message).replace(/\d+/g, '#').slice(0, 120)}|${source}|${line}`;
+
+/**
+ * Наша ли это ошибка.
+ *
+ * В WebView Telegram в консоль падает чужое: расширения, вставленные
+ * скрипты, ошибки самого клиента. Отправлять их — значит забить список
+ * шумом, в котором своё уже не найти. Считаем своим то, у чего нет
+ * источника (inline-код страницы) или источник — наш файл.
+ */
+function isOurs(source) {
+  const s = String(source || '');
+  if (!s) return true;
+  if (/^(chrome|moz|safari)-extension:/.test(s)) return false;
+  return s.includes('/js/') || s.endsWith('.js') || s.startsWith(location.origin);
+}
+
+function send(payload) {
+  const key = keyOf(payload.message, payload.source, payload.line);
+  if (sent.has(key) || sent.size >= MAX_KINDS) return;
+  sent.add(key);
+  if (!canTalk) return;
+  // Ответа не ждём и ошибку отправки глотаем: если сеть лежит, второй
+  // раз она от нашего беспокойства не поднимется.
+  post('/api/oops', payload).catch(() => {});
+}
+
+/**
+ * Включает слежение. Зовётся один раз при запуске — до всего
+ * остального, чтобы поймать и поломки самого запуска.
+ */
+function watchErrors(screenOf = () => '') {
+  const common = () => ({
+    build: BUILD || '',
+    screen: screenOf() || '',
+    platform: tg?.platform || 'браузер',
+    version: tg?.version || '',
+  });
+
+  window.addEventListener('error', e => {
+    try {
+      // Событие 'error' прилетает и от картинок, не только от скриптов:
+      // у него нет message, зато есть target. Битая обложка новости —
+      // не поломка приложения, и в список ей незачем.
+      if (!e.message) return;
+      if (!isOurs(e.filename)) return;
+      send({
+        message: e.message,
+        source: e.filename || '',
+        line: e.lineno || 0,
+        stack: e.error?.stack || '',
+        ...common(),
+      });
+    } catch { /* здесь падать нельзя тем более */ }
+  });
+
+  window.addEventListener('unhandledrejection', e => {
+    try {
+      const reason = e.reason;
+      const message = reason?.message || String(reason || 'Обещание отклонено');
+      // Отказы сети — это не поломка кода: сервер не ответил, человек в
+      // метро. Их и так видно по счётчикам, а список они забьют.
+      if (/Сервер не ответил|Failed to fetch|NetworkError|AbortError/i.test(message)) return;
+      send({
+        message,
+        source: 'promise',
+        line: 0,
+        stack: reason?.stack || '',
+        ...common(),
+      });
+    } catch { /* см. выше */ }
+  });
+}
+
+/**
+ * Сообщить о своей поломке руками — там, где ошибку мы поймали сами и
+ * показали человеку что-то осмысленное, но знать о ней всё равно надо.
+ */
+function reportOops(message, where = '') {
+  send({
+    message: String(message || '').slice(0, 300),
+    source: where || 'сами',
+    line: 0,
+    stack: '',
+    build: BUILD || '',
+    screen: where || '',
+    platform: tg?.platform || 'браузер',
+    version: tg?.version || '',
+  });
+}
+
+return {'isOurs': isOurs, 'watchErrors': watchErrors, 'reportOops': reportOops};
+})();
+
 /* ==== js\router.js ==== */
 __mod['js/router.js'] = (function () {
 // Роутер: стек экранов + нижняя навигация. Системная кнопка «Назад»
@@ -1589,6 +1766,7 @@ var haptic = __mod['js/tg.js']['haptic'];
 var hapticSelect = __mod['js/tg.js']['hapticSelect'];
 var inTelegram = __mod['js/tg.js']['inTelegram'];
 var track = __mod['js/api.js']['track'];
+var reportOops = __mod['js/oops.js']['reportOops'];
 
 const routes = new Map();
 const stack = [];
@@ -1657,6 +1835,9 @@ async function paint() {
     node = await fn(entry.params || {});
   } catch (err) {
     console.error(err);
+    // Экран не нарисовался — человек видит «Что-то пошло не так».
+    // Раньше на этом всё и заканчивалось: он уходил, а мы не знали.
+    reportOops(`экран «${entry.name}»: ${err.message}`, entry.name);
     node = document.createElement('div');
     node.className = 'screen';
     node.innerHTML = `<div class="empty-state">
@@ -4292,6 +4473,8 @@ var esc = __mod['js/ui.js']['esc'];
 var emptyState = __mod['js/ui.js']['emptyState'];
 var lightbox = __mod['js/ui.js']['lightbox'];
 var data = __mod['js/store.js']['data'];
+var loadTexts = __mod['js/store.js']['loadTexts'];
+var textOf = __mod['js/store.js']['textOf'];
 var markRead = __mod['js/store.js']['markRead'];
 var go = __mod['js/router.js']['go'];
 var openLink = __mod['js/tg.js']['openLink'];
@@ -4378,7 +4561,11 @@ async function articleScreen({ id }) {
   if (!n) return screen({ title: 'Новость', body: emptyState('Новость не найдена', 'helpCircle') });
   markRead(n.id);
 
-  const paragraphs = (n.text || '')
+  // Полный текст приезжает отдельным файлом и обычно уже здесь: его
+  // грузит фоном сам запуск. Дожидаемся на случай, когда карточку
+  // открыли раньше, чем он успел приехать.
+  await loadTexts();
+  const paragraphs = textOf('news', n)
     .split(/\n{2,}/)
     .map(p => p.trim())
     .filter(Boolean);
@@ -5258,6 +5445,8 @@ var emptyState = __mod['js/ui.js']['emptyState'];
 var data = __mod['js/store.js']['data'];
 var settings = __mod['js/store.js']['settings'];
 var save = __mod['js/store.js']['save'];
+var loadTexts = __mod['js/store.js']['loadTexts'];
+var textOf = __mod['js/store.js']['textOf'];
 var go = __mod['js/router.js']['go'];
 var switchTab = __mod['js/router.js']['switchTab'];
 var haptic = __mod['js/tg.js']['haptic'];
@@ -5293,7 +5482,10 @@ function collect(q) {
     }
   }
   for (const a of data.news || []) {
-    if (hit(a.title) || hit(a.text)) {
+    // Полный текст новости лежит отдельным файлом; экран поиска ждёт
+    // его перед отрисовкой, так что к этому моменту он уже здесь. Если
+    // не приехал — ищем по заголовку: неполный поиск лучше пустого.
+    if (hit(a.title) || hit(textOf('news', a))) {
       out.push({ kind: 'article', ico: 'news', title: a.title, sub: a.date, id: a.id });
     }
     if (out.length > 60) break;
@@ -5302,6 +5494,11 @@ function collect(q) {
 }
 
 async function searchScreen() {
+  // Поиск идёт и по текстам новостей — дожидаемся их. Экран открывают
+  // осознанно, лишние полсекунды тут дешевле, чем поиск, который не
+  // находит очевидного.
+  await loadTexts();
+
   const node = screen({
     title: 'Поиск',
     subtitle: 'Пары, кружки, институты, новости',
@@ -7344,7 +7541,8 @@ async function adminScreen() {
     body: `
       <div class="pill-row admin-tabs" id="atabs">
         ${[['stats', 'Статистика'], ['days', 'По дням'], ['users', 'Юзеры'],
-    ['roles', 'Роли'], ['raffle', 'Розыгрыш'], ['flags', 'Настройки']]
+    ['roles', 'Роли'], ['raffle', 'Розыгрыш'], ['oops', 'Поломки'],
+    ['flags', 'Настройки']]
     .map(([id, label]) => `
           <button class="pill ${tab === id ? 'active' : ''}" data-atab="${id}">${label}</button>`).join('')}
       </div>
@@ -7370,6 +7568,7 @@ async function paint(pane) {
     else if (tab === 'days') await daysPane(pane);
     else if (tab === 'users') await usersPane(pane);
     else if (tab === 'raffle') await rafflePane(pane);
+    else if (tab === 'oops') await oopsPane(pane);
     else if (tab === 'flags') await flagsPane(pane);
     else await rolesPane(pane);
   } catch (err) {
@@ -7667,6 +7866,67 @@ async function flagsPane(pane) {
     } catch (err) {
       toast(err.message);
       t.classList.toggle('on', !value);
+    }
+  });
+}
+
+// ─────────────── вкладка «Поломки» ───────────────
+
+/**
+ * Что упало у людей.
+ *
+ * Список нужен не ради полноты, а ради двух чисел: сколько раз и когда
+ * в последний раз. Ошибка с тремя сотнями повторов за сутки — это то,
+ * что чинят сегодня; единичная годовалая — то, что можно стереть.
+ */
+async function oopsPane(pane) {
+  const draw = async () => {
+    const d = await get('/api/admin/oops');
+    const list = d.errors || [];
+    const t = d.totals || {};
+    pane.innerHTML = `
+      <div class="kpi-grid" style="margin-top:0">
+        ${kpi(t.kinds ?? 0, 'разных поломок')}
+        ${kpi(t.day ?? 0, 'случаев за сутки')}
+      </div>
+      ${list.length ? `<div class="oops-list">${list.map(e => `
+        <div class="oops-item" data-oops="${e.id}">
+          <div class="oops-top">
+            <span class="oops-count">${e.count}×</span>
+            <span class="oops-when">${esc(ago(e.last_at))}</span>
+            ${e.screen ? `<span class="oops-screen">${esc(e.screen)}</span>` : ''}
+          </div>
+          <div class="oops-msg">${esc(e.message)}</div>
+          <div class="oops-meta">
+            ${esc(e.source || '')}${e.line ? `:${e.line}` : ''}
+            ${e.build ? ` · сборка ${esc(e.build)}` : ''}
+            ${e.platform ? ` · ${esc(e.platform)}` : ''}
+            ${e.user_id ? ` · id ${e.user_id}` : ''}
+          </div>
+          <button class="oops-drop" data-drop="${e.id}">Разобрано</button>
+        </div>`).join('')}</div>`
+    : emptyState('Поломок нет — или клиент ещё не успел о них рассказать', 'check')}
+      ${list.length ? `<button class="btn-secondary" id="oops-all"
+        style="margin-top:12px">Стереть все</button>` : ''}
+      <p class="raffle-fineprint">
+        Пишется текст ошибки, экран и версия сборки — ничего личного.
+        После выкладки починки список стоит стирать: иначе старые записи
+        мешаются с новыми, и непонятно, помогло ли.
+      </p>`;
+  };
+  await draw();
+
+  pane.addEventListener('click', async e => {
+    const drop = e.target.closest('[data-drop]');
+    const all = e.target.closest('#oops-all');
+    if (!drop && !all) return;
+    haptic('light');
+    try {
+      await post('/api/admin/oops', drop ? { id: +drop.dataset.drop } : {});
+      hapticNotify('success');
+      await draw();
+    } catch (err) {
+      toast(err.message);
     }
   });
 }
@@ -8065,6 +8325,8 @@ var listCard = __mod['js/ui.js']['listCard'];
 var listRow = __mod['js/ui.js']['listRow'];
 var lightbox = __mod['js/ui.js']['lightbox'];
 var data = __mod['js/store.js']['data'];
+var loadTexts = __mod['js/store.js']['loadTexts'];
+var textOf = __mod['js/store.js']['textOf'];
 var go = __mod['js/router.js']['go'];
 var openLink = __mod['js/tg.js']['openLink'];
 var screen = __mod['js/screens/common.js']['screen'];
@@ -8107,7 +8369,9 @@ async function campusItemScreen({ id }) {
   const c = (data.campus || []).find(x => x.id === id);
   if (!c) return screen({ title: 'Раздел', body: emptyState('Раздел не найден', 'helpCircle') });
 
-  const paragraphs = (c.text || '').split(/\n{2,}/).map(p => p.trim()).filter(Boolean);
+  await loadTexts();
+  const paragraphs = textOf('campus', c)
+    .split(/\n{2,}/).map(p => p.trim()).filter(Boolean);
 
   const node = screen({
     body: `
@@ -8176,6 +8440,8 @@ var toast = __mod['js/ui.js']['toast'];
 var listCard = __mod['js/ui.js']['listCard'];
 var listRow = __mod['js/ui.js']['listRow'];
 var data = __mod['js/store.js']['data'];
+var loadTexts = __mod['js/store.js']['loadTexts'];
+var textOf = __mod['js/store.js']['textOf'];
 var toggleFavorite = __mod['js/store.js']['toggleFavorite'];
 var isFavorite = __mod['js/store.js']['isFavorite'];
 var settings = __mod['js/store.js']['settings'];
@@ -8279,7 +8545,11 @@ async function clubScreen({ id }) {
   const c = (data.clubs || []).find(x => x.id === id);
   if (!c) return screen({ title: 'Кружок', body: emptyState('Не найдено', 'helpCircle') });
 
-  const paragraphs = (c.about || '').split(/\n{2,}/).map(p => p.trim()).filter(Boolean);
+  // Описание приезжает отдельным файлом — его грузит фоном запуск.
+  // Дожидаемся на случай, если карточку открыли раньше.
+  await loadTexts();
+  const paragraphs = textOf('clubs', c, 'about')
+    .split(/\n{2,}/).map(p => p.trim()).filter(Boolean);
   const fav = isFavorite(c.id);
 
   const node = screen({
@@ -8746,6 +9016,8 @@ var contactRows = __mod['js/ui.js']['contactRows'];
 var listCard = __mod['js/ui.js']['listCard'];
 var listRow = __mod['js/ui.js']['listRow'];
 var data = __mod['js/store.js']['data'];
+var loadTexts = __mod['js/store.js']['loadTexts'];
+var textOf = __mod['js/store.js']['textOf'];
 var go = __mod['js/router.js']['go'];
 var openLink = __mod['js/tg.js']['openLink'];
 var screen = __mod['js/screens/common.js']['screen'];
@@ -8786,6 +9058,12 @@ async function instituteScreen({ id }) {
   const i = (data.institutes || []).find(x => x.id === id);
   if (!i) return screen({ title: 'Институт', body: emptyState('Институт не найден', 'helpCircle') });
 
+  // Описание вынесено из стартового файла: в списке институтов оно не
+  // нужно, а весит половину их веса. Обычно уже приехало фоном, но
+  // карточку могли открыть и раньше.
+  await loadTexts();
+  const about = textOf('institutes', i, 'about');
+
   const node = screen({
     body: `
       ${i.photo ? `<div class="hero">
@@ -8799,8 +9077,8 @@ async function instituteScreen({ id }) {
         </div>
       </div>
 
-      ${i.about ? `<div class="article-text" style="font-size:15px;margin-bottom:6px">
-        <p>${esc(i.about)}</p></div>` : ''}
+      ${about ? `<div class="article-text" style="font-size:15px;margin-bottom:6px">
+        <p>${esc(about)}</p></div>` : ''}
 
       <div class="section-head"><div class="section-title">Контакты</div></div>
       ${contactRows(i) || emptyState('Контакты — на сайте института', 'phone')}
@@ -8830,6 +9108,7 @@ var syncChrome = __mod['js/tg.js']['syncChrome'];
 var guardTaps = __mod['js/tg.js']['guardTaps'];
 var tg = __mod['js/tg.js']['tg'];
 var loadData = __mod['js/store.js']['loadData'];
+var loadTexts = __mod['js/store.js']['loadTexts'];
 var settings = __mod['js/store.js']['settings'];
 var save = __mod['js/store.js']['save'];
 var applyTheme = __mod['js/store.js']['applyTheme'];
@@ -8838,6 +9117,7 @@ var register = __mod['js/router.js']['register'];
 var initRouter = __mod['js/router.js']['init'];
 var switchTab = __mod['js/router.js']['switchTab'];
 var refresh = __mod['js/router.js']['refresh'];
+var current = __mod['js/router.js']['current'];
 var fetchSchedule = __mod['js/schedule.js']['fetchSchedule'];
 var loadMe = __mod['js/api.js']['loadMe'];
 var account = __mod['js/api.js']['account'];
@@ -8845,6 +9125,8 @@ var track = __mod['js/api.js']['track'];
 var syncGroup = __mod['js/api.js']['syncGroup'];
 var post = __mod['js/api.js']['post'];
 var checkFresh = __mod['js/fresh.js']['checkFresh'];
+var watchErrors = __mod['js/oops.js']['watchErrors'];
+var reportOops = __mod['js/oops.js']['reportOops'];
 
 var home = __mod['js/screens/home.js']['default'];
 var schedule = __mod['js/screens/schedule.js']['default'];
@@ -8891,6 +9173,11 @@ var compare = __mod['js/screens/compare.js']['default'];
 // ведущий главную вверх, «сам собой» открывал ленту — под ним там
 // карточка, а WebView прощает смещение и всё равно шлёт click.
 guardTaps();
+
+// Слежение за поломками включается ПЕРВЫМ делом: иначе ошибка самого
+// запуска — та, из-за которой человек видит белый экран, — никуда не
+// попадёт, а это ровно тот случай, ради которого всё и заведено.
+watchErrors(() => current()?.name || 'запуск');
 
 const theme = resolveTheme();
 applyTheme();
@@ -9028,6 +9315,10 @@ loadData()
       return;
     }
     track('open');
+    // Длинные тексты карточек — фоном, после первого экрана. Ждать их
+    // на старте незачем: они нужны, только когда карточку откроют, а
+    // это 107 КБ, которые раньше стояли в очереди перед расписанием.
+    loadTexts();
     // Пришёл по чужой реферальной ссылке кнопкой «Открыть»: код приехал
     // в start_param, и бота человек мог не видеть вовсе. Тем же концом
     // это ловит /start, но только когда открыли именно бота.
@@ -9047,6 +9338,7 @@ loadData()
     // Сюда попадаем, только если сломался сам запуск: справочник своё
     // отсутствие переживает молча.
     console.error(err);
+    reportOops(`запуск не удался: ${err.message}`, 'запуск');
     app.innerHTML = `
       <div class="screen">
         <div class="empty-state">

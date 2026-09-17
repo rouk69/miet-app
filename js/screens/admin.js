@@ -100,7 +100,8 @@ export default async function adminScreen() {
     body: `
       <div class="pill-row admin-tabs" id="atabs">
         ${[['stats', 'Статистика'], ['days', 'По дням'], ['users', 'Юзеры'],
-    ['roles', 'Роли'], ['raffle', 'Розыгрыш'], ['flags', 'Настройки']]
+    ['roles', 'Роли'], ['raffle', 'Розыгрыш'], ['oops', 'Поломки'],
+    ['flags', 'Настройки']]
     .map(([id, label]) => `
           <button class="pill ${tab === id ? 'active' : ''}" data-atab="${id}">${label}</button>`).join('')}
       </div>
@@ -126,6 +127,7 @@ async function paint(pane) {
     else if (tab === 'days') await daysPane(pane);
     else if (tab === 'users') await usersPane(pane);
     else if (tab === 'raffle') await rafflePane(pane);
+    else if (tab === 'oops') await oopsPane(pane);
     else if (tab === 'flags') await flagsPane(pane);
     else await rolesPane(pane);
   } catch (err) {
@@ -423,6 +425,67 @@ async function flagsPane(pane) {
     } catch (err) {
       toast(err.message);
       t.classList.toggle('on', !value);
+    }
+  });
+}
+
+// ─────────────── вкладка «Поломки» ───────────────
+
+/**
+ * Что упало у людей.
+ *
+ * Список нужен не ради полноты, а ради двух чисел: сколько раз и когда
+ * в последний раз. Ошибка с тремя сотнями повторов за сутки — это то,
+ * что чинят сегодня; единичная годовалая — то, что можно стереть.
+ */
+async function oopsPane(pane) {
+  const draw = async () => {
+    const d = await get('/api/admin/oops');
+    const list = d.errors || [];
+    const t = d.totals || {};
+    pane.innerHTML = `
+      <div class="kpi-grid" style="margin-top:0">
+        ${kpi(t.kinds ?? 0, 'разных поломок')}
+        ${kpi(t.day ?? 0, 'случаев за сутки')}
+      </div>
+      ${list.length ? `<div class="oops-list">${list.map(e => `
+        <div class="oops-item" data-oops="${e.id}">
+          <div class="oops-top">
+            <span class="oops-count">${e.count}×</span>
+            <span class="oops-when">${esc(ago(e.last_at))}</span>
+            ${e.screen ? `<span class="oops-screen">${esc(e.screen)}</span>` : ''}
+          </div>
+          <div class="oops-msg">${esc(e.message)}</div>
+          <div class="oops-meta">
+            ${esc(e.source || '')}${e.line ? `:${e.line}` : ''}
+            ${e.build ? ` · сборка ${esc(e.build)}` : ''}
+            ${e.platform ? ` · ${esc(e.platform)}` : ''}
+            ${e.user_id ? ` · id ${e.user_id}` : ''}
+          </div>
+          <button class="oops-drop" data-drop="${e.id}">Разобрано</button>
+        </div>`).join('')}</div>`
+    : emptyState('Поломок нет — или клиент ещё не успел о них рассказать', 'check')}
+      ${list.length ? `<button class="btn-secondary" id="oops-all"
+        style="margin-top:12px">Стереть все</button>` : ''}
+      <p class="raffle-fineprint">
+        Пишется текст ошибки, экран и версия сборки — ничего личного.
+        После выкладки починки список стоит стирать: иначе старые записи
+        мешаются с новыми, и непонятно, помогло ли.
+      </p>`;
+  };
+  await draw();
+
+  pane.addEventListener('click', async e => {
+    const drop = e.target.closest('[data-drop]');
+    const all = e.target.closest('#oops-all');
+    if (!drop && !all) return;
+    haptic('light');
+    try {
+      await post('/api/admin/oops', drop ? { id: +drop.dataset.drop } : {});
+      hapticNotify('success');
+      await draw();
+    } catch (err) {
+      toast(err.message);
     }
   });
 }

@@ -4,6 +4,7 @@
 import { icon } from './icons.js';
 import { BackButton, haptic, hapticSelect, inTelegram } from './tg.js';
 import { track } from './api.js';
+import { reportOops } from './oops.js';
 
 const routes = new Map();
 const stack = [];
@@ -72,6 +73,9 @@ async function paint() {
     node = await fn(entry.params || {});
   } catch (err) {
     console.error(err);
+    // Экран не нарисовался — человек видит «Что-то пошло не так».
+    // Раньше на этом всё и заканчивалось: он уходил, а мы не знали.
+    reportOops(`экран «${entry.name}»: ${err.message}`, entry.name);
     node = document.createElement('div');
     node.className = 'screen';
     node.innerHTML = `<div class="empty-state">

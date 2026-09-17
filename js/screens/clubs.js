@@ -2,7 +2,8 @@
 
 import { icon } from '../icons.js';
 import { esc, emptyState, contactRows, lightbox, toast, listCard, listRow } from '../ui.js';
-import { data, toggleFavorite, isFavorite, settings } from '../store.js';
+import { data, loadTexts, textOf, toggleFavorite, isFavorite,
+  settings } from '../store.js';
 import { go } from '../router.js';
 import { openLink, haptic } from '../tg.js';
 import { screen, iconBtn } from './common.js';
@@ -101,7 +102,11 @@ export async function clubScreen({ id }) {
   const c = (data.clubs || []).find(x => x.id === id);
   if (!c) return screen({ title: 'Кружок', body: emptyState('Не найдено', 'helpCircle') });
 
-  const paragraphs = (c.about || '').split(/\n{2,}/).map(p => p.trim()).filter(Boolean);
+  // Описание приезжает отдельным файлом — его грузит фоном запуск.
+  // Дожидаемся на случай, если карточку открыли раньше.
+  await loadTexts();
+  const paragraphs = textOf('clubs', c, 'about')
+    .split(/\n{2,}/).map(p => p.trim()).filter(Boolean);
   const fav = isFavorite(c.id);
 
   const node = screen({

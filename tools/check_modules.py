@@ -134,6 +134,29 @@ else:
         problems.append(
             "js/bundle.js разошёлся с исходниками — прогони tools/stamp.py")
 
+# Справочник режется на core.json (с ним открывается приложение) и
+# texts.json (длинные тексты, приезжают фоном). Сверяем их с исходным
+# app.json: разойдись они — человек получит старый текст к новой
+# карточке или пустую карточку к новому тексту, и молча.
+sys.path.insert(0, os.path.join(ROOT, "tools"))
+import json as _json                                               # noqa: E402
+import split_texts                                                 # noqa: E402
+
+_data = os.path.join(ROOT, "data")
+_app = os.path.join(_data, "app.json")
+if os.path.exists(_app):
+    with io.open(_app, encoding="utf-8") as f:
+        _core_want, _texts_want = split_texts.split(_json.load(f))
+    for _name, _want in (("core.json", _core_want), ("texts.json", _texts_want)):
+        _path = os.path.join(_data, _name)
+        if not os.path.exists(_path):
+            problems.append(f"data/{_name} не собран — прогони tools/stamp.py")
+            continue
+        with io.open(_path, encoding="utf-8") as f:
+            if _json.load(f) != _want:
+                problems.append(
+                    f"data/{_name} разошёлся с app.json — прогони tools/stamp.py")
+
 
 SHARED = {
     "esc", "el", "icon", "listCard", "listRow", "emptyState", "toast", "sheet",

@@ -2,7 +2,7 @@
 
 import { icon } from '../icons.js';
 import { esc, emptyState, contactRows, listCard, listRow, lightbox } from '../ui.js';
-import { data } from '../store.js';
+import { data, loadTexts, textOf } from '../store.js';
 import { go } from '../router.js';
 import { openLink } from '../tg.js';
 import { screen } from './common.js';
@@ -45,7 +45,9 @@ export async function campusItemScreen({ id }) {
   const c = (data.campus || []).find(x => x.id === id);
   if (!c) return screen({ title: 'Раздел', body: emptyState('Раздел не найден', 'helpCircle') });
 
-  const paragraphs = (c.text || '').split(/\n{2,}/).map(p => p.trim()).filter(Boolean);
+  await loadTexts();
+  const paragraphs = textOf('campus', c)
+    .split(/\n{2,}/).map(p => p.trim()).filter(Boolean);
 
   const node = screen({
     body: `

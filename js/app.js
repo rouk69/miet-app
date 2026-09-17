@@ -1,11 +1,13 @@
 // Точка входа: тема → Telegram → данные → роутер.
 
 import { initTelegram, syncChrome, guardTaps, tg } from './tg.js';
-import { loadData, settings, save, applyTheme, resolveTheme } from './store.js';
-import { register, init as initRouter, switchTab, refresh } from './router.js';
+import { loadData, loadTexts, settings, save, applyTheme,
+  resolveTheme } from './store.js';
+import { register, init as initRouter, switchTab, refresh, current } from './router.js';
 import { fetchSchedule } from './schedule.js';
 import { loadMe, account, track, syncGroup, post } from './api.js';
 import { checkFresh } from './fresh.js';
+import { watchErrors, reportOops } from './oops.js';
 
 import home from './screens/home.js';
 import schedule from './screens/schedule.js';
@@ -39,6 +41,11 @@ import compare from './screens/compare.js';
 // ведущий главную вверх, «сам собой» открывал ленту — под ним там
 // карточка, а WebView прощает смещение и всё равно шлёт click.
 guardTaps();
+
+// Слежение за поломками включается ПЕРВЫМ делом: иначе ошибка самого
+// запуска — та, из-за которой человек видит белый экран, — никуда не
+// попадёт, а это ровно тот случай, ради которого всё и заведено.
+watchErrors(() => current()?.name || 'запуск');
 
 const theme = resolveTheme();
 applyTheme();
@@ -176,6 +183,10 @@ loadData()
       return;
     }
     track('open');
+    // Длинные тексты карточек — фоном, после первого экрана. Ждать их
+    // на старте незачем: они нужны, только когда карточку откроют, а
+    // это 107 КБ, которые раньше стояли в очереди перед расписанием.
+    loadTexts();
     // Пришёл по чужой реферальной ссылке кнопкой «Открыть»: код приехал
     // в start_param, и бота человек мог не видеть вовсе. Тем же концом
     // это ловит /start, но только когда открыли именно бота.
@@ -195,6 +206,7 @@ loadData()
     // Сюда попадаем, только если сломался сам запуск: справочник своё
     // отсутствие переживает молча.
     console.error(err);
+    reportOops(`запуск не удался: ${err.message}`, 'запуск');
     app.innerHTML = `
       <div class="screen">
         <div class="empty-state">

@@ -206,6 +206,30 @@ SCHEMA = [
     # нужна в базе, а не в счётчике «последнего id»: объявления приходят
     # по разным дисциплинам вперемешку, и «всё, что новее» о них сказать
     # нельзя. Хранится один номер — ни заголовка, ни текста.
+    # Поломки на стороне клиента. Строка на ОТПЕЧАТОК ошибки, а не на
+    # случай: одна и та же беда у двухсот человек — это одна запись со
+    # счётчиком, иначе первая же мелочь вытеснит из таблицы всё
+    # остальное. Личного тут не хранится: текст ошибки, экран, версия
+    # сборки; user_id — только последний, чтобы было кого переспросить.
+    """CREATE TABLE IF NOT EXISTS client_errors (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        fingerprint TEXT NOT NULL,
+        message     TEXT NOT NULL,
+        source      TEXT,
+        line        INTEGER,
+        stack       TEXT,
+        build       TEXT,
+        screen      TEXT,
+        platform    TEXT,
+        version     TEXT,
+        user_id     INTEGER,
+        count       INTEGER NOT NULL DEFAULT 1,
+        first_at    TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        last_at     TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )""",
+    "CREATE UNIQUE INDEX IF NOT EXISTS client_errors_key "
+    "ON client_errors(fingerprint)",
+    "CREATE INDEX IF NOT EXISTS client_errors_when ON client_errors(last_at)",
     # Приглашения по реферальной ссылке. Строка на ПРИГЛАШЁННОГО, а не
     # на пару: человек закрепляется за тем, по чьей ссылке пришёл первым,
     # и второй ссылкой его уже не перетянуть — иначе двое приглашающих

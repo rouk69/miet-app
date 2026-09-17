@@ -1240,6 +1240,52 @@ check("владельцу сторож отчитывается",
 
 notify.bind(None)
 
+print("\n15. Поломки на стороне клиента")
+from . import oops                                                 # noqa: E402
+
+# Одинаковые поломки складываются в одну строку со счётчиком: иначе
+# первая же мелочь у двухсот человек вытеснит из таблицы всё остальное.
+oops.forget()
+oops.report(10, {"message": "Не удалось загрузить пост 412",
+                 "source": "js/bundle.js", "line": 88, "screen": "news"})
+r = oops.report(20, {"message": "Не удалось загрузить пост 987",
+                     "source": "js/bundle.js", "line": 88, "screen": "news"})
+check("номер в тексте не плодит записей", r["count"] == 2, r)
+check("в списке одна строка", len(oops.recent()) == 1, oops.recent())
+check("а случаев два", oops.totals()["total"] == 2, oops.totals())
+oops.report(10, {"message": "Другая беда", "source": "js/bundle.js", "line": 5})
+check("разные поломки — разные строки", oops.totals()["kinds"] == 2,
+      oops.totals())
+check("пустое сообщение не пишется",
+      oops.report(10, {"message": "   "})["ok"] is False)
+check("свежая сверху", oops.recent()[0]["message"] == "Другая беда",
+      oops.recent()[0])
+
+# Помним последнего, кто поймал, — чтобы было кого переспросить.
+last = [e for e in oops.recent() if e["count"] == 2][0]
+check("запомнен последний пойманный", last["user_id"] == 20, last)
+check("экран записан", last["screen"] == "news", last)
+
+s, r = api.handle("POST", "/api/oops", {},
+                  {"message": "Экран tasks не открылся", "screen": "tasks",
+                   "build": "abc123"}, USER)
+check("клиент может сообщить о поломке", s == 200 and r["ok"], (s, r))
+s, r = api.handle("GET", "/api/admin/oops", {}, {}, ADMIN)
+check("владельцу список виден", s == 200 and r["totals"]["kinds"] == 3, r)
+s, _ = api.handle("GET", "/api/admin/oops", {}, {}, USER)
+check("постороннему — нет", s == 403, s)
+
+gone = oops.recent()[0]["id"]
+s, r = api.handle("POST", "/api/admin/oops", {}, {"id": gone}, ADMIN)
+check("разобранное стирается", s == 200 and r["gone"] == 1, r)
+s, r = api.handle("POST", "/api/admin/oops", {}, {}, ADMIN)
+check("и всё разом тоже", s == 200 and oops.totals()["kinds"] == 0, r)
+
+# Отчёт об ошибке не имеет права стать второй ошибкой.
+check("кривые данные переживаются",
+      oops.report(10, {"message": "Ок", "line": "не число"})["ok"] is True)
+oops.forget()
+
 print("\n" + "=" * 58)
 print(f"пройдено {ok}, провалено {fail}")
 print("=" * 58)

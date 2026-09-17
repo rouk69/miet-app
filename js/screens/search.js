@@ -2,7 +2,7 @@
 
 import { icon } from '../icons.js';
 import { esc, listCard, listRow, emptyState } from '../ui.js';
-import { data, settings, save } from '../store.js';
+import { data, settings, save, loadTexts, textOf } from '../store.js';
 import { go, switchTab } from '../router.js';
 import { haptic } from '../tg.js';
 import { screen } from './common.js';
@@ -37,7 +37,10 @@ function collect(q) {
     }
   }
   for (const a of data.news || []) {
-    if (hit(a.title) || hit(a.text)) {
+    // Полный текст новости лежит отдельным файлом; экран поиска ждёт
+    // его перед отрисовкой, так что к этому моменту он уже здесь. Если
+    // не приехал — ищем по заголовку: неполный поиск лучше пустого.
+    if (hit(a.title) || hit(textOf('news', a))) {
       out.push({ kind: 'article', ico: 'news', title: a.title, sub: a.date, id: a.id });
     }
     if (out.length > 60) break;
@@ -46,6 +49,11 @@ function collect(q) {
 }
 
 export default async function searchScreen() {
+  // Поиск идёт и по текстам новостей — дожидаемся их. Экран открывают
+  // осознанно, лишние полсекунды тут дешевле, чем поиск, который не
+  // находит очевидного.
+  await loadTexts();
+
   const node = screen({
     title: 'Поиск',
     subtitle: 'Пары, кружки, институты, новости',

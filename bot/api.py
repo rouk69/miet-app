@@ -30,7 +30,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
 from . import analytics, appconf, auth, directory, help_board, notify
-from . import orioks, orioks_watch, orioks_web, posts
+from . import oops, orioks, orioks_watch, orioks_web, posts
 from . import morning
 from . import paths, raffle, render, storage, uptime
 from . import webapp as webapp_watch
@@ -140,6 +140,14 @@ def handle(method: str, path: str, query: dict, body: dict, init_data: str):
 
     if path == "/api/me" and method == "GET":
         return 200, _me(user, me)
+
+    if path == "/api/oops" and method == "POST":
+        # Поломку принимаем от любого вошедшего и почти ничего с ней не
+        # делаем: складываем по отпечатку. Отказ в ответе не страшен —
+        # клиент на него не смотрит, у него и так уже что-то сломалось.
+        if me["blocked"]:
+            return 200, {"ok": False}
+        return 200, oops.report(uid, body)
 
     if path == "/api/track" and method == "POST":
         return _track(user, me, body)
@@ -791,6 +799,15 @@ def _admin(path: str, method: str, query: dict, body: dict, uid: int, me: dict):
 
     if not analytics.can(me, "stats"):
         return 403, {"error": "Нет доступа"}
+
+    if path == "/api/admin/oops":
+        # Смотреть поломки может тот, кому открыта статистика: это не
+        # данные людей, а состояние приложения.
+        if not analytics.can(me, "stats"):
+            return 403, {"error": "Нужно право видеть статистику"}
+        if method == "POST":
+            return 200, {"gone": oops.forget(int(body.get("id") or 0))}
+        return 200, {"errors": oops.recent(), "totals": oops.totals()}
 
     if path == "/api/admin/raffle":
         return _admin_raffle(path, method, query, body, me)
