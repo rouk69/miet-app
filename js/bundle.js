@@ -1,5 +1,5 @@
 /* Собрано tools/stamp.py из js/*.js — не правьте здесь.
-   Версия 20959d9a. Исходники лежат рядом и остаются модулями. */
+   Версия 4cada2c1. Исходники лежат рядом и остаются модулями. */
 var __mod = {};
 /* ==== js\config.js ==== */
 __mod['js/config.js'] = (function () {
@@ -78,7 +78,7 @@ const API_BASE = base;
 // свежую ли страницу открыл человек: Telegram кеширует мини-приложения
 // по своим правилам, и «у меня ничего не поменялось» разбирается
 // сравнением этой строки, а не на слово.
-const BUILD = '20959d9a';
+const BUILD = '4cada2c1';
 
 return {'apiBase': apiBase, 'fallBackToHome': fallBackToHome, 'API_BASE': API_BASE, 'BUILD': BUILD};
 })();
@@ -883,11 +883,11 @@ function supports(minVersion) {
   return Boolean(tg?.isVersionAtLeast?.(minVersion));
 }
 
-// Свободное место сверху и снизу отдаёт сам Telegram: системная
-// safe-area (вырез, полоса жестов) и отступ под тем, что клиент рисует
-// поверх содержимого. В обычном режиме второе почти всегда ноль, но
-// складываем оба — иначе на клиенте, который считает иначе, нижняя
-// панель сядет на полосу жестов.
+// В полноэкранном режиме контент уходит под статусбар и под пилюли
+// Telegram, поэтому складываем системный отступ (вырез, полоса жестов)
+// и contentSafeAreaInset — то место, которое клиент занял своими
+// кнопками. Из этой суммы `.screen` берёт верхний отступ, и заголовок
+// экрана под пилюли не залезает.
 function applySafeArea() {
   if (!tg) return;
   const sys = tg.safeAreaInset || { top: 0, bottom: 0 };
@@ -907,21 +907,39 @@ function syncChrome(theme) {
   document.querySelector('meta[name="theme-color"]')?.setAttribute('content', color);
 }
 
-// Обычный режим, а не полноэкранный. В полноэкранном Telegram убирает
-// свою полосу и кладёт «закрыть», «свернуть» и «меню» накладными
-// пилюлями поверх содержимого — приложение перестаёт выглядеть частью
-// переписки с ботом, и привычных кнопок человек не находит. Поэтому
-// шапку клиента оставляем ему: она несёт имя бота, «свернуть» и
-// «закрыть» там, где их ищут.
+// Полный экран вместо полосы Telegram.
 //
-// Выход зовётся на случай, когда клиент открыл нас полноэкранными сам:
-// Telegram помнит режим в пределах сессии, и мини-приложение, однажды
-// развёрнутое прежней сборкой, открылось бы так и после обновления.
-function leaveFullscreen() {
-  if (!tg?.isFullscreen || !tg?.exitFullscreen) return;
+// В обычном режиме клиент рисует сверху свою полосу с именем бота и
+// отчёркивает её линией — снаружи это выглядит рамкой вокруг чужой
+// страницы, вставленной в переписку. В полноэкранном полосы нет, а
+// «закрыть», «свернуть» и «меню» лежат накладными пилюлями поверх
+// содержимого: приложение выглядит приложением, а не сайтом в окне.
+// Кнопки при этом никуда не деваются — они те же, просто без рамки.
+//
+// Отступ под пилюли приходит в contentSafeAreaInset и складывается с
+// системным в --tg-safe-top (см. applySafeArea), из которого `.screen`
+// берёт верхний отступ. Поэтому заголовок экрана и круглые кнопки
+// рядом с ним под пилюли не залезают.
+//
+// Только мобильные клиенты: на десктопе мини-приложение и так в своём
+// окне, и полноэкранный режим там либо не поддержан, либо разворачивает
+// окно на весь монитор — ни то ни другое не нужно.
+const DESKTOP = ['tdesktop', 'macos', 'web', 'weba', 'webk', 'unknown'];
+
+function goFullscreen() {
+  if (!supports('8.0') || !tg?.requestFullscreen) return;
+  if (DESKTOP.includes(tg.platform)) return;
   try {
-    tg.exitFullscreen();
-  } catch { /* клиент не умеет — значит он и не разворачивал */ }
+    tg.requestFullscreen();
+  } catch { /* клиент отказал — остаёмся в обычном режиме */ }
+}
+
+// Чем стилям отличить один режим от другого: в полноэкранном пилюли
+// Telegram лежат поверх нашего первого экрана.
+function markFullscreen() {
+  document.documentElement.classList.toggle('tg-fullscreen',
+    Boolean(tg?.isFullscreen));
+  applySafeArea();
 }
 
 function initTelegram(theme = 'light', onThemeChange = null) {
@@ -934,9 +952,13 @@ function initTelegram(theme = 'light', onThemeChange = null) {
     tg.disableVerticalSwipes?.();
     syncChrome(theme);
     applySafeArea();
-    leaveFullscreen();
+    goFullscreen();
     tg.onEvent?.('safeAreaChanged', applySafeArea);
     tg.onEvent?.('contentSafeAreaChanged', applySafeArea);
+    tg.onEvent?.('fullscreenChanged', markFullscreen);
+    // Отказ тоже событие: клиент старый или режим запрещён — тогда
+    // живём в обычном, и пометки на странице быть не должно.
+    tg.onEvent?.('fullscreenFailed', markFullscreen);
     // Человек может переключить тему Telegram, не закрывая мини-апп.
     // Кто на это откликается, решает вызывающий: у него настройки.
     if (onThemeChange) tg.onEvent?.('themeChanged', onThemeChange);
