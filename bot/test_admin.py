@@ -1174,6 +1174,18 @@ check("то, чего на сайте нет, из API не стирается",
 check("сумма по предмету пересчитана", mat["current_grade"] == 15, mat["current_grade"])
 check("и максимум по оценённому тоже", mat["max_grade"] == 20, mat["max_grade"])
 check("счётчик сданного пересчитан", data["done"] == 2, data["done"])
+
+# Одноимённые точки: у языка «КМ» на 6-й и 12-й неделе, балл есть только
+# у первой. По одному названию он приклеивался ко второй (живой случай).
+twins = {"disciplines": [{"id": 9, "name": "Язык", "events": [
+    {"alias": "", "name": "КМ", "week": 6, "grade": None, "done": False, "max_grade": 10},
+    {"alias": "", "name": "КМ", "week": 12, "grade": None, "done": False, "max_grade": 10},
+]}]}
+orioks.with_web_grades(twins, [{"discipline": "Язык", "sh": "", "name": "КМ",
+                                "week": 6, "ball": 0.7, "max": 10}])
+ev = twins["disciplines"][0]["events"]
+check("балл одноимённой точки не уезжает на соседнюю",
+      ev[0]["grade"] == 0.7 and ev[1]["grade"] is None, ev)
 for e, g in zip(EVENTS7, _saved7):
     e["current_grade"] = g
 
