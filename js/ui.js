@@ -142,8 +142,28 @@ export function sheet({ title, body, onMount, cancel = 'Отмена', height })
 
   layer().append(backdrop, node);
   document.body.style.overflow = 'hidden';
+  fitSheetTitle(node.querySelector('.sheet-header'));
   onMount?.(node.querySelector('.sheet-body'), close);
   return { close, node };
+}
+
+/**
+ * Название шторки рядом с кнопкой «Закрыть» или под ней.
+ *
+ * Кнопка стоит слева поверх шапки, а название центрируется по всей
+ * ширине — длинное («Физика. Механика. Термодинамика…») наезжало прямо
+ * на кнопку. Помещается между кнопкой и зеркальным отступом справа —
+ * остаётся по центру; нет — шапка перестраивается: кнопка сверху,
+ * название под ней крупно во всю ширину. Мерить приходится на месте:
+ * что влезает на 390 пикселях, на 320 уже нет.
+ */
+export function fitSheetTitle(header) {
+  if (!header) return;
+  const cancel = header.querySelector('.sheet-cancel');
+  const title = header.querySelector('.sheet-title');
+  if (!cancel || !title) return;
+  const room = header.clientWidth - 2 * (cancel.offsetLeft + cancel.offsetWidth + 8);
+  header.classList.toggle('long', title.scrollWidth > room);
 }
 
 /** Короткое всплывающее сообщение по центру снизу. */

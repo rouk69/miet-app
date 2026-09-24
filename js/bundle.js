@@ -1,5 +1,5 @@
 /* Собрано tools/stamp.py из js/*.js — не правьте здесь.
-   Версия 2ac347cd. Исходники лежат рядом и остаются модулями. */
+   Версия 6ce2a13b. Исходники лежат рядом и остаются модулями. */
 var __mod = {};
 /* ==== js\config.js ==== */
 __mod['js/config.js'] = (function () {
@@ -85,7 +85,7 @@ const API_BASE = base;
 // свежую ли страницу открыл человек: Telegram кеширует мини-приложения
 // по своим правилам, и «у меня ничего не поменялось» разбирается
 // сравнением этой строки, а не на слово.
-const BUILD = '2ac347cd';
+const BUILD = '6ce2a13b';
 
 return {'apiBase': apiBase, 'fallBackToHome': fallBackToHome, 'API_BASE': API_BASE, 'BUILD': BUILD};
 })();
@@ -898,8 +898,28 @@ function sheet({ title, body, onMount, cancel = 'Отмена', height }) {
 
   layer().append(backdrop, node);
   document.body.style.overflow = 'hidden';
+  fitSheetTitle(node.querySelector('.sheet-header'));
   onMount?.(node.querySelector('.sheet-body'), close);
   return { close, node };
+}
+
+/**
+ * Название шторки рядом с кнопкой «Закрыть» или под ней.
+ *
+ * Кнопка стоит слева поверх шапки, а название центрируется по всей
+ * ширине — длинное («Физика. Механика. Термодинамика…») наезжало прямо
+ * на кнопку. Помещается между кнопкой и зеркальным отступом справа —
+ * остаётся по центру; нет — шапка перестраивается: кнопка сверху,
+ * название под ней крупно во всю ширину. Мерить приходится на месте:
+ * что влезает на 390 пикселях, на 320 уже нет.
+ */
+function fitSheetTitle(header) {
+  if (!header) return;
+  const cancel = header.querySelector('.sheet-cancel');
+  const title = header.querySelector('.sheet-title');
+  if (!cancel || !title) return;
+  const room = header.clientWidth - 2 * (cancel.offsetLeft + cancel.offsetWidth + 8);
+  header.classList.toggle('long', title.scrollWidth > room);
 }
 
 /** Короткое всплывающее сообщение по центру снизу. */
@@ -950,7 +970,7 @@ function contactRows({ lead, phone, inner, email, room, address, site }) {
   return rows.length ? listCard(rows) : '';
 }
 
-return {'esc': esc, 'el': el, '$': $, '$$': $$, 'on': on, 'iconTile': iconTile, 'listRow': listRow, 'listCard': listCard, 'pillRow': pillRow, 'segmented': segmented, 'bindChoice': bindChoice, 'emptyState': emptyState, 'toggle': toggle, 'kpi': kpi, 'skeleton': skeleton, 'sheet': sheet, 'toast': toast, 'lightbox': lightbox, 'contactRows': contactRows};
+return {'esc': esc, 'el': el, '$': $, '$$': $$, 'on': on, 'iconTile': iconTile, 'listRow': listRow, 'listCard': listCard, 'pillRow': pillRow, 'segmented': segmented, 'bindChoice': bindChoice, 'emptyState': emptyState, 'toggle': toggle, 'kpi': kpi, 'skeleton': skeleton, 'sheet': sheet, 'fitSheetTitle': fitSheetTitle, 'toast': toast, 'lightbox': lightbox, 'contactRows': contactRows};
 })();
 
 /* ==== js\api.js ==== */

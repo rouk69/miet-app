@@ -490,6 +490,34 @@ input, textarea, select {
 .sheet-title {
   font-size: 17px;
   font-weight: 700;
+  /* В одну строку — так её ширину можно честно измерить (fitSheetTitle). */
+  white-space: nowrap;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Длинное название: кнопка сверху, название под ней во всю ширину. */
+.sheet-header.long {
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-start;
+  gap: 8px;
+  padding-top: 6px;
+}
+
+.sheet-header.long .sheet-cancel { position: static; }
+
+.sheet-header.long .sheet-title {
+  font-size: 21px;
+  font-weight: 800;
+  line-height: 1.2;
+  letter-spacing: -0.2px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
 }
 
 .sheet-cancel {
@@ -585,7 +613,7 @@ input, textarea, select {
 
 .kpi-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 10px;
 }
 
