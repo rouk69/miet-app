@@ -7,7 +7,7 @@ import { art, artState } from '../art.js';
 import { settings, save } from '../store.js';
 import {
   fetchSchedule, weekOfCycle, slotsOf, dayCounts, mondayOf, shortSemestr,
-  gapsOf, humanGap, weekName, DAY_SHORT, DAY_NAMES,
+  gapsOf, humanGap, weekName, WEEK_SHORT, weekRange, studyWeek, aheadTo, DAY_SHORT, DAY_NAMES,
 } from '../schedule.js';
 import { refresh } from '../router.js';
 import { haptic, hapticSelect } from '../tg.js';
@@ -100,6 +100,7 @@ export function lessonRow(l, now = null, showState = true) {
       <div class="lesson-time">
         <div class="lesson-from">${esc(l.from)}</div>
         <div class="lesson-to">${esc(l.to)}</div>
+        ${l.altFrom ? `<div class="lesson-alt">или ${esc(l.altFrom)}</div>` : ''}
       </div>
       ${badge}
       <div class="lesson-body">
@@ -156,20 +157,19 @@ export default async function scheduleScreen(params = {}) {
 
   const curWeek = weekOfCycle(now, sched.semestr, settings.weekShift);
   const todayDay = ((now.getDay() + 6) % 7) + 1;
-  let week = params.week ?? curWeek;
+  // Неделя — это сдвиг от текущей: стрелками можно уйти и в следующий цикл,
+  // а даты при этом честно идут дальше, а не возвращаются к началу круга.
+  let off = params.week != null ? aheadTo(params.week, curWeek) : 0;
+  let week = (curWeek + off) % 4;
   let day = params.day ?? (todayDay <= 6 ? todayDay : 1);
+  const mondayAt = o => { const m = mondayOf(now); m.setDate(m.getDate() + o * 7); return m; };
 
   const node = screen({
     title: 'Расписание',
     subtitle: `${settings.group} · ${shortSemestr(sched.semestr)}`,
     actions: iconBtn('refresh', 'reload') + iconBtn('sliders', 'group'),
     body: `
-      <div class="pill-row" id="weeks">
-        ${[0, 1, 2, 3].map(w => `
-          <button class="pill ${w === week ? 'active' : ''}" data-week="${w}">
-            ${weekName(w)}${w === curWeek ? ' · сейчас' : ''}
-          </button>`).join('')}
-      </div>
+      <div class="wk" id="weeks"></div>
       <div class="week-strip" id="days"></div>
       <div id="stale"></div>
       <div id="list" class="stack" style="margin-top:16px"></div>`,
@@ -189,10 +189,39 @@ export default async function scheduleScreen(params = {}) {
       : '';
   }
 
+  /**
+   * Карточка недели: официальное имя крупно, даты и номер учебной недели
+   * под ним, стрелки по краям; ниже — четыре одинаковые ячейки цикла.
+   * Всё умещается в ширину самого узкого телефона — ничего не уезжает.
+   */
+  function drawWeeks() {
+    const mon = mondayAt(off);
+    const n = studyWeek(mon, sched.semestr);
+    const when = off === 0 ? 'сейчас' : off === 1 ? 'следующая' : off === -1 ? 'прошлая'
+      : off > 0 ? `через ${off} нед.` : `${-off} нед. назад`;
+    node.querySelector('#weeks').innerHTML = `
+      <div class="wk-head">
+        <button class="wk-arrow" data-step="-1" aria-label="Предыдущая неделя">${icon('chevronLeft', 20)}</button>
+        <div class="wk-title">
+          <div class="wk-name">${esc(weekName(week))}</div>
+          <div class="wk-sub">
+            <span class="wk-when ${off === 0 ? 'now' : ''}">${esc(when)}</span>
+            <span>${esc(weekRange(mon))}</span>${n ? `<span>${n}-я уч. неделя</span>` : ''}
+          </div>
+        </div>
+        <button class="wk-arrow" data-step="1" aria-label="Следующая неделя">${icon('chevronRight', 20)}</button>
+      </div>
+      <div class="wk-seg">
+        ${WEEK_SHORT.map(([a, b], w) => `
+          <button class="wk-cell ${w === week ? 'active' : ''} ${w === curWeek ? 'cur' : ''}" data-week="${w}">
+            <span class="wk-n">${a}</span><span class="wk-k">${b}</span>
+          </button>`).join('')}
+      </div>`;
+  }
+
   function drawDays() {
     const counts = dayCounts(sched, week);
-    const mon = mondayOf(now);
-    mon.setDate(mon.getDate() + (week - curWeek) * 7);
+    const mon = mondayAt(off);
     daysEl.innerHTML = [1, 2, 3, 4, 5, 6].map(d => {
       const date = new Date(mon);
       date.setDate(mon.getDate() + d - 1);
@@ -209,10 +238,22 @@ export default async function scheduleScreen(params = {}) {
 
   function drawList() {
     const items = slotsOf(sched, week, day);
-    const mon = mondayOf(now);
-    mon.setDate(mon.getDate() + (week - curWeek) * 7 + day - 1);
+    const mon = mondayAt(off);
+    mon.setDate(mon.getDate() + day - 1);
     const isToday = mon.toDateString() === now.toDateString();
+    // Спросить про обед стоит только там, где он что-то меняет: в дне
+    // есть 3-я пара, а группа ещё не сказала, когда у неё перерыв.
+    const ask = !sched.lunch && items.some(s => s.pair === 3 && s.altFrom);
     listEl.innerHTML = `
+      ${ask ? `
+        <div class="lunch-ask">
+          <div class="lunch-title">${icon('utensils', 17)} Когда у группы обед?</div>
+          <div class="lunch-note">От этого зависит начало 3-й пары. Сайт МИЭТ пишет всем 12:00 — выбери, как у вас:</div>
+          <div class="lunch-opts">
+            <button class="lunch-opt" data-lunch="after3"><b>После 3-й пары</b><span>3-я в 12:00–13:20</span></button>
+            <button class="lunch-opt" data-lunch="after2"><b>После 2-й пары</b><span>3-я в 12:30–13:50</span></button>
+          </div>
+        </div>` : ''}
       <div class="section-head" style="margin:0 2px 2px">
         <div class="section-title">${DAY_NAMES[day]}</div>
         <span class="muted" style="font-size:14px;font-weight:600">${shortDate(mon)}</span>
@@ -229,27 +270,37 @@ export default async function scheduleScreen(params = {}) {
         </div>` : ''}`;
   }
 
+  drawWeeks();
   drawDays();
   drawList();
   drawStale();
 
-  // Четыре недели с полными названиями в ширину телефона не влезают:
-  // выбранную прокручиваем в поле зрения, иначе «2-й знаменатель» уезжает за край.
-  const weeksEl = node.querySelector('#weeks');
-  requestAnimationFrame(() => {
-    const a = weeksEl.querySelector('.pill.active');
-    if (a) weeksEl.scrollLeft = Math.max(0, a.offsetLeft - weeksEl.offsetLeft - 16);
-  });
-
   node.querySelector('#weeks').addEventListener('click', e => {
-    const b = e.target.closest('[data-week]');
-    if (!b) return;
-    week = +b.dataset.week;
+    const step = e.target.closest('[data-step]');
+    const cell = e.target.closest('[data-week]');
+    if (!step && !cell) return;
+    // Ячейка ведёт к ближайшей такой неделе (текущая — к «сейчас»),
+    // стрелки листают по одной, в том числе в соседний цикл.
+    if (step) off += +step.dataset.step;
+    else off = aheadTo(+cell.dataset.week, curWeek);
+    week = (((curWeek + off) % 4) + 4) % 4;
     hapticSelect();
-    node.querySelectorAll('#weeks .pill').forEach(p => p.classList.remove('active'));
-    b.classList.add('active');
+    drawWeeks();
     drawDays();
     drawList();
+  });
+
+  listEl.addEventListener('click', async e => {
+    const b = e.target.closest('[data-lunch]');
+    if (!b) return;
+    save({ lunch: { ...(settings.lunch || {}), [settings.group]: b.dataset.lunch } });
+    hapticSelect();
+    // Перечитываем из своей копии (поправка кладётся при выдаче) и
+    // перерисовываем на месте — выбранные неделя и день остаются.
+    try { sched = await fetchSchedule(settings.group); } catch { /* останется как было */ }
+    drawDays();
+    drawList();
+    toast('Запомнил — время 3-й пары поправлено');
   });
 
   daysEl.addEventListener('click', e => {

@@ -11,6 +11,7 @@
 // как ошибка приложения.
 
 import { API_BASE, apiBase } from './config.js';
+import { settings } from './store.js';
 
 const API = 'https://miet.ru/schedule/data';
 const CACHE_KEY = g => `miet-sched:${g}`;
@@ -27,6 +28,37 @@ export const DAY_SHORT = ['', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
  */
 export const WEEK_NAMES = ['1-й числитель', '1-й знаменатель', '2-й числитель', '2-й знаменатель'];
 export const weekName = w => WEEK_NAMES[((w % 4) + 4) % 4];
+
+/** Короткие подписи для переключателя: полные в четыре ячейки не влезают. */
+export const WEEK_SHORT = [['1-й', 'числ.'], ['1-й', 'знам.'], ['2-й', 'числ.'], ['2-й', 'знам.']];
+
+const MONTHS_GEN = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля',
+  'августа', 'сентября', 'октября', 'ноября', 'декабря'];
+const MONTHS_SHORT = ['янв.', 'февр.', 'марта', 'апр.', 'мая', 'июня', 'июля',
+  'авг.', 'сент.', 'окт.', 'нояб.', 'дек.'];
+
+/** «21–26 сентября» или «28 сент. – 3 окт.» — учебная неделя с понедельника по субботу. */
+export function weekRange(monday) {
+  const sat = new Date(monday);
+  sat.setDate(sat.getDate() + 5);
+  if (sat.getMonth() === monday.getMonth()) {
+    return `${monday.getDate()}–${sat.getDate()} ${MONTHS_GEN[sat.getMonth()]}`;
+  }
+  return `${monday.getDate()} ${MONTHS_SHORT[monday.getMonth()]} – ${sat.getDate()} ${MONTHS_SHORT[sat.getMonth()]}`;
+}
+
+/** Номер учебной недели семестра (1, 2, …) для даты; до начала семестра — 0. */
+export function studyWeek(date, semestr) {
+  const start = mondayOf(semesterStart(semestr));
+  const n = Math.round((mondayOf(date) - start) / (7 * 86400000)) + 1;
+  return Math.max(0, n);
+}
+
+/**
+ * Через сколько недель ближайшая неделя цикла `w`, если сейчас `cur`: 0..3.
+ * Нажимая «1-й числ.», человек хочет ближайший, а не прошедший.
+ */
+export const aheadTo = (w, cur) => (((w - cur) % 4) + 4) % 4;
 
 /** Ставит дату на понедельник её недели (воскресенье относим к прошедшей). */
 export function mondayOf(date) {
@@ -245,7 +277,7 @@ async function load(group, force) {
   const cacheKey = CACHE_KEY(group);
   const copy = saved(group);
   if (!force && copy && Date.now() - copy.at < TTL) {
-    return { ...copy.data, cached: true };
+    return withLunch({ ...copy.data, cached: true }, lunchOf(group));
   }
 
   const data = await race(group);
@@ -254,12 +286,12 @@ async function load(group, force) {
     try {
       localStorage.setItem(cacheKey, JSON.stringify({ at: Date.now(), data }));
     } catch { /* переполнение хранилища — работаем без копии */ }
-    return { ...data, cached: false };
+    return withLunch({ ...data, cached: false }, lunchOf(group));
   }
 
   if (copy) {
     console.warn('расписание не обновилось, показываю сохранённое');
-    return { ...copy.data, cached: true, stale: true, why: lastWhy };
+    return withLunch({ ...copy.data, cached: true, stale: true, why: lastWhy }, lunchOf(group));
   }
 
   // Показывать нечего. Сообщение делаем человеческим: «Failed to fetch»
@@ -268,6 +300,35 @@ async function load(group, force) {
     ? 'Нет сети — расписание берётся с miet.ru'
     : `Расписание не пришло (${lastWhy || 'оба источника молчат'})`);
 }
+
+/**
+ * Третья пара и обед.
+ *
+ * Обед в МИЭТ — 40 минут, и начинается он либо после 2-й пары (11:50),
+ * либо после 3-й (13:20) — так в справочнике первокурсника
+ * (privet-miet.ru/faq). Значит, у 3-й пары два времени: 12:00–13:20 или
+ * 12:30–13:50, а 4-я в обоих случаях с 14:00. Сайт МИЭТ отдаёт всем
+ * 12:00 и не говорит, у какой группы какой обед, — его выбирает человек.
+ * Не выбрал — показываем время сайта с пометкой «или 12:30».
+ */
+export const LUNCH_THIRD = { after3: ['12:00', '13:20'], after2: ['12:30', '13:50'] };
+
+export function withLunch(sched, lunch) {
+  if (!sched || !Array.isArray(sched.lessons)) return sched;
+  const t = LUNCH_THIRD[lunch] || null;
+  // Правим только то, что пришло во времени сайта: чужое время не трогаем.
+  const fix = l => (l.pair === 3 && l.from === '12:00'
+    ? { ...l, ...(t ? { from: t[0], to: t[1] } : { altFrom: '12:30' }) } : l);
+  return {
+    ...sched,
+    lessons: sched.lessons.map(fix),
+    times: (sched.times || []).map(x => (x.code === 3 && t && x.from === '12:00'
+      ? { ...x, from: t[0], to: t[1] } : x)),
+    lunch: t ? lunch : null,
+  };
+}
+
+const lunchOf = group => (settings.lunch || {})[group] || null;
 
 /** Все записи расписания на конкретный день конкретной недели цикла. */
 export const lessonsOf = (sched, week, day) =>
@@ -285,7 +346,7 @@ export function slotsOf(sched, week, day) {
   const byPair = new Map();
   for (const l of lessonsOf(sched, week, day)) {
     if (!byPair.has(l.pair)) {
-      byPair.set(l.pair, { pair: l.pair, from: l.from, to: l.to, entries: [] });
+      byPair.set(l.pair, { pair: l.pair, from: l.from, to: l.to, altFrom: l.altFrom, entries: [] });
     }
     byPair.get(l.pair).entries.push(l);
   }
