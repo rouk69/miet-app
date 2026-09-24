@@ -8,7 +8,7 @@
 
   <link rel="stylesheet" href="css/fonts.css?v=257a7fa0">
   <link rel="stylesheet" href="css/tokens.css?v=adccc554">
-  <link rel="stylesheet" href="css/app.css?v=13ff7266">
+  <link rel="stylesheet" href="css/app.css?v=03390566">
 
   <link rel="preload" href="fonts/manrope-700-cyrillic.woff2" as="font"
         type="font/woff2" crossorigin>
@@ -37,7 +37,7 @@
   <!-- Приложение собрано в один файл (tools/stamp.py): те же
        модули, но одним походом по сети вместо тридцати двух.
        Исходники лежат рядом и остаются модулями — правят их. -->
-  <link rel="modulepreload" href="js/bundle.js?v=388103ee">
+  <link rel="modulepreload" href="js/bundle.js?v=c7a78147">
   <!-- /карта модулей -->
 </head>
 <body>
@@ -52,7 +52,7 @@
   <div id="layer"></div>
 
   <!-- точка входа -->
-  <script type="module" src="js/bundle.js?v=388103ee"></script>
+  <script type="module" src="js/bundle.js?v=c7a78147"></script>
   <!-- Сборка не выполнилась — подключаем исходные модули:
        белый экран хуже лишнего запроса. -->
   <script>
@@ -60,7 +60,7 @@
       if (window.__mietBooted) return;
       var s = document.createElement('script');
       s.type = 'module';
-      s.src = 'js/app.js?v=388103ee';
+      s.src = 'js/app.js?v=c7a78147';
       document.body.appendChild(s);
     }, 2000);
   </script>

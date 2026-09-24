@@ -433,8 +433,7 @@ function disciplineSheet(d, recent) {
         </div>
         <div class="perf-bar" style="margin-top:10px"><i style="width:${s.share}%"></i></div>
         ${s.next ? `<div class="row-subtitle" style="margin-top:8px">
-          До «${esc(s.next.label)}» не хватает ${num(s.next.left)} б. —
-          пороги оценок ориентировочные.</div>` : ''}
+          До «${esc(s.next.label)}» не хватает ${num(s.next.left)} б.</div>` : ''}
         ${(d.teachers || []).length ? `<div class="row-subtitle" style="margin-top:8px">
           ${icon('teacher', 14)} ${esc(d.teachers.join(', '))}</div>` : ''}
       </div>
@@ -456,6 +455,138 @@ function disciplineSheet(d, recent) {
           </div>`;
   }).join('')}
       </div>`,
+  });
+}
+
+// ─────────────── сдача работ (фундамент, только владелец) ───────────────
+
+/**
+ * Сдача работ в ОРИОКС. В ОРИОКС это «обращения»: работа уходит
+ * преподавателю, дальше переписка со статусами. Пока без файлов —
+ * протокол загрузки ещё не разобран — и открыто только владельцу: сервер
+ * отдаёт `homework_beta` лишь ему, маршрут остальным отвечает 404.
+ */
+async function loadHomework(box) {
+  if (!box || box.dataset.loaded) return;
+  box.dataset.loaded = '1';
+  box.innerHTML = '<div class="skeleton" style="height:120px"></div>';
+  let hw;
+  try {
+    hw = await get('/api/orioks/homework', { timeout: 30000 });
+  } catch (err) {
+    delete box.dataset.loaded;
+    box.innerHTML = `<div class="card" style="padding:16px">
+      <div class="row-subtitle">${esc(err.message)}</div></div>`;
+    return;
+  }
+  if (!hw.web) {
+    box.innerHTML = `<div class="card" style="padding:16px">
+      <div class="row-subtitle">${esc(hw.error || 'Нужен вход на сайт ОРИОКС')}</div></div>`;
+    return;
+  }
+  const threads = hw.threads || [];
+  box.innerHTML = `
+    <p class="section-note" style="margin-top:0">
+      Бета — видно только тебе. Работа уходит преподавателю по-настоящему,
+      как с сайта ОРИОКС. Файлы пока не прикладываются.
+    </p>
+    <button class="btn-primary" id="hw-new">Отправить работу</button>
+    <div class="section-head">
+      <div class="section-title">Мои обращения</div>
+    </div>
+    ${threads.length ? `<div class="list-card">${threads.map(t => `
+      <div class="todo ${t.href ? 'tap' : ''}" ${t.href ? `data-hw-open="${esc(t.href)}"` : ''}>
+        <div class="todo-main">
+          <div class="todo-subject">${esc(t.discipline || 'Дисциплина')}</div>
+          <div class="todo-what">${esc([t.title, t.event].filter(Boolean).join(' · '))}</div>
+        </div>
+        <div class="todo-side">
+          <div class="todo-when">${esc(t.status || '')}</div>
+          <div class="todo-left">${t.new ? `новых: ${t.new}` : esc(t.created || '')}</div>
+        </div>
+      </div>`).join('')}</div>`
+    : emptyState('Обращений пока нет', 'inbox')}`;
+
+  box.querySelector('#hw-new').addEventListener('click', () => homeworkSheet(hw.form, box));
+  box.addEventListener('click', e => {
+    const row = e.target.closest('[data-hw-open]');
+    // Переписку пока открываем в самом ОРИОКС: страницу обращения ещё
+    // не видели вживую — у владельца не было ни одного.
+    if (row) openLink('https://orioks.miet.ru' + row.dataset.hwOpen);
+  });
+}
+
+function homeworkSheet(form, box) {
+  const discs = (form && form.disciplines) || [];
+  const option = (v, t) => `<option value="${esc(String(v))}">${esc(t)}</option>`;
+  sheet({
+    title: 'Отправить работу',
+    height: '82vh',
+    body: `
+      <div class="field-group">
+        <div class="field-label">Дисциплина</div>
+        <select class="field-input" id="hw-dis">
+          ${discs.map(d => option(d.id, d.name)).join('')}
+        </select>
+      </div>
+      <div class="field-group">
+        <div class="field-label">Контрольное мероприятие</div>
+        <select class="field-input" id="hw-km"></select>
+      </div>
+      <div class="field-group">
+        <div class="field-label">Тип работы</div>
+        <select class="field-input" id="hw-type">
+          ${((form && form.types) || []).map(t => option(t.id, t.name)).join('')}
+        </select>
+      </div>
+      <div class="field-group">
+        <div class="field-label">Название — можно пусто</div>
+        <input class="field-input" id="hw-title" maxlength="200">
+      </div>
+      <div class="field-group">
+        <div class="field-label">Вариант — до пяти символов</div>
+        <input class="field-input" id="hw-variant" maxlength="5">
+      </div>
+      <div class="field-group">
+        <div class="field-label">Описание</div>
+        <textarea class="field-input" id="hw-msg" rows="5" maxlength="5000"
+          placeholder="Что сдаёшь и что важно знать преподавателю"></textarea>
+      </div>
+      <button class="btn-primary" id="hw-send" style="margin-top:12px">Отправить</button>`,
+    onMount(root, close) {
+      const dis = root.querySelector('#hw-dis');
+      const km = root.querySelector('#hw-km');
+      const fillKm = () => {
+        const d = discs.find(x => String(x.id) === dis.value);
+        km.innerHTML = ((d && d.events) || []).map(e => option(e.id, e.name)).join('');
+      };
+      dis.addEventListener('change', fillKm);
+      fillKm();
+      root.querySelector('#hw-send').addEventListener('click', async e => {
+        const btn = e.currentTarget;
+        const body = {
+          dis_id: +dis.value, km_id: +km.value,
+          type: +root.querySelector('#hw-type').value,
+          title: root.querySelector('#hw-title').value,
+          variant: root.querySelector('#hw-variant').value,
+          message: root.querySelector('#hw-msg').value,
+        };
+        if (!body.message.trim()) return toast('Напиши описание');
+        if (!await confirmDialog('Отправить работу преподавателю в ОРИОКС? Это по-настоящему.')) return;
+        btn.disabled = true;
+        try {
+          await post('/api/orioks/homework', { ...body, confirm: true }, { timeout: 30000 });
+          hapticNotify('success');
+          toast('Отправлено в ОРИОКС');
+          close();
+          delete box.dataset.loaded;
+          loadHomework(box);
+        } catch (err) {
+          toast(err.message);
+          btn.disabled = false;
+        }
+      });
+    },
   });
 }
 
@@ -532,7 +663,8 @@ export default async function tasksScreen() {
   // откроются «Дела».
   let tab = 'todo';
   try { tab = localStorage.getItem('miet-tasks-tab') || 'todo'; } catch { /* нет памяти */ }
-  if (tab !== 'perf') tab = 'todo';
+  const hwBeta = data.homework_beta === true;
+  if (tab !== 'perf' && !(tab === 'hw' && hwBeta)) tab = 'todo';
 
   const node = screen({
     title: 'Задания',
@@ -545,6 +677,8 @@ export default async function tasksScreen() {
         <button class="pill ${tab === 'perf' ? 'active' : ''}" data-tab="perf">
           Успеваемость${fresh.length ? ` · ${fresh.length} нов.` : ''}
         </button>
+        ${hwBeta ? `<button class="pill ${tab === 'hw' ? 'active' : ''}" data-tab="hw">
+          Сдача</button>` : ''}
       </div>
 
       <div id="tab-todo" ${tab === 'todo' ? '' : 'hidden'}>
@@ -659,12 +793,14 @@ export default async function tasksScreen() {
         </div>
         <p class="section-note">
           Сумма баллов за семестр из ОРИОКС. Нажми на предмет — покажу все
-          контрольные точки. Пороги оценок — ориентир.
+          контрольные точки.
         </p>
         <div class="list-card">
           ${data.tasks.disciplines.map(perfRow).join('')}
         </div>
       </div>
+
+      ${hwBeta ? `<div id="tab-hw" ${tab === 'hw' ? '' : 'hidden'}></div>` : ''}
 
       <div class="list-card watch-card" style="margin-top:16px">
         <div class="list-row">
@@ -772,7 +908,13 @@ export default async function tasksScreen() {
       p => p.classList.toggle('active', p.dataset.tab === id));
     node.querySelector('#tab-todo').hidden = id !== 'todo';
     node.querySelector('#tab-perf').hidden = id !== 'perf';
+    const hw = node.querySelector('#tab-hw');
+    if (hw) {
+      hw.hidden = id !== 'hw';
+      if (id === 'hw') loadHomework(hw);
+    }
   };
+  if (tab === 'hw') loadHomework(node.querySelector('#tab-hw'));
   node.addEventListener('click', e => {
     const t = e.target.closest('[data-tab]');
     if (t) { haptic('light'); return showTab(t.dataset.tab); }

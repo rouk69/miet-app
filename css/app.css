@@ -1691,7 +1691,7 @@ textarea.field-input {
 
 .perf-row:last-child { border-bottom: none; }
 .perf-row:active, .todo[data-disc]:active { background: var(--border); }
-.todo[data-disc] { cursor: pointer; }
+.todo[data-disc], .todo[data-hw-open] { cursor: pointer; }
 
 .perf-top {
   display: flex;
