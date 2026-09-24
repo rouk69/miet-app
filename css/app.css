@@ -408,6 +408,24 @@
 
 .wk-cell.active.cur::after { background: #fff; }
 
+/* Возврат к сегодняшнему дню: появляется, только когда ушёл с него. */
+.wk-today {
+  margin-top: 8px;
+  width: 100%;
+  min-height: 36px;
+  border-radius: 12px;
+  background: var(--primary-dim);
+  color: var(--primary);
+  font-size: 13px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.wk-today:active { opacity: 0.75; }
+
 .week-strip {
   display: flex;
   gap: 6px;

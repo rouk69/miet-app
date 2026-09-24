@@ -1,5 +1,5 @@
 /* Собрано tools/stamp.py из js/*.js — не правьте здесь.
-   Версия 6ce2a13b. Исходники лежат рядом и остаются модулями. */
+   Версия 25de6f2d. Исходники лежат рядом и остаются модулями. */
 var __mod = {};
 /* ==== js\config.js ==== */
 __mod['js/config.js'] = (function () {
@@ -85,7 +85,7 @@ const API_BASE = base;
 // свежую ли страницу открыл человек: Telegram кеширует мини-приложения
 // по своим правилам, и «у меня ничего не поменялось» разбирается
 // сравнением этой строки, а не на слово.
-const BUILD = '6ce2a13b';
+const BUILD = '25de6f2d';
 
 return {'apiBase': apiBase, 'fallBackToHome': fallBackToHome, 'API_BASE': API_BASE, 'BUILD': BUILD};
 })();
@@ -5503,6 +5503,10 @@ async function scheduleScreen(params = {}) {
    * под ним, стрелки по краям; ниже — четыре одинаковые ячейки цикла.
    * Всё умещается в ширину самого узкого телефона — ничего не уезжает.
    */
+  // «Домой» — текущая неделя и сегодняшний день (в воскресенье — понедельник).
+  const homeDay = todayDay <= 6 ? todayDay : 1;
+  const away = () => off !== 0 || day !== homeDay;
+
   function drawWeeks() {
     const mon = mondayAt(off);
     const n = studyWeek(mon, sched.semestr);
@@ -5525,7 +5529,10 @@ async function scheduleScreen(params = {}) {
           <button class="wk-cell ${w === week ? 'active' : ''} ${w === curWeek ? 'cur' : ''}" data-week="${w}">
             <span class="wk-n">${a}</span><span class="wk-k">${b}</span>
           </button>`).join('')}
-      </div>`;
+      </div>
+      ${away() ? `<button class="wk-today" data-today>
+        ${icon('calendar', 15)} ${todayDay <= 6 ? 'К сегодняшнему дню' : 'К текущей неделе'}
+      </button>` : ''}`;
   }
 
   function drawDays() {
@@ -5585,6 +5592,14 @@ async function scheduleScreen(params = {}) {
   drawStale();
 
   node.querySelector('#weeks').addEventListener('click', e => {
+    // Кнопок и стрелок много — легко уйти и потеряться. Одна кнопка
+    // возвращает к сегодняшнему дню; видна, только когда ушёл.
+    if (e.target.closest('[data-today]')) {
+      off = 0; week = curWeek; day = homeDay;
+      hapticSelect();
+      drawWeeks(); drawDays(); drawList();
+      return;
+    }
     const step = e.target.closest('[data-step]');
     const cell = e.target.closest('[data-week]');
     if (!step && !cell) return;
@@ -5619,6 +5634,7 @@ async function scheduleScreen(params = {}) {
     hapticSelect();
     daysEl.querySelectorAll('.week-day').forEach(x => x.classList.remove('active'));
     b.classList.add('active');
+    drawWeeks();
     drawList();
   });
 
