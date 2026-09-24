@@ -306,6 +306,7 @@ def tasks(token: str) -> dict:
                 # Имя точки, по которому сторож баллов узнаёт её между
                 # обходами, а приложение — отмечает «поставили недавно».
                 "key": orioks_grades.event_key(d.get("id"), e),
+                "alias": e.get("alias") or "",
                 "name": e.get("name") or e.get("type") or "Задание",
                 "type": e.get("type") or "",
                 "week": e.get("week"),
@@ -344,7 +345,7 @@ def tasks(token: str) -> dict:
 # Разбор веб-страницы стоит секунд, а меняются вложения раз в семестр.
 # Держим их в памяти: ключ — человек, значение — время и материалы.
 _MATERIALS: dict = {}
-_MATERIALS_TTL = 30 * 60
+_MATERIALS_TTL = 10 * 60
 
 
 def _key(text: str) -> str:
@@ -367,10 +368,12 @@ def with_materials(user_id: int, data: dict) -> dict:
 
     cached = _MATERIALS.get(user_id)
     if cached and time.time() - cached[0] < _MATERIALS_TTL:
-        items = cached[1]
+        items, marks = cached[1]
     else:
         try:
-            items = orioks_web.materials(orioks_web.study_json(cookie))
+            study = orioks_web.study_json(cookie)
+            items = orioks_web.materials(study)
+            marks = orioks_web.grades(study)
         except orioks_web.SessionExpired:
             # Доступ кончился — держать мёртвую сессию незачем.
             drop_cookie(user_id)
@@ -382,7 +385,7 @@ def with_materials(user_id: int, data: dict) -> dict:
             # бы пароль после каждой заминки у института.
             log.info("материалы ОРИОКС не получены: %s", e)
             return data
-        _MATERIALS[user_id] = (time.time(), items)
+        _MATERIALS[user_id] = (time.time(), (items, marks))
 
     by_event: dict = {}
     for m in items:
@@ -397,6 +400,49 @@ def with_materials(user_id: int, data: dict) -> dict:
                 ev["materials"] = [{"name": m["name"], "kind": m["kind"],
                                     "link": m["link"]} for m in found]
     data["materials_count"] = len(items)
+    return with_web_grades(data, marks)
+
+
+def with_web_grades(data: dict, marks: list) -> dict:
+    """
+    Досыпает баллы, которые сайт уже показывает, а API ещё нет.
+
+    Сверка по дисциплине и короткому имени мероприятия («ЛР.1», «А/П.1»):
+    у API это `alias`, у сайта `sh`. Запасной путь — полное название.
+    Балл сайта главнее: это ровно то, что человек видит в ОРИОКС, и
+    расхождение с ним выглядит как ошибка приложения. После досыпки сумма
+    по дисциплине пересчитывается — у API она тоже без этих баллов.
+    """
+    by_sh, by_name = {}, {}
+    for m in marks or []:
+        d = _key(m["discipline"])
+        if m.get("sh"):
+            by_sh[(d, _key(m["sh"]))] = m
+        if m.get("name"):
+            by_name[(d, _key(m["name"]))] = m
+    if not by_sh and not by_name:
+        return data
+
+    total = done = 0
+    for dis in data.get("disciplines", []):
+        dkey = _key(dis.get("name"))
+        touched = False
+        for ev in dis.get("events", []):
+            m = (by_sh.get((dkey, _key(ev.get("alias"))))
+                 or by_name.get((dkey, _key(ev.get("name")))))
+            if m and ev.get("grade") != m["ball"]:
+                ev["grade"] = m["ball"]
+                ev["done"] = True
+                ev["from_site"] = True
+                touched = True
+            if ev.get("task"):
+                total += 1
+                done += 1 if ev.get("done") else 0
+        if touched:
+            got = [e for e in dis.get("events", []) if e.get("done")]
+            dis["current_grade"] = sum(e.get("grade") or 0 for e in got)
+            dis["max_grade"] = sum(e.get("max_grade") or 0 for e in got)
+    data["total"], data["done"] = total, done
     return data
 
 

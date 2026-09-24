@@ -401,7 +401,7 @@ def _orioks(path: str, method: str, body: dict, uid: int, me: dict):
         cookie = orioks.cookie_of(uid)
         if not cookie:
             return 200, {"web": False, "error": "Нужен вход на сайт ОРИОКС — "
-                                                "переподключи ОРИОКС в разделе заданий"}
+                                                "переподключи ОРИОКС в разделе «Учёба»"}
         try:
             if method == "GET":
                 return 200, {"web": True,
@@ -894,7 +894,7 @@ def _admin(path: str, method: str, query: dict, body: dict, uid: int, me: dict):
         cookie = orioks.cookie_of(me["id"])
         if not cookie:
             return 200, {"error": "Сессия веб-версии не сохранена — "
-                                  "переподключи ОРИОКС в разделе заданий"}
+                                  "переподключи ОРИОКС в разделе «Учёба»"}
         page = (query.get("page", [""])[0] or "").strip()
         try:
             if query.get("try"):

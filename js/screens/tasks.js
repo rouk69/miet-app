@@ -1,4 +1,7 @@
-// Задания из ОРИОКС — список дел, а не выгрузка данных.
+// «Учёба»: всё из ОРИОКС — дела со сроками, успеваемость, сдача работ.
+// Раньше раздел звался «Задания», но вырос из этого имени.
+//
+// Дела — список, а не выгрузка данных.
 //
 // Первая версия показывала всё подряд, сгруппированное по предметам, и
 // была нечитаемой: у студента шесть-восемь дисциплин по пять-десять
@@ -593,7 +596,7 @@ function homeworkSheet(form, box) {
 export default async function tasksScreen() {
   if (!canTalk) {
     return screen({
-      title: 'Задания',
+      title: 'Учёба',
       body: emptyState('Раздел работает внутри Telegram', 'backpack'),
     });
   }
@@ -616,7 +619,7 @@ export default async function tasksScreen() {
     web = both[1].web === true;
   } catch (err) {
     return screen({
-      title: 'Задания',
+      title: 'Учёба',
       body: `<div class="card" style="padding:18px">
         <div class="row-subtitle">${esc(err.message)}</div></div>`,
     });
@@ -667,8 +670,8 @@ export default async function tasksScreen() {
   if (tab !== 'perf' && !(tab === 'hw' && hwBeta)) tab = 'todo';
 
   const node = screen({
-    title: 'Задания',
-    subtitle: start ? 'Сроки, баллы и файлы из ОРИОКС'
+    title: 'Учёба',
+    subtitle: start ? 'Дела, баллы и файлы из ОРИОКС'
       : 'Выбери группу в профиле, чтобы видеть даты',
     actions: `<button class="icon-btn" data-action="orioks">${icon('external', 19)}</button>`,
     body: `
@@ -955,7 +958,7 @@ export default async function tasksScreen() {
 
 function notLinked() {
   const node = screen({
-    title: 'Задания',
+    title: 'Учёба',
     subtitle: 'Что задали, что сдать и файлы из ОРИОКС',
     body: `
       <div class="card" style="padding:18px">
@@ -984,7 +987,7 @@ function notLinked() {
 
 function linkedButBroken(message) {
   const node = screen({
-    title: 'Задания',
+    title: 'Учёба',
     body: `
       <div class="card" style="padding:18px">
         <div class="row-title" style="margin-bottom:6px">ОРИОКС не ответил</div>

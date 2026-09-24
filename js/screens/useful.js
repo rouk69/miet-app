@@ -21,11 +21,13 @@ import { screen, iconBtn } from './common.js';
  */
 const SECTIONS = [
   {
-    title: 'Учёба',
+    // Не «Учёба»: так теперь зовётся плитка внутри (раздел ОРИОКС), а
+    // заголовок, повторяющий имя своей плитки, ничего не сообщает.
+    title: 'Самое нужное',
     note: 'То, что спрашивают чаще всего',
     tiles: [
-      { id: 'tasks', ico: 'backpack', tone: 'blue', title: 'Задания',
-        sub: 'Что задали, сроки и файлы из ОРИОКС' },
+      { id: 'tasks', ico: 'backpack', tone: 'blue', title: 'Учёба',
+        sub: 'Задания, баллы и успеваемость из ОРИОКС' },
       { id: 'teachers', ico: 'teacher', tone: 'blue', title: 'Преподаватели',
         sub: 'Кто, где и когда ведёт' },
       { id: 'rooms', ico: 'door', tone: 'blue', title: 'Аудитории',

@@ -1141,6 +1141,42 @@ check("приложение получает недавние баллы",
       s_ == 200 and "7:dz.2" in r_.get("recent", {}), r_.get("recent"))
 check("сдача работ студенту не видна", r_.get("homework_beta") is False, r_)
 
+# ─── баллы с сайта: API от него отстаёт ───
+# Живой случай 24.09.2026: сайт показывал посещаемость и КР, API — нет.
+# Структура — выжимка настоящего JSON веб-версии.
+web_study = {"dises": [{"name": "Матанализ", "segments": [{"allKms": [
+    {"sh": "dz.2", "name": "Домашнее задание 2", "week": 11, "max_ball": 10,
+     "balls": [{"ball": 7}], "grade": {"b": 7, "p": "70.0", "o": 4}},
+    {"sh": "dz.1", "name": "Домашнее задание 1", "week": 4, "max_ball": 10,
+     "balls": [], "grade": {"b": "-", "p": "-", "o": "n"}},
+    {"sh": "А/П", "name": " ", "week": 8, "max_ball": 24,
+     "balls": [{"ball": 3}], "grade": {"b": "-", "p": "-", "o": "n"}},
+]}]}]}
+marks = orioks_web.grades(web_study)
+check("с сайта взяты только выставленные",
+      sorted(m["sh"] for m in marks) == ["dz.2", "А/П"], marks)
+check("запасной путь — сумма balls",
+      next(m for m in marks if m["sh"] == "А/П")["ball"] == 3, marks)
+
+_saved7 = [e["current_grade"] for e in EVENTS7]
+EVENTS7[0]["current_grade"] = 8.0
+EVENTS7[1]["current_grade"] = -1.0
+EVENTS7[2]["current_grade"] = -1.0
+data = orioks.tasks("T" * 32)
+data = orioks.with_web_grades(data, marks)
+mat = data["disciplines"][0]
+dz2 = next(e for e in mat["events"] if e["alias"] == "dz.2")
+check("балл, которого нет в API, взят с сайта",
+      dz2["grade"] == 7 and dz2["done"] and dz2.get("from_site"), dz2)
+dz1 = next(e for e in mat["events"] if e["alias"] == "dz.1")
+check("то, чего на сайте нет, из API не стирается",
+      dz1["grade"] == 8 and dz1["done"], dz1)
+check("сумма по предмету пересчитана", mat["current_grade"] == 15, mat["current_grade"])
+check("и максимум по оценённому тоже", mat["max_grade"] == 20, mat["max_grade"])
+check("счётчик сданного пересчитан", data["done"] == 2, data["done"])
+for e, g in zip(EVENTS7, _saved7):
+    e["current_grade"] = g
+
 # ─── сдача работ: фундамент только для владельца ───
 from bot import orioks_homework  # noqa: E402
 

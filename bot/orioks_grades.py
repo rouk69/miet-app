@@ -171,5 +171,5 @@ def message(changed: list, data: dict) -> str:
         parts.append("")
     if len(changed) > IN_MESSAGE:
         parts.append(f"<i>И ещё {len(changed) - IN_MESSAGE} — в приложении, "
-                     f"раздел «Задания» → «Успеваемость».</i>")
+                     f"раздел «Учёба» → «Успеваемость».</i>")
     return "\n".join(parts).strip()
