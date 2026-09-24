@@ -66,6 +66,8 @@ def lesson_block(l: dict, live: bool = False, custom: bool = True) -> str:
     """
     num = em.pair_num(l.get("pair"), custom)
     head = f"{num} <b>{esc(l['from'])}</b>–{esc(l['to'])}"
+    if l.get("alt_from"):
+        head += f" <i>(или {esc(l['alt_from'])})</i>"
     if live:
         head += f"  {em.ico('bell', custom)} <i>идёт сейчас</i>"
 
@@ -139,6 +141,23 @@ def _now_pair(lessons: list[dict], now: dt.datetime) -> dict | None:
     return None
 
 
+LUNCH_HINT = ("3-я пара — в 12:00 или 12:30: зависит от того, когда у группы "
+              "обед. Укажи в /lunch, и время будет точным.")
+
+
+def lunch_note(slots: list[dict]) -> str:
+    """Сноска, пока группа не сказала, когда у неё обед: иначе «(или 12:30)»
+    у 3-й пары остаётся загадкой."""
+    if not any(s.get("alt_from") for s in slots):
+        return ""
+    return f"\n<i>{LUNCH_HINT}</i>"
+
+
+def from_label(s: dict) -> str:
+    """Начало пары; у 3-й без выбранного обеда — «12:00 (или 12:30)»."""
+    return s["from"] + (f" (или {s['alt_from']})" if s.get("alt_from") else "")
+
+
 def schedule_card(group: str, sched: dict, week: int, day: int, cur_week: int,
                   now: dt.datetime | None = None, custom: bool = True) -> str:
     """Основная карточка расписания на конкретный день."""
@@ -184,6 +203,7 @@ def schedule_card(group: str, sched: dict, week: int, day: int, cur_week: int,
         footer = (f"\n\n{em.ico('time', custom)} <i>{n} "
                   f"{plural(n, 'пара', 'пары', 'пар')} · "
                   f"с {slots[0]['from']} до {slots[-1]['to']}</i>")
+        footer += lunch_note(slots)
 
     return clamp(f"{head}\n{sub}\n{body}{footer}")
 
@@ -216,7 +236,7 @@ def week_card(group: str, sched: dict, week: int, cur_week: int,
                     else " / ".join(e["subject"] for e in sl["entries"]))
             rooms = [room_label(e["room"]) for e in sl["entries"] if e.get("room")]
             out = (f"{em.pair_num(sl.get('pair'), _c)} "
-                   f"<b>{sl['from']}</b>–{sl['to']} {esc(name)}")
+                   f"<b>{esc(from_label(sl))}</b>–{sl['to']} {esc(name)}")
             return out + (f" · <i>{' / '.join(rooms)}</i>" if rooms else "")
 
         rows = "\n".join(line(sl) for sl in slots)
@@ -268,6 +288,7 @@ def help_text(bot_username: str = "") -> str:
             "/week — вся неделя\n"
             "/group — сменить группу\n"
             "/shift — поправка недели цикла\n"
+            "/lunch — когда у группы обед (время 3-й пары)\n"
             "/support — связаться с автором</blockquote>\n"
             "<blockquote><b>В любом чате</b>\n"
             f"Напиши <code>{mention}</code> и пробел — бот предложит вставить "

@@ -4,7 +4,7 @@ import { icon } from '../icons.js';
 import { esc, listCard, listRow, toast, sheet, emptyState, toggle, SHORTCUT_STEPS, stepsHtml } from '../ui.js';
 import { data, settings, save, applyTheme, resolveTheme } from '../store.js';
 import { BUILD } from '../config.js';
-import { fetchSchedule, weekOfCycle, weekName } from '../schedule.js';
+import { fetchSchedule, weekOfCycle, weekName, setLunch } from '../schedule.js';
 import { go, refresh } from '../router.js';
 import { tgUser, openLink, syncChrome, haptic, hapticNotify, confirmDialog,
   canAddToHome, addToHome, homeStatus, onHomeAdded }
@@ -255,9 +255,7 @@ function lunchSheet() {
       root.addEventListener('click', e => {
         const b = e.target.closest('[data-l]');
         if (!b) return;
-        const lunch = { ...(settings.lunch || {}) };
-        if (b.dataset.l) lunch[settings.group] = b.dataset.l; else delete lunch[settings.group];
-        save({ lunch });
+        setLunch(settings.group, b.dataset.l || null);
         haptic('medium');
         close();
         refresh();

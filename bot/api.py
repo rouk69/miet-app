@@ -122,6 +122,16 @@ def handle(method: str, path: str, query: dict, body: dict, init_data: str):
         storage.set_morning(uid, on)
         return 200, {"ok": True, "morning": on}
 
+    if path == "/api/lunch" and method == "POST":
+        # Когда у группы обед — общий выбор бота и приложения: указал в
+        # одном месте, время 3-й пары поправилось в обоих.
+        group = str(body.get("group") or "").strip()[:40]
+        if not group:
+            return 400, {"error": "Нужна группа"}
+        lunch = body.get("lunch")
+        storage.set_lunch(uid, group, lunch if lunch in storage.LUNCH_CHOICES else None)
+        return 200, {"ok": True, "lunch": storage.lunch_map(uid)}
+
     if path == "/api/schedule" and method == "GET":
         # Приложение ходит за расписанием сюда, а не на miet.ru напрямую.
         # Причин две. Сайт института отвечает не всем и не всегда — с
@@ -223,6 +233,8 @@ def _me(user: dict, me: dict) -> dict:
         # Владелец из ADMIN_IDS: только он выдаёт доступ к «Учёбе».
         "root": bool(me.get("root")),
         "morning": storage.morning_on(me["id"]),
+        # Обед групп (время 3-й пары) — общий с ботом.
+        "lunch": storage.lunch_map(me["id"]),
         "label": _label(me),
         # Группа с сервера: человек выбрал её в боте — приложение подхватит
         # её на другом устройстве, и наоборот.

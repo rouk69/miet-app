@@ -1,5 +1,5 @@
 /* Собрано tools/stamp.py из js/*.js — не правьте здесь.
-   Версия 25d79d5f. Исходники лежат рядом и остаются модулями. */
+   Версия c4e79528. Исходники лежат рядом и остаются модулями. */
 var __mod = {};
 /* ==== js\config.js ==== */
 __mod['js/config.js'] = (function () {
@@ -85,7 +85,7 @@ const API_BASE = base;
 // свежую ли страницу открыл человек: Telegram кеширует мини-приложения
 // по своим правилам, и «у меня ничего не поменялось» разбирается
 // сравнением этой строки, а не на слово.
-const BUILD = '25d79d5f';
+const BUILD = 'c4e79528';
 
 return {'apiBase': apiBase, 'fallBackToHome': fallBackToHome, 'API_BASE': API_BASE, 'BUILD': BUILD};
 })();
@@ -1611,6 +1611,9 @@ __mod['js/schedule.js'] = (function () {
 var API_BASE = __mod['js/config.js']['API_BASE'];
 var apiBase = __mod['js/config.js']['apiBase'];
 var settings = __mod['js/store.js']['settings'];
+var save = __mod['js/store.js']['save'];
+var post = __mod['js/api.js']['post'];
+var account = __mod['js/api.js']['account'];
 
 const API = 'https://miet.ru/schedule/data';
 const CACHE_KEY = g => `miet-sched:${g}`;
@@ -1929,6 +1932,37 @@ function withLunch(sched, lunch) {
 
 const lunchOf = group => (settings.lunch || {})[group] || null;
 
+/**
+ * Выбрать обед группы — и там, и в боте: выбор хранится на сервере и
+ * общий. `lunch` — 'after2' | 'after3' | null («не знаю»).
+ */
+function setLunch(group, lunch) {
+  const next = { ...(settings.lunch || {}) };
+  if (lunch) next[group] = lunch; else delete next[group];
+  save({ lunch: next });
+  post('/api/lunch', { group, lunch }).catch(() => { /* офлайн — останется локально */ });
+}
+
+/**
+ * После ответа сервера: выбор могли сделать в боте. Первый раз ещё и
+ * отдаём серверу то, что человек успел выбрать в приложении до появления
+ * общего выбора, — иначе он бы молча пропал. Дальше главный — сервер.
+ */
+function syncLunch() {
+  if (!account.loaded || !account.lunch) return;
+  const server = account.lunch;
+  if (!settings.lunchSynced) {
+    const local = settings.lunch || {};
+    for (const [g, l] of Object.entries(local)) {
+      if (!(g in server)) {
+        server[g] = l;
+        post('/api/lunch', { group: g, lunch: l }).catch(() => {});
+      }
+    }
+  }
+  save({ lunch: { ...server }, lunchSynced: true });
+}
+
 /** Все записи расписания на конкретный день конкретной недели цикла. */
 const lessonsOf = (sched, week, day) =>
   (sched?.lessons || []).filter(l => l.week === week && l.day === day);
@@ -2065,7 +2099,7 @@ function weekDates(base = new Date()) {
   });
 }
 
-return {'DAY_NAMES': DAY_NAMES, 'DAY_SHORT': DAY_SHORT, 'WEEK_NAMES': WEEK_NAMES, 'weekName': weekName, 'WEEK_SHORT': WEEK_SHORT, 'weekRange': weekRange, 'studyWeek': studyWeek, 'aheadTo': aheadTo, 'mondayOf': mondayOf, 'semesterStart': semesterStart, 'weekOfCycle': weekOfCycle, 'parseSubject': parseSubject, 'shortSemestr': shortSemestr, 'fetchSchedule': fetchSchedule, 'LUNCH_THIRD': LUNCH_THIRD, 'withLunch': withLunch, 'lessonsOf': lessonsOf, 'slotsOf': slotsOf, 'gapsOf': gapsOf, 'humanGap': humanGap, 'dayCounts': dayCounts, 'nowState': nowState, 'weekDates': weekDates};
+return {'DAY_NAMES': DAY_NAMES, 'DAY_SHORT': DAY_SHORT, 'WEEK_NAMES': WEEK_NAMES, 'weekName': weekName, 'WEEK_SHORT': WEEK_SHORT, 'weekRange': weekRange, 'studyWeek': studyWeek, 'aheadTo': aheadTo, 'mondayOf': mondayOf, 'semesterStart': semesterStart, 'weekOfCycle': weekOfCycle, 'parseSubject': parseSubject, 'shortSemestr': shortSemestr, 'fetchSchedule': fetchSchedule, 'LUNCH_THIRD': LUNCH_THIRD, 'withLunch': withLunch, 'setLunch': setLunch, 'syncLunch': syncLunch, 'lessonsOf': lessonsOf, 'slotsOf': slotsOf, 'gapsOf': gapsOf, 'humanGap': humanGap, 'dayCounts': dayCounts, 'nowState': nowState, 'weekDates': weekDates};
 })();
 
 /* ==== js\subjects.js ==== */
@@ -4782,6 +4816,7 @@ var BUILD = __mod['js/config.js']['BUILD'];
 var fetchSchedule = __mod['js/schedule.js']['fetchSchedule'];
 var weekOfCycle = __mod['js/schedule.js']['weekOfCycle'];
 var weekName = __mod['js/schedule.js']['weekName'];
+var setLunch = __mod['js/schedule.js']['setLunch'];
 var go = __mod['js/router.js']['go'];
 var refresh = __mod['js/router.js']['refresh'];
 var tgUser = __mod['js/tg.js']['tgUser'];
@@ -5043,9 +5078,7 @@ function lunchSheet() {
       root.addEventListener('click', e => {
         const b = e.target.closest('[data-l]');
         if (!b) return;
-        const lunch = { ...(settings.lunch || {}) };
-        if (b.dataset.l) lunch[settings.group] = b.dataset.l; else delete lunch[settings.group];
-        save({ lunch });
+        setLunch(settings.group, b.dataset.l || null);
         haptic('medium');
         close();
         refresh();
@@ -5409,6 +5442,7 @@ var WEEK_SHORT = __mod['js/schedule.js']['WEEK_SHORT'];
 var weekRange = __mod['js/schedule.js']['weekRange'];
 var studyWeek = __mod['js/schedule.js']['studyWeek'];
 var aheadTo = __mod['js/schedule.js']['aheadTo'];
+var setLunch = __mod['js/schedule.js']['setLunch'];
 var DAY_SHORT = __mod['js/schedule.js']['DAY_SHORT'];
 var DAY_NAMES = __mod['js/schedule.js']['DAY_NAMES'];
 var refresh = __mod['js/router.js']['refresh'];
@@ -5714,7 +5748,7 @@ async function scheduleScreen(params = {}) {
   listEl.addEventListener('click', async e => {
     const b = e.target.closest('[data-lunch]');
     if (!b) return;
-    save({ lunch: { ...(settings.lunch || {}), [settings.group]: b.dataset.lunch } });
+    setLunch(settings.group, b.dataset.lunch);
     hapticSelect();
     // Перечитываем из своей копии (поправка кладётся при выдаче) и
     // перерисовываем на месте — выбранные неделя и день остаются.
@@ -9873,6 +9907,7 @@ var switchTab = __mod['js/router.js']['switchTab'];
 var refresh = __mod['js/router.js']['refresh'];
 var current = __mod['js/router.js']['current'];
 var fetchSchedule = __mod['js/schedule.js']['fetchSchedule'];
+var syncLunch = __mod['js/schedule.js']['syncLunch'];
 var loadMe = __mod['js/api.js']['loadMe'];
 var account = __mod['js/api.js']['account'];
 var track = __mod['js/api.js']['track'];
@@ -10072,6 +10107,8 @@ loadData()
     track('open');
     // Права приехали: «Учёба» на главной появляется или уступает место.
     applyAccess();
+    // Обед групп — общий с ботом: выбор мог прийти оттуда.
+    syncLunch();
     // Длинные тексты карточек — фоном, после первого экрана. Ждать их
     // на старте незачем: они нужны, только когда карточку откроют, а
     // это 107 КБ, которые раньше стояли в очереди перед расписанием.

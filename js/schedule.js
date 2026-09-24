@@ -11,7 +11,8 @@
 // как ошибка приложения.
 
 import { API_BASE, apiBase } from './config.js';
-import { settings } from './store.js';
+import { settings, save } from './store.js';
+import { post, account } from './api.js';
 
 const API = 'https://miet.ru/schedule/data';
 const CACHE_KEY = g => `miet-sched:${g}`;
@@ -329,6 +330,37 @@ export function withLunch(sched, lunch) {
 }
 
 const lunchOf = group => (settings.lunch || {})[group] || null;
+
+/**
+ * Выбрать обед группы — и там, и в боте: выбор хранится на сервере и
+ * общий. `lunch` — 'after2' | 'after3' | null («не знаю»).
+ */
+export function setLunch(group, lunch) {
+  const next = { ...(settings.lunch || {}) };
+  if (lunch) next[group] = lunch; else delete next[group];
+  save({ lunch: next });
+  post('/api/lunch', { group, lunch }).catch(() => { /* офлайн — останется локально */ });
+}
+
+/**
+ * После ответа сервера: выбор могли сделать в боте. Первый раз ещё и
+ * отдаём серверу то, что человек успел выбрать в приложении до появления
+ * общего выбора, — иначе он бы молча пропал. Дальше главный — сервер.
+ */
+export function syncLunch() {
+  if (!account.loaded || !account.lunch) return;
+  const server = account.lunch;
+  if (!settings.lunchSynced) {
+    const local = settings.lunch || {};
+    for (const [g, l] of Object.entries(local)) {
+      if (!(g in server)) {
+        server[g] = l;
+        post('/api/lunch', { group: g, lunch: l }).catch(() => {});
+      }
+    }
+  }
+  save({ lunch: { ...server }, lunchSynced: true });
+}
 
 /** Все записи расписания на конкретный день конкретной недели цикла. */
 export const lessonsOf = (sched, week, day) =>

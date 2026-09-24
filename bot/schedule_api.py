@@ -341,6 +341,36 @@ def cached_schedule(group: str) -> dict | None:
     return _cache_get(f"sched2_{group}", TTL)
 
 
+# Обед в МИЭТ — 40 минут: после 2-й пары (11:50) или после 3-й (13:20),
+# см. privet-miet.ru/faq. Значит, 3-я пара 12:00–13:20 или 12:30–13:50, а
+# 4-я всегда с 14:00. Сайт МИЭТ пишет всем 12:00 и не говорит, у кого какой
+# обед, — выбирает человек. Порт withLunch из js/schedule.js: держать
+# одинаковыми.
+LUNCH_THIRD = {"after3": ("12:00", "13:20"), "after2": ("12:30", "13:50")}
+
+
+def with_lunch(sched: dict, lunch: str | None) -> dict:
+    """Копия расписания со временем 3-й пары по обеду группы.
+
+    Обед не выбран — время сайта и пометка `alt_from` («или 12:30»).
+    Правим только то, что пришло во времени сайта: чужое не трогаем.
+    """
+    if not isinstance(sched, dict) or not isinstance(sched.get("lessons"), list):
+        return sched
+    t = LUNCH_THIRD.get(lunch or "")
+
+    def fix(l: dict) -> dict:
+        if l.get("pair") != 3 or l.get("from") != "12:00":
+            return l
+        return {**l, "from": t[0], "to": t[1]} if t else {**l, "alt_from": "12:30"}
+
+    times = [({**x, "from": t[0], "to": t[1]}
+              if t and x.get("code") == 3 and x.get("from") == "12:00" else x)
+             for x in sched.get("times") or []]
+    return {**sched, "lessons": [fix(l) for l in sched["lessons"]], "times": times,
+            "lunch": lunch if t else None}
+
+
 def lessons_of(sched: dict, week: int, day: int) -> list[dict]:
     return [l for l in sched.get("lessons", [])
             if l["week"] == week and l["day"] == day]
@@ -365,7 +395,7 @@ def slots_of(sched: dict, week: int, day: int) -> list[dict]:
         slot = by_pair.get(l["pair"])
         if slot is None:
             slot = {"pair": l["pair"], "from": l["from"], "to": l["to"],
-                    "entries": []}
+                    "alt_from": l.get("alt_from"), "entries": []}
             by_pair[l["pair"]] = slot
             out.append(slot)
         slot["entries"].append(l)

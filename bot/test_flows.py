@@ -275,6 +275,36 @@ storage.set_shift(UID, 0)
 tg.reset(); press("noop")
 check("noop ничего не ломает", len(tg.edited) == 0 and len(tg.answers) == 1)
 
+print("\n6а. Обед группы: время 3-й пары 12:00 или 12:30")
+_prev_group = storage.get_user(UID)["group"]
+storage.set_group(UID, "ПИН-31")
+FIXTURE["lessons"].append(_lesson(1, 0, 3, "12:00", "13:20", "Физика", "Лекция", "📘",
+                                  "Сидоров С.С.", "3105 а"))
+storage.set_lunch(UID, "ПИН-31", None)
+tg.reset(); press("d|0|1|ПИН-31")
+body = edited_body()
+check("обед не выбран — оба времени", "12:00" in body and "12:30" in body, body[:400])
+check("и подсказка про /lunch", "/lunch" in body, body[-300:])
+tg.reset(); msg("/lunch")
+check("/lunch отвечает", len(tg.sent) == 1, tg.sent)
+check("три варианта обеда",
+      callbacks(tg.sent[0]["markup"]) == ["lunch|after3", "lunch|after2", "lunch|none"],
+      callbacks(tg.sent[0]["markup"]) if tg.sent else None)
+tg.reset(); press("lunch|after2")
+check("выбор сохранён", storage.lunch_for(UID, "ПИН-31") == "after2")
+check("после выбора сообщение стало карточкой дня", len(tg.edited) == 1, tg.edited)
+tg.reset(); press("d|0|1|ПИН-31")
+body = edited_body() if tg.edited else ""
+check("карточка сразу с 12:30–13:50", "12:30" in body and "13:50" in body, body[:400])
+check("без пометки «или» и подсказки", "или 12" not in body and "/lunch" not in body, body[-300:])
+tg.reset(); press("lunch|after3"); tg.reset(); press("d|0|1|ПИН-31")
+body = edited_body() if tg.edited else ""
+check("обед после 3-й — 12:00–13:20", "12:00" in body and "13:20" in body and "12:30" not in body, body[:400])
+tg.reset(); press("lunch|none")
+check("«не знаю» стирает выбор", storage.lunch_for(UID, "ПИН-31") is None)
+FIXTURE["lessons"].pop()
+storage.set_group(UID, _prev_group)
+
 print("\n7. «Группа» меняется в том же чате, где нажали")
 tg.reset(); press("grp", inline=True)
 check("сообщение переписано на месте", len(tg.edited) == 1,

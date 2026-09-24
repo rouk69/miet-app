@@ -79,6 +79,8 @@ def lesson_rows(slots: list[dict], live: dict | None, custom: bool) -> str:
         # Время целиком: по одному началу непонятно, когда пара кончится,
         # особенно во вставленной в чужой чат карточке.
         left = f'{num} {esc(s["from"])}<br><i>{esc(s["to"])}</i>'
+        if s.get("alt_from"):
+            left += f'<br><i>или {esc(s["alt_from"])}</i>'
 
         if s.get("same_subject", True):
             subject = (f'{em.kind_ico(s.get("kindCls", "oth"), custom)} '
@@ -192,6 +194,8 @@ def day_html(group: str, sched: dict, week: int, day: int, cur_week: int,
         body += (f'<p><i>{em.ico("time", custom)} {n} '
                  f'{render.plural(n, "пара", "пары", "пар")} · '
                  f'с {slots[0]["from"]} до {slots[-1]["to"]}</i></p>')
+        if any(s.get("alt_from") for s in slots):
+            body += f'<p><i>{esc(render.LUNCH_HINT)}</i></p>'
     else:
         body = "<blockquote>☕ Пар нет — можно выдохнуть</blockquote>"
 
@@ -220,7 +224,7 @@ def week_html(group: str, sched: dict, week: int, cur_week: int,
             for s in slots:
                 name = (s["subject"] if s["same_subject"]
                         else " / ".join(e["subject"] for e in s["entries"]))
-                line = f'{esc(s["from"])}–{esc(s["to"])} · {esc(name)}'
+                line = f'{esc(render.from_label(s))}–{esc(s["to"])} · {esc(name)}'
                 rooms = [render.room_label(e["room"])
                          for e in s["entries"] if e.get("room")]
                 if rooms:
