@@ -56,6 +56,8 @@ export default async function profileScreen() {
       ${listCard([
       listRow({ ico: 'users', title: 'Группа', value: settings.group || 'не выбрана', chevron: true, id: 'group', cls: 'tap' }),
       listRow({ ico: 'calendar', title: 'Текущая неделя', value: weekLabel, chevron: true, id: 'week', cls: 'tap' }),
+      ...(settings.group ? [listRow({ ico: 'utensils', title: 'Обед группы', value: LUNCH_LABEL[(settings.lunch || {})[settings.group]] || 'не указан',
+        chevron: true, id: 'lunch', cls: 'tap' })] : []),
       listRow({ ico: 'heart', title: 'Избранные кружки', value: String(favCount), chevron: true, id: 'fav', cls: 'tap' }),
     ])}
 
@@ -145,6 +147,7 @@ export default async function profileScreen() {
       case 'admin': return go('admin');
       case 'group': return pickGroup(() => refresh());
       case 'week': return weekShiftSheet(baseWeek);
+      case 'lunch': return lunchSheet();
       case 'fav': return go('clubs');
       case 'about': return go('about');
       case 'campus': return go('campus');
@@ -178,6 +181,47 @@ export default async function profileScreen() {
  * Поправка недели. Цикл в МИЭТе четырёхнедельный, отсчёт ведём от начала
  * семестра — если у деканата счёт другой, здесь его можно сдвинуть.
  */
+const LUNCH_LABEL = { after2: 'после 2-й пары', after3: 'после 3-й пары' };
+
+/**
+ * Когда у группы обед. От этого зависит только 3-я пара: 12:00–13:20,
+ * если обед после неё, и 12:30–13:50, если перед ней. Сайт МИЭТ этого
+ * не сообщает, поэтому выбирает человек — для каждой группы отдельно.
+ */
+function lunchSheet() {
+  const cur = (settings.lunch || {})[settings.group] || '';
+  const opt = (id, title, sub) => `
+    <button class="list-row tap" data-l="${id}" style="width:100%;text-align:left">
+      <div class="list-row-body"><div class="row-title">${title}</div><div class="row-subtitle">${sub}</div></div>
+      ${cur === id ? icon('check', 20) : ''}
+    </button>`;
+  sheet({
+    title: 'Обед группы',
+    body: `
+      <div class="row-subtitle" style="margin-bottom:12px;line-height:1.5">
+        Обед в МИЭТ — 40 минут: после 2-й пары (11:50) или после 3-й (13:20).
+        От этого зависит, во сколько начинается 3-я пара.
+      </div>
+      <div class="list-card">
+        ${opt('after3', 'После 3-й пары', '3-я пара в 12:00–13:20')}
+        ${opt('after2', 'После 2-й пары', '3-я пара в 12:30–13:50')}
+        ${opt('', 'Не знаю', 'показывать оба времени')}
+      </div>`,
+    onMount(root, close) {
+      root.addEventListener('click', e => {
+        const b = e.target.closest('[data-l]');
+        if (!b) return;
+        const lunch = { ...(settings.lunch || {}) };
+        if (b.dataset.l) lunch[settings.group] = b.dataset.l; else delete lunch[settings.group];
+        save({ lunch });
+        haptic('medium');
+        close();
+        refresh();
+      });
+    },
+  });
+}
+
 function weekShiftSheet(base) {
   // Зная неделю без поправки, спрашиваем по-человечески: «какая неделя
   // сейчас?» — названиями из официального расписания, а не «+1, +2».

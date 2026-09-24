@@ -1,5 +1,5 @@
 /* Собрано tools/stamp.py из js/*.js — не правьте здесь.
-   Версия 8f246b15. Исходники лежат рядом и остаются модулями. */
+   Версия 2ac347cd. Исходники лежат рядом и остаются модулями. */
 var __mod = {};
 /* ==== js\config.js ==== */
 __mod['js/config.js'] = (function () {
@@ -85,7 +85,7 @@ const API_BASE = base;
 // свежую ли страницу открыл человек: Telegram кеширует мини-приложения
 // по своим правилам, и «у меня ничего не поменялось» разбирается
 // сравнением этой строки, а не на слово.
-const BUILD = '8f246b15';
+const BUILD = '2ac347cd';
 
 return {'apiBase': apiBase, 'fallBackToHome': fallBackToHome, 'API_BASE': API_BASE, 'BUILD': BUILD};
 })();
@@ -324,419 +324,6 @@ const iconNames = Object.keys(P);
 return {'icon': icon, 'hasIcon': hasIcon, 'iconNames': iconNames};
 })();
 
-/* ==== js\schedule.js ==== */
-__mod['js/schedule.js'] = (function () {
-// Расписание — живое, но добывается тремя путями подряд.
-//
-// Сначала своя копия в телефоне (сутки), потом сервер бота: у него есть
-// кеш, он ближе к институту и отвечает мгновенно. Только если и он
-// молчит — идём на miet.ru сами (он отдаёт Access-Control-Allow-Origin,
-// поэтому запрос из браузера возможен), а совсем в конце достаём
-// сохранённое, даже просроченное.
-//
-// Порядок именно такой, потому что сайт института отвечает не всем и не
-// всегда: с части мобильных сетей он недоступен вовсе, и это выглядело
-// как ошибка приложения.
-
-var API_BASE = __mod['js/config.js']['API_BASE'];
-var apiBase = __mod['js/config.js']['apiBase'];
-
-const API = 'https://miet.ru/schedule/data';
-const CACHE_KEY = g => `miet-sched:${g}`;
-const TTL = 24 * 60 * 60 * 1000;
-
-const DAY_NAMES = ['', 'Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота'];
-const DAY_SHORT = ['', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
-
-/**
- * Недели цикла так, как их зовёт официальное расписание miet.ru
- * (weekText в его сборке): 0 — «1-й числитель», 1 — «1-й знаменатель»,
- * 2 — «2-й числитель», 3 — «2-й знаменатель». Студенты ориентируются
- * по этим словам, а не по номеру 1..4.
- */
-const WEEK_NAMES = ['1-й числитель', '1-й знаменатель', '2-й числитель', '2-й знаменатель'];
-const weekName = w => WEEK_NAMES[((w % 4) + 4) % 4];
-
-/** Ставит дату на понедельник её недели (воскресенье относим к прошедшей). */
-function mondayOf(date) {
-  const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-  const shift = (d.getDay() + 6) % 7;   // Пн=0 … Вс=6
-  d.setDate(d.getDate() - shift);
-  return d;
-}
-
-/**
- * Начало семестра по строке вида «Осенний семестр 2026/2027».
- * Осенний считаем с 1 сентября, весенний — с 9 февраля.
- */
-function semesterStart(semestr) {
-  const m = /(\d{4})\s*\/\s*(\d{4})/.exec(semestr || '');
-  const autumn = /осен/i.test(semestr || '');
-  const now = new Date();
-  if (!m) {
-    return autumn || now.getMonth() >= 7
-      ? new Date(now.getFullYear(), 8, 1)
-      : new Date(now.getFullYear(), 1, 9);
-  }
-  return autumn
-    ? new Date(+m[1], 8, 1)
-    : new Date(+m[2], 1, 9);
-}
-
-/**
- * Номер недели в четырёхнедельном цикле МИЭТ (0..3).
- * Вычисляем от начала семестра; если у деканата счёт разошёлся,
- * пользователь поправляет сдвигом в профиле.
- */
-function weekOfCycle(date, semestr, shift = 0) {
-  const start = mondayOf(semesterStart(semestr));
-  const cur = mondayOf(date);
-  const weeks = Math.round((cur - start) / (7 * 86400000));
-  return (((weeks + shift) % 4) + 4) % 4;
-}
-
-/** Разбирает «[ФТД] [ДСТ] Быстрые алгоритмы [Лек]» на части. */
-function parseSubject(raw) {
-  let name = String(raw || '').trim();
-  const flags = [];
-  let kind = '';
-  name = name.replace(/\[(ФТД|ДСТ|ФАК)\]/gi, (_, f) => { flags.push(f.toUpperCase()); return ''; });
-  name = name.replace(/\[([^\]]+)\]\s*$/, (_, k) => { kind = k.trim(); return ''; });
-  name = name.replace(/\s{2,}/g, ' ').trim();
-  const low = kind.toLowerCase();
-  const cls = low.startsWith('лек') ? 'lek'
-    : low.startsWith('пр') ? 'pr'
-      : low.startsWith('лаб') ? 'lab' : 'oth';
-  const full = { lek: 'Лекция', pr: 'Практика', lab: 'Лабораторная' }[cls] || kind;
-  return { name, kind: full, cls, flags };
-}
-
-const hhmm = iso => (String(iso || '').match(/T(\d{2}:\d{2})/) || [, ''])[1];
-
-/** «Осенний семестр 2026/2027» → «осень 2026/27» — чтобы влезало в подзаголовок. */
-function shortSemestr(s) {
-  const m = /(\d{4})\s*\/\s*(\d{4})/.exec(s || '');
-  const season = /осен/i.test(s || '') ? 'осень' : /весен/i.test(s || '') ? 'весна' : '';
-  if (!m) return season || s || '';
-  return `${season} ${m[1]}/${m[2].slice(2)}`.trim();
-}
-
-/** Приводит ответ API к плоскому виду, удобному для экрана. */
-function normalize(json) {
-  const times = (json.Times || []).map(t => ({
-    code: t.Code,
-    label: t.Time,
-    from: hhmm(t.TimeFrom),
-    to: hhmm(t.TimeTo),
-  }));
-  const lessons = (json.Data || []).map(d => {
-    const s = parseSubject(d.Class?.Name);
-    return {
-      day: d.Day,                 // 1..6 — Пн..Сб
-      week: d.DayNumber,          // 0..3 — неделя цикла
-      pair: d.Time?.Code,
-      from: hhmm(d.Time?.TimeFrom),
-      to: hhmm(d.Time?.TimeTo),
-      subject: s.name,
-      kind: s.kind,
-      kindCls: s.cls,
-      flags: s.flags,
-      teacher: d.Class?.TeacherFull || d.Class?.Teacher || '',
-      teacherShort: d.Class?.Teacher || '',
-      room: d.Room?.Name || '',
-      group: d.Group?.Name || '',
-    };
-  });
-  lessons.sort((a, b) => a.day - b.day || a.pair - b.pair);
-  return { semestr: json.Semestr || '', times, lessons };
-}
-
-/** Сохранённая копия расписания: {at, data} или null. */
-function saved(group) {
-  try {
-    const hit = JSON.parse(localStorage.getItem(CACHE_KEY(group)) || 'null');
-    return hit && hit.data ? hit : null;
-  } catch {
-    return null;                       // копия побилась — считаем, что её нет
-  }
-}
-
-/**
- * Расписание с сервера бота: у него есть кеш и он ближе к институту.
- *
- * Пустая строка вместо адреса означает, что серверная часть выключена
- * (обычный браузер вне Telegram) — тогда этот путь просто пропускается.
- */
-async function fromBot(group) {
-  if (!API_BASE) return null;
-  const stop = new AbortController();
-  const bell = setTimeout(() => stop.abort(), 8000);
-  try {
-    const res = await fetch(
-      `${apiBase()}/api/schedule?group=${encodeURIComponent(group)}`,
-      { signal: stop.signal, headers: initDataHeader() });
-    if (!res.ok) return null;
-    const data = await res.json();
-    return data && data.ready && Array.isArray(data.lessons) ? data : null;
-  } catch {
-    return null;                        // молчит — пойдём на miet.ru сами
-  } finally {
-    clearTimeout(bell);
-  }
-}
-
-/** Заголовок с подписью Telegram, если мы внутри него. */
-function initDataHeader() {
-  const raw = window.Telegram?.WebApp?.initData || '';
-  return raw ? { 'X-Init-Data': raw } : {};
-}
-
-/** Расписание прямо с miet.ru — как ходило приложение до сих пор. */
-async function fromSite(group) {
-  const res = await fetch(`${API}?group=${encodeURIComponent(group)}`,
-    { cache: 'no-cache' });
-  if (!res.ok) throw new Error(`miet.ru ответил ${res.status}`);
-  return normalize(await res.json());
-}
-
-// Почему второй запрос уходит с задержкой, а не сразу: обычно хватает
-// первого, и дёргать сайт института за каждым расписанием незачем. Но
-// ждать его молчание целиком — значит ставить человека в очередь к
-// чужому серверу, поэтому через полторы секунды стартует второй путь.
-const HEDGE_AFTER = 1200;
-
-// Причина последнего отказа — её показывает плашка «сохранённое».
-let lastWhy = '';
-
-const wait = ms => new Promise(done => setTimeout(done, ms));
-
-/**
- * Два источника наперегонки: чей ответ пришёл первым, тот и берём.
- *
- * Раньше они шли по очереди, и молчащий бот (например, он как раз
- * перезапускается после выкладки) означал восемь секунд ожидания перед
- * тем, как приложение вообще попробует miet.ru. Теперь худший случай —
- * это время ответа того, кто жив.
- */
-async function race(group) {
-  lastWhy = '';
-  const attempts = [
-    fromBot(group).catch(() => null),
-    wait(HEDGE_AFTER).then(() => fromSite(group).catch(e => {
-      lastWhy = e.message;
-      return null;
-    })),
-  ];
-
-  return firstOk(attempts);
-}
-
-/**
- * Первый непустой ответ из нескольких.
- *
- * Своими руками, а не Promise.any: тот появился в 2021-м, а мини-апп
- * открывают и на старых телефонах — там его просто нет, и приложение
- * упало бы на ровном месте.
- */
-function firstOk(promises) {
-  return new Promise(resolve => {
-    let left = promises.length;
-    const miss = () => { if (--left === 0) resolve(null); };
-    promises.forEach(p => p.then(v => (v ? resolve(v) : miss()), miss));
-  });
-}
-
-/**
- * Загружает расписание группы. force=true обходит свежую копию.
- *
- * Порядок такой: свежая копия в телефоне → сервер бота (у него кеш и он
- * отвечает мгновенно) → miet.ru напрямую → любая копия, даже
- * просроченная. Сайт института отвечает не всем и не всегда: с части
- * мобильных сетей он недоступен вовсе, и раньше это означало ошибку
- * вместо расписания.
- */
-// Запросы, которые уже в пути: группа → обещание. Нужны, потому что
-// расписание просят двое сразу — приложение при старте (чтобы не ждать
-// справочник) и экран, который его рисует. Без этого выходило бы два
-// одинаковых запроса и две записи в хранилище.
-const inFlight = new Map();
-
-function fetchSchedule(group, { force = false } = {}) {
-  const key = `${group}|${force ? 'force' : ''}`;
-  const going = inFlight.get(key);
-  if (going) return going;
-  const started = load(group, force).finally(() => inFlight.delete(key));
-  inFlight.set(key, started);
-  return started;
-}
-
-async function load(group, force) {
-  const cacheKey = CACHE_KEY(group);
-  const copy = saved(group);
-  if (!force && copy && Date.now() - copy.at < TTL) {
-    return { ...copy.data, cached: true };
-  }
-
-  const data = await race(group);
-
-  if (data) {
-    try {
-      localStorage.setItem(cacheKey, JSON.stringify({ at: Date.now(), data }));
-    } catch { /* переполнение хранилища — работаем без копии */ }
-    return { ...data, cached: false };
-  }
-
-  if (copy) {
-    console.warn('расписание не обновилось, показываю сохранённое');
-    return { ...copy.data, cached: true, stale: true, why: lastWhy };
-  }
-
-  // Показывать нечего. Сообщение делаем человеческим: «Failed to fetch»
-  // ничего не объясняет тому, кто просто открыл приложение.
-  throw new Error(navigator.onLine === false
-    ? 'Нет сети — расписание берётся с miet.ru'
-    : `Расписание не пришло (${lastWhy || 'оба источника молчат'})`);
-}
-
-/** Все записи расписания на конкретный день конкретной недели цикла. */
-const lessonsOf = (sched, week, day) =>
-  (sched?.lessons || []).filter(l => l.week === week && l.day === day);
-
-/**
- * Пары дня — по одной на слот звонков.
- *
- * В одном слоте у группы может стоять несколько занятий: язык и
- * физкультура делятся на подгруппы, и МИЭТ отдаёт их отдельными записями
- * с одинаковым временем. Без сборки они выглядели бы как две пары подряд
- * с одним и тем же временем, а счётчик показывал бы на одну больше.
- */
-function slotsOf(sched, week, day) {
-  const byPair = new Map();
-  for (const l of lessonsOf(sched, week, day)) {
-    if (!byPair.has(l.pair)) {
-      byPair.set(l.pair, { pair: l.pair, from: l.from, to: l.to, entries: [] });
-    }
-    byPair.get(l.pair).entries.push(l);
-  }
-  return [...byPair.values()]
-    .sort((a, b) => (a.pair || 0) - (b.pair || 0))
-    .map(s => {
-      const first = s.entries[0];
-      // Обычно подгруппы — один предмет у разных преподавателей. Если
-      // предметы разные, общего названия у слота быть не может.
-      const sameSubject = new Set(s.entries.map(e => e.subject)).size === 1;
-      return {
-        ...s,
-        sameSubject,
-        split: s.entries.length > 1,
-        subject: sameSubject ? first.subject : '',
-        kind: sameSubject ? first.kind : '',
-        kindCls: sameSubject ? first.kindCls : 'oth',
-        flags: sameSubject ? first.flags : [],
-      };
-    });
-}
-
-/**
- * Окна между парами: где в дне пропущен слот звонков.
- *
- * Студент планирует день не парами, а промежутками: «после второй окно
- * до четвёртой» — это полтора часа, за которые успеваешь доехать,
- * поесть или доделать лабу. В расписании окно видно только дыркой в
- * номерах пар, и её приходилось замечать самому, сверяя время конца
- * одной строки с началом следующей.
- *
- * Тот же расчёт есть у бота (`schedule_api.gaps_of`) — они порты друг
- * друга, и меняться должны вместе.
- */
-function gapsOf(slots) {
-  const out = [];
-  for (let i = 0; i + 1 < slots.length; i++) {
-    const before = slots[i];
-    const after = slots[i + 1];
-    const missed = (after.pair || 0) - (before.pair || 0) - 1;
-    if (missed <= 0) continue;
-    out.push({
-      after: before.pair,
-      before: after.pair,
-      pairs: missed,
-      from: before.to || '',
-      to: after.from || '',
-      minutes: minutesBetween(before.to, after.from),
-    });
-  }
-  return out;
-}
-
-function minutesBetween(start, end) {
-  const mins = t => {
-    const m = /^(\d{1,2}):(\d{2})$/.exec(String(t || ''));
-    return m ? +m[1] * 60 + +m[2] : null;
-  };
-  const a = mins(start);
-  const b = mins(end);
-  return a !== null && b !== null && b > a ? b - a : 0;
-}
-
-/** «100» → «1 ч 40 мин»: человек считает окно часами, а не минутами. */
-function humanGap(minutes) {
-  const m = Math.max(0, Math.round(minutes || 0));
-  if (!m) return '';
-  const h = Math.floor(m / 60);
-  const rest = m % 60;
-  if (!h) return `${rest} мин`;
-  return rest ? `${h} ч ${rest} мин` : `${h} ч`;
-}
-
-/** Сколько пар в каждый день выбранной недели — для точек под датами. */
-function dayCounts(sched, week) {
-  const seen = [0, 1, 2, 3, 4, 5, 6].map(() => new Set());
-  for (const l of sched?.lessons || []) {
-    if (l.week === week && l.day >= 1 && l.day <= 6) seen[l.day].add(l.pair);
-  }
-  return seen.map(s => s.size);
-}
-
-const minutes = t => {
-  const [h, m] = String(t || '0:0').split(':').map(Number);
-  return h * 60 + m;
-};
-
-/**
- * Текущая и следующая пара на сегодня. Возвращает { current, next, progress }.
- * progress — доля прошедшего времени текущей пары (0..1).
- */
-function nowState(sched, week, now = new Date()) {
-  const day = ((now.getDay() + 6) % 7) + 1;      // 1..7, где 7 — воскресенье
-  if (day > 6) return { current: null, next: null, progress: 0, day };
-  const today = lessonsOf(sched, week, day);
-  const mins = now.getHours() * 60 + now.getMinutes();
-  let current = null, next = null, progress = 0;
-  for (const l of today) {
-    const a = minutes(l.from), b = minutes(l.to);
-    if (mins >= a && mins < b) {
-      current = l;
-      progress = (mins - a) / (b - a);
-    } else if (mins < a && !next) {
-      next = l;
-    }
-  }
-  return { current, next, progress, day, today };
-}
-
-/** Дата понедельника текущей недели + смещение дня (для полосы дат). */
-function weekDates(base = new Date()) {
-  const mon = mondayOf(base);
-  return Array.from({ length: 6 }, (_, i) => {
-    const d = new Date(mon);
-    d.setDate(mon.getDate() + i);
-    return d;
-  });
-}
-
-return {'DAY_NAMES': DAY_NAMES, 'DAY_SHORT': DAY_SHORT, 'WEEK_NAMES': WEEK_NAMES, 'weekName': weekName, 'mondayOf': mondayOf, 'semesterStart': semesterStart, 'weekOfCycle': weekOfCycle, 'parseSubject': parseSubject, 'shortSemestr': shortSemestr, 'fetchSchedule': fetchSchedule, 'lessonsOf': lessonsOf, 'slotsOf': slotsOf, 'gapsOf': gapsOf, 'humanGap': humanGap, 'dayCounts': dayCounts, 'nowState': nowState, 'weekDates': weekDates};
-})();
-
 /* ==== js\store.js ==== */
 __mod['js/store.js'] = (function () {
 // Состояние приложения. Настройки живут в localStorage — он у мини-аппа
@@ -751,6 +338,7 @@ const DEFAULTS = {
   favorites: [],      // id избранных кружков
   seenNews: [],       // id прочитанных новостей
   hideEmptyDays: false,
+  lunch: {},          // группа → 'after2' | 'after3': когда обед, от этого зависит 3-я пара
 };
 
 function read() {
@@ -1936,6 +1524,480 @@ const depth = () => stack.length;
 
 
 return {'TABS': TABS, 'register': register, 'init': init, 'go': go, 'back': back, 'switchTab': switchTab, 'refresh': refresh, 'current': current, 'depth': depth, 'isTab': isTab};
+})();
+
+/* ==== js\schedule.js ==== */
+__mod['js/schedule.js'] = (function () {
+// Расписание — живое, но добывается тремя путями подряд.
+//
+// Сначала своя копия в телефоне (сутки), потом сервер бота: у него есть
+// кеш, он ближе к институту и отвечает мгновенно. Только если и он
+// молчит — идём на miet.ru сами (он отдаёт Access-Control-Allow-Origin,
+// поэтому запрос из браузера возможен), а совсем в конце достаём
+// сохранённое, даже просроченное.
+//
+// Порядок именно такой, потому что сайт института отвечает не всем и не
+// всегда: с части мобильных сетей он недоступен вовсе, и это выглядело
+// как ошибка приложения.
+
+var API_BASE = __mod['js/config.js']['API_BASE'];
+var apiBase = __mod['js/config.js']['apiBase'];
+var settings = __mod['js/store.js']['settings'];
+
+const API = 'https://miet.ru/schedule/data';
+const CACHE_KEY = g => `miet-sched:${g}`;
+const TTL = 24 * 60 * 60 * 1000;
+
+const DAY_NAMES = ['', 'Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота'];
+const DAY_SHORT = ['', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
+
+/**
+ * Недели цикла так, как их зовёт официальное расписание miet.ru
+ * (weekText в его сборке): 0 — «1-й числитель», 1 — «1-й знаменатель»,
+ * 2 — «2-й числитель», 3 — «2-й знаменатель». Студенты ориентируются
+ * по этим словам, а не по номеру 1..4.
+ */
+const WEEK_NAMES = ['1-й числитель', '1-й знаменатель', '2-й числитель', '2-й знаменатель'];
+const weekName = w => WEEK_NAMES[((w % 4) + 4) % 4];
+
+/** Короткие подписи для переключателя: полные в четыре ячейки не влезают. */
+const WEEK_SHORT = [['1-й', 'числ.'], ['1-й', 'знам.'], ['2-й', 'числ.'], ['2-й', 'знам.']];
+
+const MONTHS_GEN = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля',
+  'августа', 'сентября', 'октября', 'ноября', 'декабря'];
+const MONTHS_SHORT = ['янв.', 'февр.', 'марта', 'апр.', 'мая', 'июня', 'июля',
+  'авг.', 'сент.', 'окт.', 'нояб.', 'дек.'];
+
+/** «21–26 сентября» или «28 сент. – 3 окт.» — учебная неделя с понедельника по субботу. */
+function weekRange(monday) {
+  const sat = new Date(monday);
+  sat.setDate(sat.getDate() + 5);
+  if (sat.getMonth() === monday.getMonth()) {
+    return `${monday.getDate()}–${sat.getDate()} ${MONTHS_GEN[sat.getMonth()]}`;
+  }
+  return `${monday.getDate()} ${MONTHS_SHORT[monday.getMonth()]} – ${sat.getDate()} ${MONTHS_SHORT[sat.getMonth()]}`;
+}
+
+/** Номер учебной недели семестра (1, 2, …) для даты; до начала семестра — 0. */
+function studyWeek(date, semestr) {
+  const start = mondayOf(semesterStart(semestr));
+  const n = Math.round((mondayOf(date) - start) / (7 * 86400000)) + 1;
+  return Math.max(0, n);
+}
+
+/**
+ * Через сколько недель ближайшая неделя цикла `w`, если сейчас `cur`: 0..3.
+ * Нажимая «1-й числ.», человек хочет ближайший, а не прошедший.
+ */
+const aheadTo = (w, cur) => (((w - cur) % 4) + 4) % 4;
+
+/** Ставит дату на понедельник её недели (воскресенье относим к прошедшей). */
+function mondayOf(date) {
+  const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const shift = (d.getDay() + 6) % 7;   // Пн=0 … Вс=6
+  d.setDate(d.getDate() - shift);
+  return d;
+}
+
+/**
+ * Начало семестра по строке вида «Осенний семестр 2026/2027».
+ * Осенний считаем с 1 сентября, весенний — с 9 февраля.
+ */
+function semesterStart(semestr) {
+  const m = /(\d{4})\s*\/\s*(\d{4})/.exec(semestr || '');
+  const autumn = /осен/i.test(semestr || '');
+  const now = new Date();
+  if (!m) {
+    return autumn || now.getMonth() >= 7
+      ? new Date(now.getFullYear(), 8, 1)
+      : new Date(now.getFullYear(), 1, 9);
+  }
+  return autumn
+    ? new Date(+m[1], 8, 1)
+    : new Date(+m[2], 1, 9);
+}
+
+/**
+ * Номер недели в четырёхнедельном цикле МИЭТ (0..3).
+ * Вычисляем от начала семестра; если у деканата счёт разошёлся,
+ * пользователь поправляет сдвигом в профиле.
+ */
+function weekOfCycle(date, semestr, shift = 0) {
+  const start = mondayOf(semesterStart(semestr));
+  const cur = mondayOf(date);
+  const weeks = Math.round((cur - start) / (7 * 86400000));
+  return (((weeks + shift) % 4) + 4) % 4;
+}
+
+/** Разбирает «[ФТД] [ДСТ] Быстрые алгоритмы [Лек]» на части. */
+function parseSubject(raw) {
+  let name = String(raw || '').trim();
+  const flags = [];
+  let kind = '';
+  name = name.replace(/\[(ФТД|ДСТ|ФАК)\]/gi, (_, f) => { flags.push(f.toUpperCase()); return ''; });
+  name = name.replace(/\[([^\]]+)\]\s*$/, (_, k) => { kind = k.trim(); return ''; });
+  name = name.replace(/\s{2,}/g, ' ').trim();
+  const low = kind.toLowerCase();
+  const cls = low.startsWith('лек') ? 'lek'
+    : low.startsWith('пр') ? 'pr'
+      : low.startsWith('лаб') ? 'lab' : 'oth';
+  const full = { lek: 'Лекция', pr: 'Практика', lab: 'Лабораторная' }[cls] || kind;
+  return { name, kind: full, cls, flags };
+}
+
+const hhmm = iso => (String(iso || '').match(/T(\d{2}:\d{2})/) || [, ''])[1];
+
+/** «Осенний семестр 2026/2027» → «осень 2026/27» — чтобы влезало в подзаголовок. */
+function shortSemestr(s) {
+  const m = /(\d{4})\s*\/\s*(\d{4})/.exec(s || '');
+  const season = /осен/i.test(s || '') ? 'осень' : /весен/i.test(s || '') ? 'весна' : '';
+  if (!m) return season || s || '';
+  return `${season} ${m[1]}/${m[2].slice(2)}`.trim();
+}
+
+/** Приводит ответ API к плоскому виду, удобному для экрана. */
+function normalize(json) {
+  const times = (json.Times || []).map(t => ({
+    code: t.Code,
+    label: t.Time,
+    from: hhmm(t.TimeFrom),
+    to: hhmm(t.TimeTo),
+  }));
+  const lessons = (json.Data || []).map(d => {
+    const s = parseSubject(d.Class?.Name);
+    return {
+      day: d.Day,                 // 1..6 — Пн..Сб
+      week: d.DayNumber,          // 0..3 — неделя цикла
+      pair: d.Time?.Code,
+      from: hhmm(d.Time?.TimeFrom),
+      to: hhmm(d.Time?.TimeTo),
+      subject: s.name,
+      kind: s.kind,
+      kindCls: s.cls,
+      flags: s.flags,
+      teacher: d.Class?.TeacherFull || d.Class?.Teacher || '',
+      teacherShort: d.Class?.Teacher || '',
+      room: d.Room?.Name || '',
+      group: d.Group?.Name || '',
+    };
+  });
+  lessons.sort((a, b) => a.day - b.day || a.pair - b.pair);
+  return { semestr: json.Semestr || '', times, lessons };
+}
+
+/** Сохранённая копия расписания: {at, data} или null. */
+function saved(group) {
+  try {
+    const hit = JSON.parse(localStorage.getItem(CACHE_KEY(group)) || 'null');
+    return hit && hit.data ? hit : null;
+  } catch {
+    return null;                       // копия побилась — считаем, что её нет
+  }
+}
+
+/**
+ * Расписание с сервера бота: у него есть кеш и он ближе к институту.
+ *
+ * Пустая строка вместо адреса означает, что серверная часть выключена
+ * (обычный браузер вне Telegram) — тогда этот путь просто пропускается.
+ */
+async function fromBot(group) {
+  if (!API_BASE) return null;
+  const stop = new AbortController();
+  const bell = setTimeout(() => stop.abort(), 8000);
+  try {
+    const res = await fetch(
+      `${apiBase()}/api/schedule?group=${encodeURIComponent(group)}`,
+      { signal: stop.signal, headers: initDataHeader() });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data && data.ready && Array.isArray(data.lessons) ? data : null;
+  } catch {
+    return null;                        // молчит — пойдём на miet.ru сами
+  } finally {
+    clearTimeout(bell);
+  }
+}
+
+/** Заголовок с подписью Telegram, если мы внутри него. */
+function initDataHeader() {
+  const raw = window.Telegram?.WebApp?.initData || '';
+  return raw ? { 'X-Init-Data': raw } : {};
+}
+
+/** Расписание прямо с miet.ru — как ходило приложение до сих пор. */
+async function fromSite(group) {
+  const res = await fetch(`${API}?group=${encodeURIComponent(group)}`,
+    { cache: 'no-cache' });
+  if (!res.ok) throw new Error(`miet.ru ответил ${res.status}`);
+  return normalize(await res.json());
+}
+
+// Почему второй запрос уходит с задержкой, а не сразу: обычно хватает
+// первого, и дёргать сайт института за каждым расписанием незачем. Но
+// ждать его молчание целиком — значит ставить человека в очередь к
+// чужому серверу, поэтому через полторы секунды стартует второй путь.
+const HEDGE_AFTER = 1200;
+
+// Причина последнего отказа — её показывает плашка «сохранённое».
+let lastWhy = '';
+
+const wait = ms => new Promise(done => setTimeout(done, ms));
+
+/**
+ * Два источника наперегонки: чей ответ пришёл первым, тот и берём.
+ *
+ * Раньше они шли по очереди, и молчащий бот (например, он как раз
+ * перезапускается после выкладки) означал восемь секунд ожидания перед
+ * тем, как приложение вообще попробует miet.ru. Теперь худший случай —
+ * это время ответа того, кто жив.
+ */
+async function race(group) {
+  lastWhy = '';
+  const attempts = [
+    fromBot(group).catch(() => null),
+    wait(HEDGE_AFTER).then(() => fromSite(group).catch(e => {
+      lastWhy = e.message;
+      return null;
+    })),
+  ];
+
+  return firstOk(attempts);
+}
+
+/**
+ * Первый непустой ответ из нескольких.
+ *
+ * Своими руками, а не Promise.any: тот появился в 2021-м, а мини-апп
+ * открывают и на старых телефонах — там его просто нет, и приложение
+ * упало бы на ровном месте.
+ */
+function firstOk(promises) {
+  return new Promise(resolve => {
+    let left = promises.length;
+    const miss = () => { if (--left === 0) resolve(null); };
+    promises.forEach(p => p.then(v => (v ? resolve(v) : miss()), miss));
+  });
+}
+
+/**
+ * Загружает расписание группы. force=true обходит свежую копию.
+ *
+ * Порядок такой: свежая копия в телефоне → сервер бота (у него кеш и он
+ * отвечает мгновенно) → miet.ru напрямую → любая копия, даже
+ * просроченная. Сайт института отвечает не всем и не всегда: с части
+ * мобильных сетей он недоступен вовсе, и раньше это означало ошибку
+ * вместо расписания.
+ */
+// Запросы, которые уже в пути: группа → обещание. Нужны, потому что
+// расписание просят двое сразу — приложение при старте (чтобы не ждать
+// справочник) и экран, который его рисует. Без этого выходило бы два
+// одинаковых запроса и две записи в хранилище.
+const inFlight = new Map();
+
+function fetchSchedule(group, { force = false } = {}) {
+  const key = `${group}|${force ? 'force' : ''}`;
+  const going = inFlight.get(key);
+  if (going) return going;
+  const started = load(group, force).finally(() => inFlight.delete(key));
+  inFlight.set(key, started);
+  return started;
+}
+
+async function load(group, force) {
+  const cacheKey = CACHE_KEY(group);
+  const copy = saved(group);
+  if (!force && copy && Date.now() - copy.at < TTL) {
+    return withLunch({ ...copy.data, cached: true }, lunchOf(group));
+  }
+
+  const data = await race(group);
+
+  if (data) {
+    try {
+      localStorage.setItem(cacheKey, JSON.stringify({ at: Date.now(), data }));
+    } catch { /* переполнение хранилища — работаем без копии */ }
+    return withLunch({ ...data, cached: false }, lunchOf(group));
+  }
+
+  if (copy) {
+    console.warn('расписание не обновилось, показываю сохранённое');
+    return withLunch({ ...copy.data, cached: true, stale: true, why: lastWhy }, lunchOf(group));
+  }
+
+  // Показывать нечего. Сообщение делаем человеческим: «Failed to fetch»
+  // ничего не объясняет тому, кто просто открыл приложение.
+  throw new Error(navigator.onLine === false
+    ? 'Нет сети — расписание берётся с miet.ru'
+    : `Расписание не пришло (${lastWhy || 'оба источника молчат'})`);
+}
+
+/**
+ * Третья пара и обед.
+ *
+ * Обед в МИЭТ — 40 минут, и начинается он либо после 2-й пары (11:50),
+ * либо после 3-й (13:20) — так в справочнике первокурсника
+ * (privet-miet.ru/faq). Значит, у 3-й пары два времени: 12:00–13:20 или
+ * 12:30–13:50, а 4-я в обоих случаях с 14:00. Сайт МИЭТ отдаёт всем
+ * 12:00 и не говорит, у какой группы какой обед, — его выбирает человек.
+ * Не выбрал — показываем время сайта с пометкой «или 12:30».
+ */
+const LUNCH_THIRD = { after3: ['12:00', '13:20'], after2: ['12:30', '13:50'] };
+
+function withLunch(sched, lunch) {
+  if (!sched || !Array.isArray(sched.lessons)) return sched;
+  const t = LUNCH_THIRD[lunch] || null;
+  // Правим только то, что пришло во времени сайта: чужое время не трогаем.
+  const fix = l => (l.pair === 3 && l.from === '12:00'
+    ? { ...l, ...(t ? { from: t[0], to: t[1] } : { altFrom: '12:30' }) } : l);
+  return {
+    ...sched,
+    lessons: sched.lessons.map(fix),
+    times: (sched.times || []).map(x => (x.code === 3 && t && x.from === '12:00'
+      ? { ...x, from: t[0], to: t[1] } : x)),
+    lunch: t ? lunch : null,
+  };
+}
+
+const lunchOf = group => (settings.lunch || {})[group] || null;
+
+/** Все записи расписания на конкретный день конкретной недели цикла. */
+const lessonsOf = (sched, week, day) =>
+  (sched?.lessons || []).filter(l => l.week === week && l.day === day);
+
+/**
+ * Пары дня — по одной на слот звонков.
+ *
+ * В одном слоте у группы может стоять несколько занятий: язык и
+ * физкультура делятся на подгруппы, и МИЭТ отдаёт их отдельными записями
+ * с одинаковым временем. Без сборки они выглядели бы как две пары подряд
+ * с одним и тем же временем, а счётчик показывал бы на одну больше.
+ */
+function slotsOf(sched, week, day) {
+  const byPair = new Map();
+  for (const l of lessonsOf(sched, week, day)) {
+    if (!byPair.has(l.pair)) {
+      byPair.set(l.pair, { pair: l.pair, from: l.from, to: l.to, altFrom: l.altFrom, entries: [] });
+    }
+    byPair.get(l.pair).entries.push(l);
+  }
+  return [...byPair.values()]
+    .sort((a, b) => (a.pair || 0) - (b.pair || 0))
+    .map(s => {
+      const first = s.entries[0];
+      // Обычно подгруппы — один предмет у разных преподавателей. Если
+      // предметы разные, общего названия у слота быть не может.
+      const sameSubject = new Set(s.entries.map(e => e.subject)).size === 1;
+      return {
+        ...s,
+        sameSubject,
+        split: s.entries.length > 1,
+        subject: sameSubject ? first.subject : '',
+        kind: sameSubject ? first.kind : '',
+        kindCls: sameSubject ? first.kindCls : 'oth',
+        flags: sameSubject ? first.flags : [],
+      };
+    });
+}
+
+/**
+ * Окна между парами: где в дне пропущен слот звонков.
+ *
+ * Студент планирует день не парами, а промежутками: «после второй окно
+ * до четвёртой» — это полтора часа, за которые успеваешь доехать,
+ * поесть или доделать лабу. В расписании окно видно только дыркой в
+ * номерах пар, и её приходилось замечать самому, сверяя время конца
+ * одной строки с началом следующей.
+ *
+ * Тот же расчёт есть у бота (`schedule_api.gaps_of`) — они порты друг
+ * друга, и меняться должны вместе.
+ */
+function gapsOf(slots) {
+  const out = [];
+  for (let i = 0; i + 1 < slots.length; i++) {
+    const before = slots[i];
+    const after = slots[i + 1];
+    const missed = (after.pair || 0) - (before.pair || 0) - 1;
+    if (missed <= 0) continue;
+    out.push({
+      after: before.pair,
+      before: after.pair,
+      pairs: missed,
+      from: before.to || '',
+      to: after.from || '',
+      minutes: minutesBetween(before.to, after.from),
+    });
+  }
+  return out;
+}
+
+function minutesBetween(start, end) {
+  const mins = t => {
+    const m = /^(\d{1,2}):(\d{2})$/.exec(String(t || ''));
+    return m ? +m[1] * 60 + +m[2] : null;
+  };
+  const a = mins(start);
+  const b = mins(end);
+  return a !== null && b !== null && b > a ? b - a : 0;
+}
+
+/** «100» → «1 ч 40 мин»: человек считает окно часами, а не минутами. */
+function humanGap(minutes) {
+  const m = Math.max(0, Math.round(minutes || 0));
+  if (!m) return '';
+  const h = Math.floor(m / 60);
+  const rest = m % 60;
+  if (!h) return `${rest} мин`;
+  return rest ? `${h} ч ${rest} мин` : `${h} ч`;
+}
+
+/** Сколько пар в каждый день выбранной недели — для точек под датами. */
+function dayCounts(sched, week) {
+  const seen = [0, 1, 2, 3, 4, 5, 6].map(() => new Set());
+  for (const l of sched?.lessons || []) {
+    if (l.week === week && l.day >= 1 && l.day <= 6) seen[l.day].add(l.pair);
+  }
+  return seen.map(s => s.size);
+}
+
+const minutes = t => {
+  const [h, m] = String(t || '0:0').split(':').map(Number);
+  return h * 60 + m;
+};
+
+/**
+ * Текущая и следующая пара на сегодня. Возвращает { current, next, progress }.
+ * progress — доля прошедшего времени текущей пары (0..1).
+ */
+function nowState(sched, week, now = new Date()) {
+  const day = ((now.getDay() + 6) % 7) + 1;      // 1..7, где 7 — воскресенье
+  if (day > 6) return { current: null, next: null, progress: 0, day };
+  const today = lessonsOf(sched, week, day);
+  const mins = now.getHours() * 60 + now.getMinutes();
+  let current = null, next = null, progress = 0;
+  for (const l of today) {
+    const a = minutes(l.from), b = minutes(l.to);
+    if (mins >= a && mins < b) {
+      current = l;
+      progress = (mins - a) / (b - a);
+    } else if (mins < a && !next) {
+      next = l;
+    }
+  }
+  return { current, next, progress, day, today };
+}
+
+/** Дата понедельника текущей недели + смещение дня (для полосы дат). */
+function weekDates(base = new Date()) {
+  const mon = mondayOf(base);
+  return Array.from({ length: 6 }, (_, i) => {
+    const d = new Date(mon);
+    d.setDate(mon.getDate() + i);
+    return d;
+  });
+}
+
+return {'DAY_NAMES': DAY_NAMES, 'DAY_SHORT': DAY_SHORT, 'WEEK_NAMES': WEEK_NAMES, 'weekName': weekName, 'WEEK_SHORT': WEEK_SHORT, 'weekRange': weekRange, 'studyWeek': studyWeek, 'aheadTo': aheadTo, 'mondayOf': mondayOf, 'semesterStart': semesterStart, 'weekOfCycle': weekOfCycle, 'parseSubject': parseSubject, 'shortSemestr': shortSemestr, 'fetchSchedule': fetchSchedule, 'LUNCH_THIRD': LUNCH_THIRD, 'withLunch': withLunch, 'lessonsOf': lessonsOf, 'slotsOf': slotsOf, 'gapsOf': gapsOf, 'humanGap': humanGap, 'dayCounts': dayCounts, 'nowState': nowState, 'weekDates': weekDates};
 })();
 
 /* ==== js\subjects.js ==== */
@@ -4709,6 +4771,8 @@ async function profileScreen() {
       ${listCard([
       listRow({ ico: 'users', title: 'Группа', value: settings.group || 'не выбрана', chevron: true, id: 'group', cls: 'tap' }),
       listRow({ ico: 'calendar', title: 'Текущая неделя', value: weekLabel, chevron: true, id: 'week', cls: 'tap' }),
+      ...(settings.group ? [listRow({ ico: 'utensils', title: 'Обед группы', value: LUNCH_LABEL[(settings.lunch || {})[settings.group]] || 'не указан',
+        chevron: true, id: 'lunch', cls: 'tap' })] : []),
       listRow({ ico: 'heart', title: 'Избранные кружки', value: String(favCount), chevron: true, id: 'fav', cls: 'tap' }),
     ])}
 
@@ -4798,6 +4862,7 @@ async function profileScreen() {
       case 'admin': return go('admin');
       case 'group': return pickGroup(() => refresh());
       case 'week': return weekShiftSheet(baseWeek);
+      case 'lunch': return lunchSheet();
       case 'fav': return go('clubs');
       case 'about': return go('about');
       case 'campus': return go('campus');
@@ -4831,6 +4896,47 @@ async function profileScreen() {
  * Поправка недели. Цикл в МИЭТе четырёхнедельный, отсчёт ведём от начала
  * семестра — если у деканата счёт другой, здесь его можно сдвинуть.
  */
+const LUNCH_LABEL = { after2: 'после 2-й пары', after3: 'после 3-й пары' };
+
+/**
+ * Когда у группы обед. От этого зависит только 3-я пара: 12:00–13:20,
+ * если обед после неё, и 12:30–13:50, если перед ней. Сайт МИЭТ этого
+ * не сообщает, поэтому выбирает человек — для каждой группы отдельно.
+ */
+function lunchSheet() {
+  const cur = (settings.lunch || {})[settings.group] || '';
+  const opt = (id, title, sub) => `
+    <button class="list-row tap" data-l="${id}" style="width:100%;text-align:left">
+      <div class="list-row-body"><div class="row-title">${title}</div><div class="row-subtitle">${sub}</div></div>
+      ${cur === id ? icon('check', 20) : ''}
+    </button>`;
+  sheet({
+    title: 'Обед группы',
+    body: `
+      <div class="row-subtitle" style="margin-bottom:12px;line-height:1.5">
+        Обед в МИЭТ — 40 минут: после 2-й пары (11:50) или после 3-й (13:20).
+        От этого зависит, во сколько начинается 3-я пара.
+      </div>
+      <div class="list-card">
+        ${opt('after3', 'После 3-й пары', '3-я пара в 12:00–13:20')}
+        ${opt('after2', 'После 2-й пары', '3-я пара в 12:30–13:50')}
+        ${opt('', 'Не знаю', 'показывать оба времени')}
+      </div>`,
+    onMount(root, close) {
+      root.addEventListener('click', e => {
+        const b = e.target.closest('[data-l]');
+        if (!b) return;
+        const lunch = { ...(settings.lunch || {}) };
+        if (b.dataset.l) lunch[settings.group] = b.dataset.l; else delete lunch[settings.group];
+        save({ lunch });
+        haptic('medium');
+        close();
+        refresh();
+      });
+    },
+  });
+}
+
 function weekShiftSheet(base) {
   // Зная неделю без поправки, спрашиваем по-человечески: «какая неделя
   // сейчас?» — названиями из официального расписания, а не «+1, +2».
@@ -5182,6 +5288,10 @@ var shortSemestr = __mod['js/schedule.js']['shortSemestr'];
 var gapsOf = __mod['js/schedule.js']['gapsOf'];
 var humanGap = __mod['js/schedule.js']['humanGap'];
 var weekName = __mod['js/schedule.js']['weekName'];
+var WEEK_SHORT = __mod['js/schedule.js']['WEEK_SHORT'];
+var weekRange = __mod['js/schedule.js']['weekRange'];
+var studyWeek = __mod['js/schedule.js']['studyWeek'];
+var aheadTo = __mod['js/schedule.js']['aheadTo'];
 var DAY_SHORT = __mod['js/schedule.js']['DAY_SHORT'];
 var DAY_NAMES = __mod['js/schedule.js']['DAY_NAMES'];
 var refresh = __mod['js/router.js']['refresh'];
@@ -5279,6 +5389,7 @@ function lessonRow(l, now = null, showState = true) {
       <div class="lesson-time">
         <div class="lesson-from">${esc(l.from)}</div>
         <div class="lesson-to">${esc(l.to)}</div>
+        ${l.altFrom ? `<div class="lesson-alt">или ${esc(l.altFrom)}</div>` : ''}
       </div>
       ${badge}
       <div class="lesson-body">
@@ -5335,20 +5446,19 @@ async function scheduleScreen(params = {}) {
 
   const curWeek = weekOfCycle(now, sched.semestr, settings.weekShift);
   const todayDay = ((now.getDay() + 6) % 7) + 1;
-  let week = params.week ?? curWeek;
+  // Неделя — это сдвиг от текущей: стрелками можно уйти и в следующий цикл,
+  // а даты при этом честно идут дальше, а не возвращаются к началу круга.
+  let off = params.week != null ? aheadTo(params.week, curWeek) : 0;
+  let week = (curWeek + off) % 4;
   let day = params.day ?? (todayDay <= 6 ? todayDay : 1);
+  const mondayAt = o => { const m = mondayOf(now); m.setDate(m.getDate() + o * 7); return m; };
 
   const node = screen({
     title: 'Расписание',
     subtitle: `${settings.group} · ${shortSemestr(sched.semestr)}`,
     actions: iconBtn('refresh', 'reload') + iconBtn('sliders', 'group'),
     body: `
-      <div class="pill-row" id="weeks">
-        ${[0, 1, 2, 3].map(w => `
-          <button class="pill ${w === week ? 'active' : ''}" data-week="${w}">
-            ${weekName(w)}${w === curWeek ? ' · сейчас' : ''}
-          </button>`).join('')}
-      </div>
+      <div class="wk" id="weeks"></div>
       <div class="week-strip" id="days"></div>
       <div id="stale"></div>
       <div id="list" class="stack" style="margin-top:16px"></div>`,
@@ -5368,10 +5478,39 @@ async function scheduleScreen(params = {}) {
       : '';
   }
 
+  /**
+   * Карточка недели: официальное имя крупно, даты и номер учебной недели
+   * под ним, стрелки по краям; ниже — четыре одинаковые ячейки цикла.
+   * Всё умещается в ширину самого узкого телефона — ничего не уезжает.
+   */
+  function drawWeeks() {
+    const mon = mondayAt(off);
+    const n = studyWeek(mon, sched.semestr);
+    const when = off === 0 ? 'сейчас' : off === 1 ? 'следующая' : off === -1 ? 'прошлая'
+      : off > 0 ? `через ${off} нед.` : `${-off} нед. назад`;
+    node.querySelector('#weeks').innerHTML = `
+      <div class="wk-head">
+        <button class="wk-arrow" data-step="-1" aria-label="Предыдущая неделя">${icon('chevronLeft', 20)}</button>
+        <div class="wk-title">
+          <div class="wk-name">${esc(weekName(week))}</div>
+          <div class="wk-sub">
+            <span class="wk-when ${off === 0 ? 'now' : ''}">${esc(when)}</span>
+            <span>${esc(weekRange(mon))}</span>${n ? `<span>${n}-я уч. неделя</span>` : ''}
+          </div>
+        </div>
+        <button class="wk-arrow" data-step="1" aria-label="Следующая неделя">${icon('chevronRight', 20)}</button>
+      </div>
+      <div class="wk-seg">
+        ${WEEK_SHORT.map(([a, b], w) => `
+          <button class="wk-cell ${w === week ? 'active' : ''} ${w === curWeek ? 'cur' : ''}" data-week="${w}">
+            <span class="wk-n">${a}</span><span class="wk-k">${b}</span>
+          </button>`).join('')}
+      </div>`;
+  }
+
   function drawDays() {
     const counts = dayCounts(sched, week);
-    const mon = mondayOf(now);
-    mon.setDate(mon.getDate() + (week - curWeek) * 7);
+    const mon = mondayAt(off);
     daysEl.innerHTML = [1, 2, 3, 4, 5, 6].map(d => {
       const date = new Date(mon);
       date.setDate(mon.getDate() + d - 1);
@@ -5388,10 +5527,22 @@ async function scheduleScreen(params = {}) {
 
   function drawList() {
     const items = slotsOf(sched, week, day);
-    const mon = mondayOf(now);
-    mon.setDate(mon.getDate() + (week - curWeek) * 7 + day - 1);
+    const mon = mondayAt(off);
+    mon.setDate(mon.getDate() + day - 1);
     const isToday = mon.toDateString() === now.toDateString();
+    // Спросить про обед стоит только там, где он что-то меняет: в дне
+    // есть 3-я пара, а группа ещё не сказала, когда у неё перерыв.
+    const ask = !sched.lunch && items.some(s => s.pair === 3 && s.altFrom);
     listEl.innerHTML = `
+      ${ask ? `
+        <div class="lunch-ask">
+          <div class="lunch-title">${icon('utensils', 17)} Когда у группы обед?</div>
+          <div class="lunch-note">От этого зависит начало 3-й пары. Сайт МИЭТ пишет всем 12:00 — выбери, как у вас:</div>
+          <div class="lunch-opts">
+            <button class="lunch-opt" data-lunch="after3"><b>После 3-й пары</b><span>3-я в 12:00–13:20</span></button>
+            <button class="lunch-opt" data-lunch="after2"><b>После 2-й пары</b><span>3-я в 12:30–13:50</span></button>
+          </div>
+        </div>` : ''}
       <div class="section-head" style="margin:0 2px 2px">
         <div class="section-title">${DAY_NAMES[day]}</div>
         <span class="muted" style="font-size:14px;font-weight:600">${shortDate(mon)}</span>
@@ -5408,27 +5559,37 @@ async function scheduleScreen(params = {}) {
         </div>` : ''}`;
   }
 
+  drawWeeks();
   drawDays();
   drawList();
   drawStale();
 
-  // Четыре недели с полными названиями в ширину телефона не влезают:
-  // выбранную прокручиваем в поле зрения, иначе «2-й знаменатель» уезжает за край.
-  const weeksEl = node.querySelector('#weeks');
-  requestAnimationFrame(() => {
-    const a = weeksEl.querySelector('.pill.active');
-    if (a) weeksEl.scrollLeft = Math.max(0, a.offsetLeft - weeksEl.offsetLeft - 16);
-  });
-
   node.querySelector('#weeks').addEventListener('click', e => {
-    const b = e.target.closest('[data-week]');
-    if (!b) return;
-    week = +b.dataset.week;
+    const step = e.target.closest('[data-step]');
+    const cell = e.target.closest('[data-week]');
+    if (!step && !cell) return;
+    // Ячейка ведёт к ближайшей такой неделе (текущая — к «сейчас»),
+    // стрелки листают по одной, в том числе в соседний цикл.
+    if (step) off += +step.dataset.step;
+    else off = aheadTo(+cell.dataset.week, curWeek);
+    week = (((curWeek + off) % 4) + 4) % 4;
     hapticSelect();
-    node.querySelectorAll('#weeks .pill').forEach(p => p.classList.remove('active'));
-    b.classList.add('active');
+    drawWeeks();
     drawDays();
     drawList();
+  });
+
+  listEl.addEventListener('click', async e => {
+    const b = e.target.closest('[data-lunch]');
+    if (!b) return;
+    save({ lunch: { ...(settings.lunch || {}), [settings.group]: b.dataset.lunch } });
+    hapticSelect();
+    // Перечитываем из своей копии (поправка кладётся при выдаче) и
+    // перерисовываем на месте — выбранные неделя и день остаются.
+    try { sched = await fetchSchedule(settings.group); } catch { /* останется как было */ }
+    drawDays();
+    drawList();
+    toast('Запомнил — время 3-й пары поправлено');
   });
 
   daysEl.addEventListener('click', e => {

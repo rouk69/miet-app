@@ -10,6 +10,7 @@ const DEFAULTS = {
   favorites: [],      // id избранных кружков
   seenNews: [],       // id прочитанных новостей
   hideEmptyDays: false,
+  lunch: {},          // группа → 'after2' | 'after3': когда обед, от этого зависит 3-я пара
 };
 
 function read() {

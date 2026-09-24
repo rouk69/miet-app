@@ -390,6 +390,23 @@ CASES = [
     ("неделя 2 — 2-й числитель", "weekName(2)", "2-й числитель"),
     ("неделя 3 — 2-й знаменатель", "weekName(3)", "2-й знаменатель"),
     ("сдвиг за конец цикла — по кругу", "weekName(3 + 2)", "1-й знаменатель"),
+    # Карточка недели: даты с понедельника по субботу, номер учебной недели.
+    ("неделя в одном месяце", "weekRange(new Date(2026, 8, 21))", "21–26 сентября"),
+    ("неделя на стыке месяцев", "weekRange(new Date(2026, 8, 28))", "28 сент. – 3 окт."),
+    ("первая учебная неделя", "studyWeek(new Date(2026, 8, 2), SEM)", "1"),
+    ("четвёртая учебная неделя", "studyWeek(new Date(2026, 8, 24), SEM)", "4"),
+    ("до семестра — ноль", "studyWeek(new Date(2026, 7, 10), SEM)", "0"),
+    ("ячейка ведёт вперёд, а не назад", "aheadTo(0, 3)", "1"),
+    ("текущая ячейка — это сейчас", "aheadTo(2, 2)", "0"),
+    # Третья пара и обед: 12:00–13:20 или 12:30–13:50, остальное не трогаем.
+    ("обед не выбран — второе время пометкой", "third(withLunch(LUN, null)).altFrom", "12:30"),
+    ("обед не выбран — время сайта", "third(withLunch(LUN, null)).from", "12:00"),
+    ("обед после 2-й — пара в 12:30", "third(withLunch(LUN, 'after2')).from + '-' + third(withLunch(LUN, 'after2')).to", "12:30-13:50"),
+    ("обед после 3-й — пара в 12:00", "third(withLunch(LUN, 'after3')).from", "12:00"),
+    ("выбранный обед без пометки", "String(third(withLunch(LUN, 'after3')).altFrom)", "undefined"),
+    ("соседние пары не сдвигаются", "withLunch(LUN, 'after2').lessons[2].from", "14:00"),
+    ("сетка звонков тоже поправлена", "withLunch(LUN, 'after2').times[0].from", "12:30"),
+    ("чужое время не трогаем", "withLunch({ lessons: [{ pair: 3, from: '12:20', to: '13:50' }] }, 'after2').lessons[0].from", "12:20"),
     # Успеваемость. Главная ловушка — `max_grade` дисциплины: это максимум
     # по оценённому, а не за семестр; сумма берётся по всем точкам.
     ("семестр — сумма всех точек", "standing(INF).max", "100"),
@@ -481,7 +498,13 @@ var plural = _rf.plural, dayLabel = _rf.dayLabel;
 
 var __scr = __mod['js/screens/schedule.js'];
 var _sc = __mod['js/schedule.js'];
-var gapsOf = _sc.gapsOf, humanGap = _sc.humanGap, weekName = _sc.weekName;
+var gapsOf = _sc.gapsOf, humanGap = _sc.humanGap, weekName = _sc.weekName,
+    weekRange = _sc.weekRange, studyWeek = _sc.studyWeek, aheadTo = _sc.aheadTo,
+    withLunch = _sc.withLunch;
+var SEM = 'Осенний семестр 2026/2027';
+var LUN = { lessons: [{ pair: 2, from: '10:30', to: '11:50' }, { pair: 3, from: '12:00', to: '13:20' },
+  { pair: 4, from: '14:00', to: '15:20' }], times: [{ code: 3, from: '12:00', to: '13:20' }] };
+var third = function (s) { return s.lessons.filter(function (l) { return l.pair === 3; })[0]; };
 
 // День с дыркой в номерах пар: после второй сразу пятая.
 var WITH_GAP = [
