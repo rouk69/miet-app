@@ -251,7 +251,7 @@ print("\n4. Кнопки переключения дня")
 tg.reset(); press("d|2|4|ПИН-31")
 check("сообщение отредактировано", len(tg.edited) == 1)
 check("правка ушла по message_id", tg.edited[0]["message_id"] == 10)
-check("в тексте 3-я неделя", "3-я неделя" in edited_body(), edited_body()[:80])
+check("в тексте 2-й числитель", "2-й числитель" in edited_body(), edited_body()[:80])
 check("на callback ответили", len(tg.answers) == 1)
 
 print("\n5. Кнопки во вставленном сообщении (inline)")

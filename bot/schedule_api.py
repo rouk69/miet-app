@@ -126,6 +126,15 @@ def semester_start(semestr: str) -> dt.date:
     return dt.date(int(m.group(1)), 9, 1) if autumn else dt.date(int(m.group(2)), 2, 9)
 
 
+# Недели цикла так, как их зовёт официальное расписание miet.ru (weekText
+# в его сборке). Порт WEEK_NAMES из js/schedule.js — держать одинаковыми.
+WEEK_NAMES = ("1-й числитель", "1-й знаменатель", "2-й числитель", "2-й знаменатель")
+
+
+def week_name(week: int) -> str:
+    return WEEK_NAMES[week % 4]
+
+
 def week_of_cycle(d: dt.date, semestr: str, shift: int = 0) -> int:
     """Номер недели в четырёхнедельном цикле МИЭТ, 0..3."""
     start = monday_of(semester_start(semestr))

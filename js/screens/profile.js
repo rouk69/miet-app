@@ -4,7 +4,7 @@ import { icon } from '../icons.js';
 import { esc, listCard, listRow, toast, sheet, emptyState, toggle } from '../ui.js';
 import { data, settings, save, applyTheme, resolveTheme } from '../store.js';
 import { BUILD } from '../config.js';
-import { fetchSchedule, weekOfCycle } from '../schedule.js';
+import { fetchSchedule, weekOfCycle, weekName } from '../schedule.js';
 import { go, refresh } from '../router.js';
 import { tgUser, openLink, syncChrome, haptic, hapticNotify, confirmDialog }
   from '../tg.js';
@@ -18,10 +18,12 @@ export default async function profileScreen() {
   const favCount = settings.favorites.length;
 
   let weekLabel = '—';
+  let baseWeek = null;   // неделя цикла без поправки — от неё считает окно поправки
   if (settings.group) {
     try {
       const s = await fetchSchedule(settings.group);
-      weekLabel = `${weekOfCycle(new Date(), s.semestr, settings.weekShift) + 1}-я из 4`;
+      baseWeek = weekOfCycle(new Date(), s.semestr, 0);
+      weekLabel = weekName(baseWeek + settings.weekShift);
     } catch { weekLabel = 'нет данных'; }
   }
 
@@ -142,7 +144,7 @@ export default async function profileScreen() {
     switch (row.dataset.id) {
       case 'admin': return go('admin');
       case 'group': return pickGroup(() => refresh());
-      case 'week': return weekShiftSheet();
+      case 'week': return weekShiftSheet(baseWeek);
       case 'fav': return go('clubs');
       case 'about': return go('about');
       case 'campus': return go('campus');
@@ -176,19 +178,28 @@ export default async function profileScreen() {
  * Поправка недели. Цикл в МИЭТе четырёхнедельный, отсчёт ведём от начала
  * семестра — если у деканата счёт другой, здесь его можно сдвинуть.
  */
-function weekShiftSheet() {
+function weekShiftSheet(base) {
+  // Зная неделю без поправки, спрашиваем по-человечески: «какая неделя
+  // сейчас?» — названиями из официального расписания, а не «+1, +2».
+  const known = base !== null && base !== undefined;
   sheet({
     title: 'Поправка недели',
     body: `
       <div class="row-subtitle" style="margin-bottom:14px;line-height:1.5">
-        Неделя цикла считается от начала семестра. Если приложение показывает
-        не ту неделю, что деканат, — сдвинь на нужное число.
+        ${known
+    ? 'Неделя считается от начала семестра. Если в официальном расписании сейчас другая — выбери её.'
+    : 'Неделя цикла считается от начала семестра. Если приложение показывает не ту неделю, что деканат, — сдвинь на нужное число.'}
       </div>
-      <div class="pill-row" id="shift">
-        ${[0, 1, 2, 3].map(s => `
+      <div class="pill-row" id="shift" style="flex-wrap:wrap">
+        ${[0, 1, 2, 3].map(i => {
+    // С известной неделей кнопки идут по порядку недель (1-й числитель…),
+    // и каждая несёт сдвиг, который к ней приводит.
+    const s = known ? (i - base + 4) % 4 : i;
+    return `
           <button class="pill ${settings.weekShift === s ? 'active' : ''}" data-shift="${s}">
-            ${s === 0 ? 'без сдвига' : `+${s}`}
-          </button>`).join('')}
+            ${known ? weekName(i) : s === 0 ? 'без сдвига' : `+${s}`}
+          </button>`;
+  }).join('')}
       </div>`,
     onMount(root, close) {
       root.querySelector('#shift').addEventListener('click', e => {

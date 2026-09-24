@@ -383,7 +383,21 @@ CASES = [
     ("«прочие» уходят в конец",
      "blocksOf([{name:'Спорткомплекс'},{name:'3105'}]).join(',')", "3,#"),
     ("кривая дата подписи не даёт", "String(dayLabel('') === '')", "true"),
+    # Названия недель — слово в слово как у miet.ru, по ним студенты и
+    # сверяются с официальным расписанием; счёт цикла идёт по кругу.
+    ("неделя 0 — 1-й числитель", "weekName(0)", "1-й числитель"),
+    ("неделя 1 — 1-й знаменатель", "weekName(1)", "1-й знаменатель"),
+    ("неделя 2 — 2-й числитель", "weekName(2)", "2-й числитель"),
+    ("неделя 3 — 2-й знаменатель", "weekName(3)", "2-й знаменатель"),
+    ("сдвиг за конец цикла — по кругу", "weekName(3 + 2)", "1-й знаменатель"),
 ]
+
+# Бот подписывает недели тем же словарём (bot/schedule_api.WEEK_NAMES):
+# разойдись они — в сообщении бота и в приложении была бы разная неделя.
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from bot.schedule_api import WEEK_NAMES as _BOT_WEEKS  # noqa: E402
+CASES += [(f"неделя {i} у бота та же", f"weekName({i})", n)
+          for i, n in enumerate(_BOT_WEEKS)]
 
 
 # Модули в сборке завёрнуты, глобальных имён нет: достаём нужное из
@@ -425,7 +439,7 @@ var plural = _rf.plural, dayLabel = _rf.dayLabel;
 
 var __scr = __mod['js/screens/schedule.js'];
 var _sc = __mod['js/schedule.js'];
-var gapsOf = _sc.gapsOf, humanGap = _sc.humanGap;
+var gapsOf = _sc.gapsOf, humanGap = _sc.humanGap, weekName = _sc.weekName;
 
 // День с дыркой в номерах пар: после второй сразу пятая.
 var WITH_GAP = [

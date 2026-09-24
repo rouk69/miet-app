@@ -19,7 +19,7 @@ import { screen, pickGroup } from './common.js';
 import { subjectBadge } from '../subjects.js';
 import { haptic } from '../tg.js';
 import {
-  fetchSchedule, weekOfCycle, slotsOf, DAY_SHORT, DAY_NAMES,
+  fetchSchedule, weekOfCycle, weekName, slotsOf, DAY_SHORT, DAY_NAMES,
 } from '../schedule.js';
 
 // С чем сравниваем. Живёт в модуле, а не в параметрах экрана: человек
@@ -205,7 +205,7 @@ export default async function compareScreen() {
     const cmp = perDay[day] || { rows: [], together: 0, both: 0, free: 0 };
 
     body.innerHTML = `
-      ${pillRow([0, 1, 2, 3].map(w => ({ id: String(w), label: `${w + 1}-я неделя` })),
+      ${pillRow([0, 1, 2, 3].map(w => ({ id: String(w), label: weekName(w) })),
     String(week), 'cmpweek')}
 
       <div class="cmp-sum">

@@ -153,7 +153,7 @@ def schedule_card(group: str, sched: dict, week: int, day: int, cur_week: int,
     if is_today:
         head += " <i>· сегодня</i>"
 
-    sub_bits = [f"{week + 1}-я неделя", esc(group)]
+    sub_bits = [api.week_name(week), esc(group)]
     sem = short_semestr(sched.get("semestr", ""))
     if sem:
         sub_bits.append(sem)
@@ -201,7 +201,7 @@ def week_card(group: str, sched: dict, week: int, cur_week: int,
               custom: bool = True) -> str:
     """Свод на всю неделю. Дни с парами разворачиваются по нажатию."""
     counts = api.day_counts(sched, week)
-    lines = [f"{em.ico('calendar', custom)} <b>{week + 1}-я неделя</b> · "
+    lines = [f"{em.ico('calendar', custom)} <b>Неделя · {api.week_name(week)}</b> · "
              f"<i>{esc(group)}</i>", ""]
     for d in range(1, 7):
         slots = api.slots_of(sched, week, d)

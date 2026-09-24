@@ -7,7 +7,7 @@ import { art, artState } from '../art.js';
 import { settings, save } from '../store.js';
 import {
   fetchSchedule, weekOfCycle, slotsOf, dayCounts, mondayOf, shortSemestr,
-  gapsOf, humanGap, DAY_SHORT, DAY_NAMES,
+  gapsOf, humanGap, weekName, DAY_SHORT, DAY_NAMES,
 } from '../schedule.js';
 import { refresh } from '../router.js';
 import { haptic, hapticSelect } from '../tg.js';
@@ -167,7 +167,7 @@ export default async function scheduleScreen(params = {}) {
       <div class="pill-row" id="weeks">
         ${[0, 1, 2, 3].map(w => `
           <button class="pill ${w === week ? 'active' : ''}" data-week="${w}">
-            ${w + 1}-я неделя${w === curWeek ? ' · сейчас' : ''}
+            ${weekName(w)}${w === curWeek ? ' · сейчас' : ''}
           </button>`).join('')}
       </div>
       <div class="week-strip" id="days"></div>
@@ -232,6 +232,14 @@ export default async function scheduleScreen(params = {}) {
   drawDays();
   drawList();
   drawStale();
+
+  // Четыре недели с полными названиями в ширину телефона не влезают:
+  // выбранную прокручиваем в поле зрения, иначе «2-й знаменатель» уезжает за край.
+  const weeksEl = node.querySelector('#weeks');
+  requestAnimationFrame(() => {
+    const a = weeksEl.querySelector('.pill.active');
+    if (a) weeksEl.scrollLeft = Math.max(0, a.offsetLeft - weeksEl.offsetLeft - 16);
+  });
 
   node.querySelector('#weeks').addEventListener('click', e => {
     const b = e.target.closest('[data-week]');

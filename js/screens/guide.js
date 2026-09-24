@@ -8,7 +8,7 @@
 import { icon } from '../icons.js';
 import { esc, emptyState } from '../ui.js';
 import { data, settings } from '../store.js';
-import { fetchSchedule, weekOfCycle, semesterStart } from '../schedule.js';
+import { fetchSchedule, weekOfCycle, weekName, semesterStart } from '../schedule.js';
 import { go } from '../router.js';
 import { openLink } from '../tg.js';
 import { screen } from './common.js';
@@ -240,7 +240,7 @@ export async function datesScreen() {
       <div class="card" style="padding:18px">
         <div class="now-kicker">${esc(sched.semestr)}</div>
         <div style="font-size:22px;font-weight:800;margin:6px 0 2px">
-          ${week + 1}-я неделя цикла
+          Сейчас ${weekName(week)}
         </div>
         <div class="row-subtitle">
           Идёт ${passed}-я учебная неделя · семестр начался ${esc(human(start))}
