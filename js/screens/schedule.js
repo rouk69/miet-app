@@ -7,7 +7,7 @@ import { art, artState } from '../art.js';
 import { settings, save } from '../store.js';
 import {
   fetchSchedule, weekOfCycle, slotsOf, dayCounts, mondayOf, shortSemestr,
-  gapsOf, humanGap, weekName, WEEK_SHORT, weekRange, studyWeek, aheadTo, DAY_SHORT, DAY_NAMES,
+  gapsOf, humanGap, weekName, WEEK_SHORT, weekRange, studyWeek, aheadTo, setLunch, DAY_SHORT, DAY_NAMES,
 } from '../schedule.js';
 import { refresh } from '../router.js';
 import { haptic, hapticSelect } from '../tg.js';
@@ -308,7 +308,7 @@ export default async function scheduleScreen(params = {}) {
   listEl.addEventListener('click', async e => {
     const b = e.target.closest('[data-lunch]');
     if (!b) return;
-    save({ lunch: { ...(settings.lunch || {}), [settings.group]: b.dataset.lunch } });
+    setLunch(settings.group, b.dataset.lunch);
     hapticSelect();
     // Перечитываем из своей копии (поправка кладётся при выдаче) и
     // перерисовываем на месте — выбранные неделя и день остаются.

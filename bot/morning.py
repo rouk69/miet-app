@@ -79,7 +79,7 @@ def card(group: str, uid: int, custom: bool = True,
     пар. Решение принимается здесь, а не в рассылке: расписание уже
     загружено, и второй раз ходить за ним незачем.
     """
-    sched = api.fetch_schedule(group)
+    sched = api.with_lunch(api.fetch_schedule(group), storage.lunch_for(uid, group))
     today = msk_now().date()
     day = today.isoweekday()
     if day > 6:

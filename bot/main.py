@@ -228,11 +228,16 @@ def today_day() -> int:
     return d if d <= 6 else 1
 
 
+def sched_for(group: str, uid: int | None = None) -> dict:
+    """Расписание группы с временем 3-й пары по обеду, который указал человек."""
+    return api.with_lunch(api.fetch_schedule(group), storage.lunch_for(uid, group))
+
+
 def build_rich_day(group: str, week: int | None = None, day: int | None = None,
                    shift: int = 0, webapp: bool = True, custom: bool = True,
                    uid: int | None = None) -> tuple[str, dict, int]:
     """Та же карточка дня, но разметкой Rich HTML — с таблицей и кнопками."""
-    sched = api.fetch_schedule(group)
+    sched = sched_for(group, uid)
     if uid is not None:
         shift = storage.shift_for(uid, sched["semestr"])
     cur_week = api.week_of_cycle(dt.date.today(), sched["semestr"], shift)
@@ -254,7 +259,7 @@ def build_day(group: str, week: int | None = None, day: int | None = None,
     кнопки web_app во вставляемых сообщениях и отклоняет весь
     answerInlineQuery целиком, а не просто игнорирует кнопку.
     """
-    sched = api.fetch_schedule(group)
+    sched = sched_for(group, uid)
     if uid is not None:
         shift = storage.shift_for(uid, sched["semestr"])
     cur_week = api.week_of_cycle(dt.date.today(), sched["semestr"], shift)
@@ -541,7 +546,7 @@ def cmd_week(m: types.Message) -> None:
     ctx = user_ctx(m.from_user.id)
     if not ctx["group"]:
         return ask_group(m.chat.id)
-    sched = api.fetch_schedule(ctx["group"])
+    sched = sched_for(ctx["group"], m.from_user.id)
     cur = api.week_of_cycle(dt.date.today(), sched["semestr"], ctx["shift"])
     if _rich["direct"]:
         try:
@@ -675,6 +680,32 @@ def cmd_shift(m: types.Message) -> None:
                 "если счёт разошёлся с деканатом, сдвинь на нужное число.\n\n"
                 f"Сейчас: <b>{'без сдвига' if not ctx['shift'] else '+' + str(ctx['shift'])}</b>")
     bot.send_message(m.chat.id, text, reply_markup=kb)
+
+
+LUNCH_TEXT = ("🍽 <b>Обед группы {group}</b>\n\n"
+              "Обед в МИЭТ — 40 минут: после 2-й пары (11:50) или после 3-й (13:20). "
+              "От этого зависит 3-я пара: <b>12:00–13:20</b> или <b>12:30–13:50</b>. "
+              "Сайт МИЭТ этого не пишет — выбери, как у вас.\n\n"
+              "<i>Выбор общий с приложением.</i>")
+
+
+@bot.message_handler(commands=["lunch"])
+def cmd_lunch(m: types.Message) -> None:
+    if not seen(m.from_user, "/lunch"):
+        return
+    ctx = user_ctx(m.from_user.id)
+    if not ctx["group"]:
+        return ask_group(m.chat.id)
+    cur = storage.lunch_for(m.from_user.id, ctx["group"])
+    mark = lambda v: "• " if cur == v else ""  # noqa: E731
+    kb = types.InlineKeyboardMarkup()
+    kb.row(types.InlineKeyboardButton(mark("after3") + "После 3-й пары · 3-я в 12:00",
+                                      callback_data=kbs.cb("lunch", "after3")))
+    kb.row(types.InlineKeyboardButton(mark("after2") + "После 2-й пары · 3-я в 12:30",
+                                      callback_data=kbs.cb("lunch", "after2")))
+    kb.row(types.InlineKeyboardButton(mark(None) + "Не знаю — показывать оба",
+                                      callback_data=kbs.cb("lunch", "none")))
+    bot.send_message(m.chat.id, LUNCH_TEXT.format(group=render.esc(ctx["group"])), reply_markup=kb)
 
 
 def send_day(chat_id: int, group: str, week: int | None = None,
@@ -954,7 +985,7 @@ def on_callback(call: types.CallbackQuery) -> None:
 
         if action == "w":                       # свод на неделю
             week, group = int(parts[1]) % 4, parts[2]
-            sched = api.fetch_schedule(group)
+            sched = sched_for(group, uid)
             cur = api.week_of_cycle(dt.date.today(), sched["semestr"], shift)
             webapp = None if call.inline_message_id else app_url(uid)
             if _rich[scope]:
@@ -993,6 +1024,16 @@ def on_callback(call: types.CallbackQuery) -> None:
             storage.set_group(uid, group, call.from_user.username)
             edit_day(call, group, None, None, shift, scope, uid)
             return bot.answer_callback_query(call.id, f"Группа {group} сохранена")
+
+        if action == "lunch":                   # обед группы → время 3-й пары
+            g = user_ctx(uid)["group"]
+            if not g:
+                return bot.answer_callback_query(call.id, "Сначала выбери группу")
+            storage.set_lunch(uid, g, parts[1] if parts[1] in storage.LUNCH_CHOICES else None)
+            bot.answer_callback_query(call.id, "Сохранено — время 3-й пары поправлено")
+            if call.message:
+                return edit_day(call, g, None, None, user_ctx(uid)["shift"], scope, uid)
+            return
 
         if action == "shift":                   # поправка недели
             semestr = ""
@@ -1128,6 +1169,7 @@ def main() -> None:
             types.BotCommand("week", "Вся неделя"),
             types.BotCommand("group", "Сменить группу"),
             types.BotCommand("shift", "Поправка недели цикла"),
+            types.BotCommand("lunch", "Обед группы — время 3-й пары"),
             types.BotCommand("help", "Как пользоваться"),
             types.BotCommand("support", "Связаться с автором"),
             types.BotCommand("post", "Написать пост в ленту"),

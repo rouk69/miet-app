@@ -104,6 +104,37 @@ def popular_groups(limit: int = 15) -> list[str]:
 
 # ─────────────── утренняя карточка дня ───────────────
 
+LUNCH_CHOICES = ("after2", "after3")
+
+
+def lunch_for(user_id: int | None, group: str | None) -> str | None:
+    """'after2' | 'after3' | None — когда у группы обед по словам человека."""
+    if not user_id or not group:
+        return None
+    row = conn().execute("SELECT lunch FROM group_lunch WHERE user_id=? AND grp=?",
+                         (user_id, group)).fetchone()
+    return row[0] if row and row[0] in LUNCH_CHOICES else None
+
+
+def lunch_map(user_id: int) -> dict:
+    return {g: l for g, l in conn().execute(
+        "SELECT grp, lunch FROM group_lunch WHERE user_id=?", (user_id,))
+        if l in LUNCH_CHOICES}
+
+
+def set_lunch(user_id: int, group: str, lunch: str | None) -> None:
+    """None — «не знаю»: забываем выбор, показываем оба времени."""
+    if lunch not in LUNCH_CHOICES:
+        conn().execute("DELETE FROM group_lunch WHERE user_id=? AND grp=?",
+                       (user_id, group))
+        return
+    conn().execute(
+        """INSERT INTO group_lunch (user_id, grp, lunch) VALUES (?, ?, ?)
+           ON CONFLICT(user_id, grp) DO UPDATE SET
+             lunch=excluded.lunch, updated_at=CURRENT_TIMESTAMP""",
+        (user_id, group, lunch))
+
+
 def morning_on(user_id: int) -> bool:
     """Придёт ли человеку утренняя карточка. По умолчанию — да."""
     row = conn().execute(

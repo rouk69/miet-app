@@ -630,6 +630,26 @@ def fake_study(cookie):
 
 orioks_web.study_json = fake_study
 
+# ─── обед группы: общий у бота и приложения ───
+s, r = api.handle("POST", "/api/lunch", {}, {"group": "ПИН-31", "lunch": "after2"}, USER)
+check("приложение сохраняет обед", s == 200 and r["lunch"] == {"ПИН-31": "after2"}, (s, r))
+s, r = api.handle("GET", "/api/me", {}, {}, USER)
+check("и видит его в /api/me", r.get("lunch") == {"ПИН-31": "after2"}, r.get("lunch"))
+s, r = api.handle("POST", "/api/lunch", {}, {"group": "ПИН-31", "lunch": "что-то"}, USER)
+check("непонятное значение — это «не знаю»", r["lunch"] == {}, r)
+s, r = api.handle("POST", "/api/lunch", {}, {"lunch": "after2"}, USER)
+check("без группы — отказ", s == 400, s)
+from bot import schedule_api as _sa  # noqa: E402
+_d = {"lessons": [{"pair": 3, "from": "12:00", "to": "13:20"}, {"pair": 4, "from": "14:00", "to": "15:20"}],
+      "times": [{"code": 3, "from": "12:00", "to": "13:20"}]}
+check("with_lunch: обед после 2-й — 12:30–13:50",
+      _sa.with_lunch(_d, "after2")["lessons"][0]["from"] == "12:30"
+      and _sa.with_lunch(_d, "after2")["lessons"][0]["to"] == "13:50")
+check("with_lunch: 4-я пара не двигается", _sa.with_lunch(_d, "after2")["lessons"][1]["from"] == "14:00")
+check("with_lunch: без выбора — пометка «или 12:30»",
+      _sa.with_lunch(_d, None)["lessons"][0].get("alt_from") == "12:30")
+check("with_lunch: исходное расписание не портится", _d["lessons"][0]["from"] == "12:00")
+
 # ─── доступ к «Учёбе»: закрыто всем, кроме владельца ───
 from bot import orioks_access  # noqa: E402
 

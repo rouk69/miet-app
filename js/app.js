@@ -4,7 +4,7 @@ import { initTelegram, syncChrome, guardTaps, tg } from './tg.js';
 import { loadData, loadTexts, settings, save, applyTheme,
   resolveTheme } from './store.js';
 import { register, init as initRouter, switchTab, refresh, current } from './router.js';
-import { fetchSchedule } from './schedule.js';
+import { fetchSchedule, syncLunch } from './schedule.js';
 import { loadMe, account, track, syncGroup, post } from './api.js';
 import { checkFresh } from './fresh.js';
 import { watchErrors, reportOops } from './oops.js';
@@ -185,6 +185,8 @@ loadData()
     track('open');
     // Права приехали: «Учёба» на главной появляется или уступает место.
     applyAccess();
+    // Обед групп — общий с ботом: выбор мог прийти оттуда.
+    syncLunch();
     // Длинные тексты карточек — фоном, после первого экрана. Ждать их
     // на старте незачем: они нужны, только когда карточку откроют, а
     // это 107 КБ, которые раньше стояли в очереди перед расписанием.

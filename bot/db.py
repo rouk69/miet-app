@@ -260,6 +260,16 @@ SCHEMA = [
     # заметить перемену; число показываем из свежего ответа ОРИОКС.
     # `changed_at` пуст у того, что застали при первом обходе: это не
     # «новый балл», а то, что уже было.
+    # Когда у группы обед — от этого зависит время 3-й пары (12:00 или
+    # 12:30). Выбирает человек, и выбор общий у бота и приложения. Ключ —
+    # пара (человек, группа): у старосты может быть выбрана и соседняя.
+    """CREATE TABLE IF NOT EXISTS group_lunch (
+        user_id    INTEGER NOT NULL,
+        grp        TEXT NOT NULL,
+        lunch      TEXT NOT NULL,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (user_id, grp)
+    )""",
     """CREATE TABLE IF NOT EXISTS orioks_grades (
         user_id    INTEGER NOT NULL,
         key        TEXT NOT NULL,
