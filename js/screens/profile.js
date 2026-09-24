@@ -1,12 +1,13 @@
 // Профиль: группа, тема, поправка недели, избранное, обслуживание кеша.
 
 import { icon } from '../icons.js';
-import { esc, listCard, listRow, toast, sheet, emptyState, toggle } from '../ui.js';
+import { esc, listCard, listRow, toast, sheet, emptyState, toggle, SHORTCUT_STEPS, stepsHtml } from '../ui.js';
 import { data, settings, save, applyTheme, resolveTheme } from '../store.js';
 import { BUILD } from '../config.js';
 import { fetchSchedule, weekOfCycle, weekName } from '../schedule.js';
 import { go, refresh } from '../router.js';
-import { tgUser, openLink, syncChrome, haptic, hapticNotify, confirmDialog }
+import { tgUser, openLink, syncChrome, haptic, hapticNotify, confirmDialog,
+  canAddToHome, addToHome, homeStatus, onHomeAdded }
   from '../tg.js';
 import { account, canTalk, post } from '../api.js';
 import { screen, pickGroup } from './common.js';
@@ -16,6 +17,10 @@ export default async function profileScreen() {
   const name = [user?.first_name, user?.last_name].filter(Boolean).join(' ') || 'Студент МИЭТ';
   const initials = (user?.first_name?.[0] || 'М') + (user?.last_name?.[0] || '');
   const favCount = settings.favorites.length;
+
+  // Есть ли ярлык на рабочем столе — клиент отвечает быстро или никак
+  // (тогда через полторы секунды считаем «неизвестно»).
+  const home = await homeStatus();
 
   let weekLabel = '—';
   let baseWeek = null;   // неделя цикла без поправки — от неё считает окно поправки
@@ -60,6 +65,10 @@ export default async function profileScreen() {
         chevron: true, id: 'lunch', cls: 'tap' })] : []),
       listRow({ ico: 'heart', title: 'Избранные кружки', value: String(favCount), chevron: true, id: 'fav', cls: 'tap' }),
     ])}
+
+      <div class="section-head"><div class="section-title">Быстрый доступ</div></div>
+      ${listCard([listRow({ ico: 'zap', title: 'Ярлык на рабочий стол', sub: 'Открывать приложение в один тап',
+    value: home === 'added' ? 'добавлен' : '', chevron: true, id: 'shortcut', cls: 'tap' })])}
 
       ${canTalk ? `
         <div class="section-head"><div class="section-title">Утро</div></div>
@@ -148,6 +157,7 @@ export default async function profileScreen() {
       case 'group': return pickGroup(() => refresh());
       case 'week': return weekShiftSheet(baseWeek);
       case 'lunch': return lunchSheet();
+      case 'shortcut': return shortcutSheet(home);
       case 'fav': return go('clubs');
       case 'about': return go('about');
       case 'campus': return go('campus');
@@ -181,6 +191,40 @@ export default async function profileScreen() {
  * Поправка недели. Цикл в МИЭТе четырёхнедельный, отсчёт ведём от начала
  * семестра — если у деканата счёт другой, здесь его можно сдвинуть.
  */
+/**
+ * Ярлык на рабочий стол: кнопка, которая сама открывает окно Telegram,
+ * и пошаговая инструкция на случай, если кнопка недоступна (компьютер,
+ * старый клиент) или человеку проще руками.
+ */
+function shortcutSheet(status) {
+  const can = canAddToHome() && status !== 'added';
+  sheet({
+    title: 'Ярлык на рабочий стол',
+    cancel: 'Закрыть',
+    body: `
+      <div class="row-subtitle" style="margin-bottom:14px;line-height:1.5">
+        Иконка MIET на рабочем столе телефона открывает приложение сразу —
+        без чата с ботом и лишних нажатий.
+      </div>
+      ${status === 'added' ? `<div class="ok-note">${icon('check', 16)} Ярлык уже на рабочем столе</div>` : ''}
+      ${can ? `<button class="btn-primary" id="add-home">${icon('zap', 18)} Добавить ярлык</button>
+        <div class="field-label" style="margin:18px 2px 10px">Или вручную</div>` : `
+        <div class="field-label" style="margin:4px 2px 10px">Как добавить</div>`}
+      ${stepsHtml(SHORTCUT_STEPS)}
+      <div class="row-subtitle" style="margin-top:12px;line-height:1.5">
+        Это для телефона: на компьютере ярлыков нет. Если такого пункта в меню
+        нет — обнови Telegram.
+      </div>`,
+    onMount(root, close) {
+      root.querySelector('#add-home')?.addEventListener('click', () => {
+        haptic('medium');
+        if (!addToHome()) toast('Не получилось — добавь по шагам ниже');
+      });
+      onHomeAdded(() => { hapticNotify('success'); toast('Ярлык добавлен'); close(); refresh(); });
+    },
+  });
+}
+
 const LUNCH_LABEL = { after2: 'после 2-й пары', after3: 'после 3-й пары' };
 
 /**

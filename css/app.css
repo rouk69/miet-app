@@ -1736,6 +1736,85 @@ textarea.field-input {
 
 /* Показывается один раз: дальше главная нужна, чтобы за две секунды
    увидеть свою пару, а не читать описание приложения. */
+/* Подсказка «ярлык на рабочий стол» на главной. */
+.tip-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--surface);
+  border-radius: 20px;
+  padding: 12px 10px 12px 14px;
+  margin-bottom: 14px;
+}
+
+.tip-ico {
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  border-radius: 12px;
+  background: var(--primary-dim);
+  color: var(--primary);
+  display: grid;
+  place-items: center;
+}
+
+.tip-body { flex: 1; min-width: 0; }
+.tip-title { font-size: 15px; font-weight: 800; color: var(--text); }
+.tip-text { margin-top: 2px; font-size: 12px; line-height: 1.35; color: var(--text-secondary); }
+
+.tip-add {
+  flex-shrink: 0;
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: var(--primary);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.tip-x {
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: var(--text-tertiary);
+}
+
+/* Пошаговая инструкция: номер в кружке и текст. */
+.steps { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+.steps li { display: flex; gap: 12px; align-items: flex-start; }
+
+.step-n {
+  width: 26px;
+  height: 26px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--primary-dim);
+  color: var(--primary);
+  font-size: 13px;
+  font-weight: 800;
+  display: grid;
+  place-items: center;
+}
+
+.step-t { font-size: 14px; line-height: 1.45; color: var(--text); padding-top: 3px; min-width: 0; }
+.step-t b { font-weight: 800; }
+
+.ok-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 14px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: var(--surface);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--success-text);
+}
+
 .hello {
   padding: 18px;
   margin-bottom: 12px;

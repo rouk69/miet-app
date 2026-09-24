@@ -1,12 +1,12 @@
 // Главная: что сейчас, расписание на сегодня, быстрые разделы, свежие новости.
 
 import { icon } from '../icons.js';
-import { esc, listCard, listRow } from '../ui.js';
+import { esc, listCard, listRow, toast } from '../ui.js';
 import { data, settings } from '../store.js';
 import { fetchSchedule, weekOfCycle, weekName, nowState, slotsOf, semesterStart, DAY_NAMES }
   from '../schedule.js';
 import { go, switchTab } from '../router.js';
-import { tgUser, openLink } from '../tg.js';
+import { tgUser, openLink, haptic, hapticNotify, addToHome, homeStatus, onHomeAdded } from '../tg.js';
 import { get, canTalk, account } from '../api.js';
 import { screen, pickGroup, newsRow, humanDate, iconBtn } from './common.js';
 import { dayRows, teacherOf } from './schedule.js';
@@ -58,6 +58,7 @@ export default async function home() {
     actions: iconBtn('search', 'search') + iconBtn('user', 'profile'),
     body: `
       <div id="hello-slot"></div>
+      <div id="tip-slot"></div>
       <div id="now-slot" class="stack"></div>
       <div id="study-slot"></div>
 
@@ -97,6 +98,7 @@ export default async function home() {
 
   // ── знакомство ──
   renderHello(node.querySelector('#hello-slot'), user);
+  renderShortcutTip(node.querySelector('#tip-slot'));
 
   // ── карточка «сейчас» ──
   const slot = node.querySelector('#now-slot');
@@ -142,6 +144,45 @@ export default async function home() {
 // Карточку «что это такое» человек читает один раз. Дальше она мешает:
 // главная нужна, чтобы за две секунды увидеть свою пару.
 const HELLO_KEY = 'miet-hello-seen';
+const TIP_KEY = 'miet-shortcut-tip';
+
+/**
+ * «Открывай в один тап»: ярлык MIET на рабочем столе телефона.
+ *
+ * Показываем, только если клиент умеет ставить ярлык и его ещё нет
+ * ('missed'), и не вместе с приветствием новичка — две карточки подряд
+ * на первом экране уже шум. Закрыл крестиком — больше не появится;
+ * инструкция остаётся в профиле.
+ */
+async function renderShortcutTip(slot) {
+  if (!slot) return;
+  try {
+    if (localStorage.getItem(TIP_KEY) === '1' || localStorage.getItem(HELLO_KEY) !== '1') return;
+  } catch { return; }
+  if (await homeStatus() !== 'missed') return;
+  const forget = () => {
+    try { localStorage.setItem(TIP_KEY, '1'); } catch { /* приватный режим */ }
+    slot.innerHTML = '';
+  };
+  slot.innerHTML = `
+    <div class="tip-card">
+      <span class="tip-ico">${icon('zap', 20)}</span>
+      <div class="tip-body">
+        <div class="tip-title">Открывай в один тап</div>
+        <div class="tip-text">Ярлык MIET на рабочий стол</div>
+      </div>
+      <button class="tip-add" data-tip="add">Добавить</button>
+      <button class="tip-x" data-tip="x" aria-label="Скрыть">${icon('x', 16)}</button>
+    </div>`;
+  slot.addEventListener('click', e => {
+    const b = e.target.closest('[data-tip]');
+    if (!b) return;
+    haptic('light');
+    if (b.dataset.tip === 'x') return forget();
+    if (!addToHome()) { toast('Инструкция — в профиле, раздел «Быстрый доступ»'); forget(); }
+  });
+  onHomeAdded(() => { hapticNotify('success'); toast('Ярлык добавлен'); forget(); });
+}
 
 /**
  * Короткий рассказ о приложении — только тем, кто здесь впервые, и

@@ -166,6 +166,17 @@ export function fitSheetTitle(header) {
   header.classList.toggle('long', title.scrollWidth > room);
 }
 
+/** Шаги «как добавить ярлык вручную» — одна разметка на все места. */
+export const SHORTCUT_STEPS = [
+  'Открой приложение MIET из бота @mietapp_bot.',
+  'Нажми <b>⋮</b> — три точки в правом верхнем углу окна приложения.',
+  'Выбери <b>«Добавить на главный экран»</b> — в некоторых версиях Telegram пункт называется <b>«Создать ярлык»</b>.',
+  'Подтверди. На рабочем столе появится иконка MIET — жми её, и приложение откроется сразу, без чата с ботом.',
+];
+
+export const stepsHtml = steps => `<ol class="steps">${steps.map((s, i) =>
+  `<li><span class="step-n">${i + 1}</span><span class="step-t">${s}</span></li>`).join('')}</ol>`;
+
 /** Короткое всплывающее сообщение по центру снизу. */
 export function toast(message) {
   const t = el(`<div style="
