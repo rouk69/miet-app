@@ -142,7 +142,7 @@ def day_buttons(group: str, sched: dict, week: int, day: int, cur_week: int,
     prev_w, next_w = (week - 1) % 4, (week + 1) % 4
     parts.append(row(
         button("◀️", data=kbs.cb("d", prev_w, day, group)),
-        button(f"Неделя {week + 1}-я", type="disabled"),
+        button(api.week_name(week), type="disabled"),
         button("▶️", data=kbs.cb("d", next_w, day, group)),
     ))
 
@@ -177,7 +177,7 @@ def day_html(group: str, sched: dict, week: int, day: int, cur_week: int,
     head = (f'<h3>{em.ico("calendar", custom)} {api.DAY_NAMES[day]} · '
             f'{api.human_date(date)}{" · сегодня" if is_today else ""}</h3>')
 
-    sub_bits = [f"{week + 1}-я неделя", esc(group)]
+    sub_bits = [api.week_name(week), esc(group)]
     sem = render.short_semestr(sched.get("semestr", ""))
     if sem:
         sub_bits.append(sem)
@@ -205,7 +205,7 @@ def day_html(group: str, sched: dict, week: int, day: int, cur_week: int,
 def week_html(group: str, sched: dict, week: int, cur_week: int,
               custom: bool = True, webapp_url: str | None = None,
               buttons: bool = True) -> str:
-    head = (f'<h3>{em.ico("calendar", custom)} {week + 1}-я неделя</h3>'
+    head = (f'<h3>{em.ico("calendar", custom)} Неделя · {api.week_name(week)}</h3>'
             f'<p><i>{esc(group)}</i></p>')
 
     rows_html = []
@@ -238,7 +238,7 @@ def week_html(group: str, sched: dict, week: int, cur_week: int,
         prev_w, next_w = (week - 1) % 4, (week + 1) % 4
         tail = row(
             button("◀️", data=kbs.cb("w", prev_w, group)),
-            button(f"Неделя {week + 1}-я", type="disabled"),
+            button(api.week_name(week), type="disabled"),
             button("▶️", data=kbs.cb("w", next_w, group)),
         ) + row(
             button("Сегодня", data=kbs.cb("today", group), style=STYLE_ACTION),

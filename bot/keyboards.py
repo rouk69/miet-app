@@ -105,7 +105,7 @@ def day_keyboard(group: str, sched: dict, week: int, day: int, cur_week: int,
     prev_w, next_w = (week - 1) % 4, (week + 1) % 4
     kb.row(
         types.InlineKeyboardButton("◀️", callback_data=cb("d", prev_w, day, group)),
-        types.InlineKeyboardButton(f"Неделя {week + 1}-я",
+        types.InlineKeyboardButton(api.week_name(week),
                                    callback_data=cb("noop")),
         types.InlineKeyboardButton("▶️", callback_data=cb("d", next_w, day, group)),
     )
@@ -133,7 +133,7 @@ def week_keyboard(group: str, week: int,
     prev_w, next_w = (week - 1) % 4, (week + 1) % 4
     kb.row(
         types.InlineKeyboardButton("◀️", callback_data=cb("w", prev_w, group)),
-        types.InlineKeyboardButton(f"Неделя {week + 1}-я", callback_data=cb("noop")),
+        types.InlineKeyboardButton(api.week_name(week), callback_data=cb("noop")),
         types.InlineKeyboardButton("▶️", callback_data=cb("w", next_w, group)),
     )
     kb.row(

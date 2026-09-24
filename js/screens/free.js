@@ -23,7 +23,7 @@ import { artState } from '../art.js';
 import { screen } from './common.js';
 import { go } from '../router.js';
 import { haptic } from '../tg.js';
-import { fetchSchedule, weekOfCycle, DAY_SHORT, DAY_NAMES } from '../schedule.js';
+import { fetchSchedule, weekOfCycle, weekName, DAY_SHORT, DAY_NAMES } from '../schedule.js';
 
 // Слоты звонков МИЭТ. Время нужно до первого ответа сервера: экран
 // открывается на «сейчас», и вычислить текущую пару надо ещё до запроса.
@@ -127,7 +127,7 @@ export default async function freeRoomsScreen(params = {}) {
             <div class="free-when-sub">
               ${atNow() ? 'сейчас' : DAY_NAMES[day]} ·
               ${pair}-я пара ${esc(slot.from || '')}–${esc(slot.to || '')}
-              ${weekKnown ? ` · ${week + 1}-я неделя` : ''}
+              ${weekKnown ? ` · ${weekName(week)}` : ''}
             </div>
           </div>
         </div>

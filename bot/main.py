@@ -646,17 +646,35 @@ def cmd_shift(m: types.Message) -> None:
     if not seen(m.from_user, "/shift"):
         return
     ctx = user_ctx(m.from_user.id)
-    kb = types.InlineKeyboardMarkup(row_width=4)
-    kb.row(*[types.InlineKeyboardButton(
-        ("• " if ctx["shift"] == s else "") + (f"+{s}" if s else "0"),
-        callback_data=kbs.cb("shift", s)) for s in range(4)])
-    bot.send_message(
-        m.chat.id,
-        "🔧 <b>Поправка недели</b>\n\n"
-        "Цикл в МИЭТе четырёхнедельный. Бот считает неделю от начала семестра — "
-        "если счёт разошёлся с деканатом, сдвинь на нужное число.\n\n"
-        f"Сейчас: <b>{'без сдвига' if not ctx['shift'] else '+' + str(ctx['shift'])}</b>",
-        reply_markup=kb)
+    base = None                         # неделя цикла без поправки
+    if ctx["group"]:
+        try:
+            base = api.week_of_cycle(dt.date.today(),
+                                     api.fetch_schedule(ctx["group"])["semestr"])
+        except Exception:
+            pass
+    kb = types.InlineKeyboardMarkup()
+    if base is not None:
+        # Спрашиваем «какая неделя сейчас» словами официального расписания,
+        # а не «+1, +2»: кнопка несёт сдвиг, который к этой неделе приводит.
+        btns = [types.InlineKeyboardButton(
+            ("• " if (base + ctx["shift"]) % 4 == w else "") + api.week_name(w),
+            callback_data=kbs.cb("shift", (w - base) % 4)) for w in range(4)]
+        kb.row(*btns[:2])
+        kb.row(*btns[2:])
+        text = ("🔧 <b>Поправка недели</b>\n\n"
+                "Бот считает неделю от начала семестра. Сейчас у него "
+                f"<b>{api.week_name(base + ctx['shift'])}</b>. Если в официальном "
+                "расписании другая — выбери её.")
+    else:
+        kb.row(*[types.InlineKeyboardButton(
+            ("• " if ctx["shift"] == s else "") + (f"+{s}" if s else "0"),
+            callback_data=kbs.cb("shift", s)) for s in range(4)])
+        text = ("🔧 <b>Поправка недели</b>\n\n"
+                "Цикл в МИЭТе четырёхнедельный. Бот считает неделю от начала семестра — "
+                "если счёт разошёлся с деканатом, сдвинь на нужное число.\n\n"
+                f"Сейчас: <b>{'без сдвига' if not ctx['shift'] else '+' + str(ctx['shift'])}</b>")
+    bot.send_message(m.chat.id, text, reply_markup=kb)
 
 
 def send_day(chat_id: int, group: str, week: int | None = None,
@@ -1054,7 +1072,7 @@ def on_inline(q: types.InlineQuery) -> None:
             continue
         lessons = api.lessons_of(sched, cur, today_day())
         desc = (f"{len(lessons)} {render.plural(len(lessons), 'пара', 'пары', 'пар')} · "
-                f"{cur + 1}-я неделя") if lessons else "Сегодня пар нет"
+                f"{api.week_name(cur)}") if lessons else "Сегодня пар нет"
         content, markup = None, kb
         if _rich["inline"]:
             try:

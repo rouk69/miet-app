@@ -11,7 +11,7 @@ import { get, canTalk } from '../api.js';
 import { go } from '../router.js';
 import { settings } from '../store.js';
 import { screen } from './common.js';
-import { DAY_NAMES } from '../schedule.js';
+import { DAY_NAMES, weekName } from '../schedule.js';
 
 const KIND_NAMES = { lek: 'лекция', pr: 'практика', lab: 'лаборатор.', oth: '' };
 
@@ -47,7 +47,7 @@ function timetable(slots, showTeacher) {
     const days = {};
     week.forEach(s => (days[s.day] = days[s.day] || []).push(s));
     return `
-      <div class="section-head"><div class="section-title">${i + 1}-я неделя</div></div>
+      <div class="section-head"><div class="section-title">${weekName(i)}</div></div>
       ${Object.keys(days).sort().map(d => `
         <div class="day-block">
           <div class="day-name">${esc(DAY_NAMES[d] || 'День ' + d)}</div>

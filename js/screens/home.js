@@ -3,7 +3,7 @@
 import { icon } from '../icons.js';
 import { esc, listCard, listRow } from '../ui.js';
 import { data, settings } from '../store.js';
-import { fetchSchedule, weekOfCycle, nowState, slotsOf, semesterStart, DAY_NAMES }
+import { fetchSchedule, weekOfCycle, weekName, nowState, slotsOf, semesterStart, DAY_NAMES }
   from '../schedule.js';
 import { go, switchTab } from '../router.js';
 import { tgUser, openLink } from '../tg.js';
@@ -335,7 +335,7 @@ async function renderNow(slot, now) {
              <div class="now-kicker">${day > 6 ? 'Воскресенье' : 'На сегодня всё'}</div>
              <div class="now-title">Пар больше нет</div>
              <div class="now-meta muted">
-               <span>${esc(settings.group)}</span><span>${week + 1}-я неделя цикла</span>
+               <span>${esc(settings.group)}</span><span>${weekName(week)}</span>
              </div>
            </div>
            ${art(day > 6 ? 'rest' : 'done', 76, 'art-aside')}

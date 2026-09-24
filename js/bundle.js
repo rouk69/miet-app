@@ -1,5 +1,5 @@
 /* Собрано tools/stamp.py из js/*.js — не правьте здесь.
-   Версия ad655346. Исходники лежат рядом и остаются модулями. */
+   Версия 63401d10. Исходники лежат рядом и остаются модулями. */
 var __mod = {};
 /* ==== js\config.js ==== */
 __mod['js/config.js'] = (function () {
@@ -85,7 +85,7 @@ const API_BASE = base;
 // свежую ли страницу открыл человек: Telegram кеширует мини-приложения
 // по своим правилам, и «у меня ничего не поменялось» разбирается
 // сравнением этой строки, а не на слово.
-const BUILD = 'ad655346';
+const BUILD = '63401d10';
 
 return {'apiBase': apiBase, 'fallBackToHome': fallBackToHome, 'API_BASE': API_BASE, 'BUILD': BUILD};
 })();
@@ -347,6 +347,15 @@ const TTL = 24 * 60 * 60 * 1000;
 
 const DAY_NAMES = ['', 'Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота'];
 const DAY_SHORT = ['', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
+
+/**
+ * Недели цикла так, как их зовёт официальное расписание miet.ru
+ * (weekText в его сборке): 0 — «1-й числитель», 1 — «1-й знаменатель»,
+ * 2 — «2-й числитель», 3 — «2-й знаменатель». Студенты ориентируются
+ * по этим словам, а не по номеру 1..4.
+ */
+const WEEK_NAMES = ['1-й числитель', '1-й знаменатель', '2-й числитель', '2-й знаменатель'];
+const weekName = w => WEEK_NAMES[((w % 4) + 4) % 4];
 
 /** Ставит дату на понедельник её недели (воскресенье относим к прошедшей). */
 function mondayOf(date) {
@@ -725,7 +734,7 @@ function weekDates(base = new Date()) {
   });
 }
 
-return {'DAY_NAMES': DAY_NAMES, 'DAY_SHORT': DAY_SHORT, 'mondayOf': mondayOf, 'semesterStart': semesterStart, 'weekOfCycle': weekOfCycle, 'parseSubject': parseSubject, 'shortSemestr': shortSemestr, 'fetchSchedule': fetchSchedule, 'lessonsOf': lessonsOf, 'slotsOf': slotsOf, 'gapsOf': gapsOf, 'humanGap': humanGap, 'dayCounts': dayCounts, 'nowState': nowState, 'weekDates': weekDates};
+return {'DAY_NAMES': DAY_NAMES, 'DAY_SHORT': DAY_SHORT, 'WEEK_NAMES': WEEK_NAMES, 'weekName': weekName, 'mondayOf': mondayOf, 'semesterStart': semesterStart, 'weekOfCycle': weekOfCycle, 'parseSubject': parseSubject, 'shortSemestr': shortSemestr, 'fetchSchedule': fetchSchedule, 'lessonsOf': lessonsOf, 'slotsOf': slotsOf, 'gapsOf': gapsOf, 'humanGap': humanGap, 'dayCounts': dayCounts, 'nowState': nowState, 'weekDates': weekDates};
 })();
 
 /* ==== js\store.js ==== */
@@ -2485,6 +2494,7 @@ var subjectBadge = __mod['js/subjects.js']['subjectBadge'];
 var haptic = __mod['js/tg.js']['haptic'];
 var fetchSchedule = __mod['js/schedule.js']['fetchSchedule'];
 var weekOfCycle = __mod['js/schedule.js']['weekOfCycle'];
+var weekName = __mod['js/schedule.js']['weekName'];
 var slotsOf = __mod['js/schedule.js']['slotsOf'];
 var DAY_SHORT = __mod['js/schedule.js']['DAY_SHORT'];
 var DAY_NAMES = __mod['js/schedule.js']['DAY_NAMES'];
@@ -2672,7 +2682,7 @@ async function compareScreen() {
     const cmp = perDay[day] || { rows: [], together: 0, both: 0, free: 0 };
 
     body.innerHTML = `
-      ${pillRow([0, 1, 2, 3].map(w => ({ id: String(w), label: `${w + 1}-я неделя` })),
+      ${pillRow([0, 1, 2, 3].map(w => ({ id: String(w), label: weekName(w) })),
     String(week), 'cmpweek')}
 
       <div class="cmp-sum">
@@ -3560,6 +3570,7 @@ var go = __mod['js/router.js']['go'];
 var haptic = __mod['js/tg.js']['haptic'];
 var fetchSchedule = __mod['js/schedule.js']['fetchSchedule'];
 var weekOfCycle = __mod['js/schedule.js']['weekOfCycle'];
+var weekName = __mod['js/schedule.js']['weekName'];
 var DAY_SHORT = __mod['js/schedule.js']['DAY_SHORT'];
 var DAY_NAMES = __mod['js/schedule.js']['DAY_NAMES'];
 
@@ -3665,7 +3676,7 @@ async function freeRoomsScreen(params = {}) {
             <div class="free-when-sub">
               ${atNow() ? 'сейчас' : DAY_NAMES[day]} ·
               ${pair}-я пара ${esc(slot.from || '')}–${esc(slot.to || '')}
-              ${weekKnown ? ` · ${week + 1}-я неделя` : ''}
+              ${weekKnown ? ` · ${weekName(week)}` : ''}
             </div>
           </div>
         </div>
@@ -3830,6 +3841,7 @@ var data = __mod['js/store.js']['data'];
 var settings = __mod['js/store.js']['settings'];
 var fetchSchedule = __mod['js/schedule.js']['fetchSchedule'];
 var weekOfCycle = __mod['js/schedule.js']['weekOfCycle'];
+var weekName = __mod['js/schedule.js']['weekName'];
 var semesterStart = __mod['js/schedule.js']['semesterStart'];
 var go = __mod['js/router.js']['go'];
 var openLink = __mod['js/tg.js']['openLink'];
@@ -4062,7 +4074,7 @@ async function datesScreen() {
       <div class="card" style="padding:18px">
         <div class="now-kicker">${esc(sched.semestr)}</div>
         <div style="font-size:22px;font-weight:800;margin:6px 0 2px">
-          ${week + 1}-я неделя цикла
+          Сейчас ${weekName(week)}
         </div>
         <div class="row-subtitle">
           Идёт ${passed}-я учебная неделя · семестр начался ${esc(human(start))}
@@ -4633,6 +4645,7 @@ var resolveTheme = __mod['js/store.js']['resolveTheme'];
 var BUILD = __mod['js/config.js']['BUILD'];
 var fetchSchedule = __mod['js/schedule.js']['fetchSchedule'];
 var weekOfCycle = __mod['js/schedule.js']['weekOfCycle'];
+var weekName = __mod['js/schedule.js']['weekName'];
 var go = __mod['js/router.js']['go'];
 var refresh = __mod['js/router.js']['refresh'];
 var tgUser = __mod['js/tg.js']['tgUser'];
@@ -4654,10 +4667,12 @@ async function profileScreen() {
   const favCount = settings.favorites.length;
 
   let weekLabel = '—';
+  let baseWeek = null;   // неделя цикла без поправки — от неё считает окно поправки
   if (settings.group) {
     try {
       const s = await fetchSchedule(settings.group);
-      weekLabel = `${weekOfCycle(new Date(), s.semestr, settings.weekShift) + 1}-я из 4`;
+      baseWeek = weekOfCycle(new Date(), s.semestr, 0);
+      weekLabel = weekName(baseWeek + settings.weekShift);
     } catch { weekLabel = 'нет данных'; }
   }
 
@@ -4778,7 +4793,7 @@ async function profileScreen() {
     switch (row.dataset.id) {
       case 'admin': return go('admin');
       case 'group': return pickGroup(() => refresh());
-      case 'week': return weekShiftSheet();
+      case 'week': return weekShiftSheet(baseWeek);
       case 'fav': return go('clubs');
       case 'about': return go('about');
       case 'campus': return go('campus');
@@ -4812,19 +4827,28 @@ async function profileScreen() {
  * Поправка недели. Цикл в МИЭТе четырёхнедельный, отсчёт ведём от начала
  * семестра — если у деканата счёт другой, здесь его можно сдвинуть.
  */
-function weekShiftSheet() {
+function weekShiftSheet(base) {
+  // Зная неделю без поправки, спрашиваем по-человечески: «какая неделя
+  // сейчас?» — названиями из официального расписания, а не «+1, +2».
+  const known = base !== null && base !== undefined;
   sheet({
     title: 'Поправка недели',
     body: `
       <div class="row-subtitle" style="margin-bottom:14px;line-height:1.5">
-        Неделя цикла считается от начала семестра. Если приложение показывает
-        не ту неделю, что деканат, — сдвинь на нужное число.
+        ${known
+    ? 'Неделя считается от начала семестра. Если в официальном расписании сейчас другая — выбери её.'
+    : 'Неделя цикла считается от начала семестра. Если приложение показывает не ту неделю, что деканат, — сдвинь на нужное число.'}
       </div>
-      <div class="pill-row" id="shift">
-        ${[0, 1, 2, 3].map(s => `
+      <div class="pill-row" id="shift" style="flex-wrap:wrap">
+        ${[0, 1, 2, 3].map(i => {
+    // С известной неделей кнопки идут по порядку недель (1-й числитель…),
+    // и каждая несёт сдвиг, который к ней приводит.
+    const s = known ? (i - base + 4) % 4 : i;
+    return `
           <button class="pill ${settings.weekShift === s ? 'active' : ''}" data-shift="${s}">
-            ${s === 0 ? 'без сдвига' : `+${s}`}
-          </button>`).join('')}
+            ${known ? weekName(i) : s === 0 ? 'без сдвига' : `+${s}`}
+          </button>`;
+  }).join('')}
       </div>`,
     onMount(root, close) {
       root.querySelector('#shift').addEventListener('click', e => {
@@ -5153,6 +5177,7 @@ var mondayOf = __mod['js/schedule.js']['mondayOf'];
 var shortSemestr = __mod['js/schedule.js']['shortSemestr'];
 var gapsOf = __mod['js/schedule.js']['gapsOf'];
 var humanGap = __mod['js/schedule.js']['humanGap'];
+var weekName = __mod['js/schedule.js']['weekName'];
 var DAY_SHORT = __mod['js/schedule.js']['DAY_SHORT'];
 var DAY_NAMES = __mod['js/schedule.js']['DAY_NAMES'];
 var refresh = __mod['js/router.js']['refresh'];
@@ -5317,7 +5342,7 @@ async function scheduleScreen(params = {}) {
       <div class="pill-row" id="weeks">
         ${[0, 1, 2, 3].map(w => `
           <button class="pill ${w === week ? 'active' : ''}" data-week="${w}">
-            ${w + 1}-я неделя${w === curWeek ? ' · сейчас' : ''}
+            ${weekName(w)}${w === curWeek ? ' · сейчас' : ''}
           </button>`).join('')}
       </div>
       <div class="week-strip" id="days"></div>
@@ -5382,6 +5407,14 @@ async function scheduleScreen(params = {}) {
   drawDays();
   drawList();
   drawStale();
+
+  // Четыре недели с полными названиями в ширину телефона не влезают:
+  // выбранную прокручиваем в поле зрения, иначе «2-й знаменатель» уезжает за край.
+  const weeksEl = node.querySelector('#weeks');
+  requestAnimationFrame(() => {
+    const a = weeksEl.querySelector('.pill.active');
+    if (a) weeksEl.scrollLeft = Math.max(0, a.offsetLeft - weeksEl.offsetLeft - 16);
+  });
 
   node.querySelector('#weeks').addEventListener('click', e => {
     const b = e.target.closest('[data-week]');
@@ -6531,6 +6564,7 @@ var go = __mod['js/router.js']['go'];
 var settings = __mod['js/store.js']['settings'];
 var screen = __mod['js/screens/common.js']['screen'];
 var DAY_NAMES = __mod['js/schedule.js']['DAY_NAMES'];
+var weekName = __mod['js/schedule.js']['weekName'];
 
 const KIND_NAMES = { lek: 'лекция', pr: 'практика', lab: 'лаборатор.', oth: '' };
 
@@ -6566,7 +6600,7 @@ function timetable(slots, showTeacher) {
     const days = {};
     week.forEach(s => (days[s.day] = days[s.day] || []).push(s));
     return `
-      <div class="section-head"><div class="section-title">${i + 1}-я неделя</div></div>
+      <div class="section-head"><div class="section-title">${weekName(i)}</div></div>
       ${Object.keys(days).sort().map(d => `
         <div class="day-block">
           <div class="day-name">${esc(DAY_NAMES[d] || 'День ' + d)}</div>
@@ -8643,6 +8677,7 @@ var data = __mod['js/store.js']['data'];
 var settings = __mod['js/store.js']['settings'];
 var fetchSchedule = __mod['js/schedule.js']['fetchSchedule'];
 var weekOfCycle = __mod['js/schedule.js']['weekOfCycle'];
+var weekName = __mod['js/schedule.js']['weekName'];
 var nowState = __mod['js/schedule.js']['nowState'];
 var slotsOf = __mod['js/schedule.js']['slotsOf'];
 var semesterStart = __mod['js/schedule.js']['semesterStart'];
@@ -8988,7 +9023,7 @@ async function renderNow(slot, now) {
              <div class="now-kicker">${day > 6 ? 'Воскресенье' : 'На сегодня всё'}</div>
              <div class="now-title">Пар больше нет</div>
              <div class="now-meta muted">
-               <span>${esc(settings.group)}</span><span>${week + 1}-я неделя цикла</span>
+               <span>${esc(settings.group)}</span><span>${weekName(week)}</span>
              </div>
            </div>
            ${art(day > 6 ? 'rest' : 'done', 76, 'art-aside')}
