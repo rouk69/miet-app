@@ -408,7 +408,9 @@ def with_web_grades(data: dict, marks: list) -> dict:
     Досыпает баллы, которые сайт уже показывает, а API ещё нет.
 
     Сверка по дисциплине и короткому имени мероприятия («ЛР.1», «А/П.1»):
-    у API это `alias`, у сайта `sh`. Запасной путь — полное название.
+    у API это `alias`, у сайта `sh`. Запасной путь — название вместе с
+    неделей: одно название без недели путает одноимённые точки — у языка
+    «КМ» трижды за семестр, и балл первой приклеивался ко второй.
     Балл сайта главнее: это ровно то, что человек видит в ОРИОКС, и
     расхождение с ним выглядит как ошибка приложения. После досыпки сумма
     по дисциплине пересчитывается — у API она тоже без этих баллов.
@@ -419,7 +421,7 @@ def with_web_grades(data: dict, marks: list) -> dict:
         if m.get("sh"):
             by_sh[(d, _key(m["sh"]))] = m
         if m.get("name"):
-            by_name[(d, _key(m["name"]))] = m
+            by_name[(d, _key(m["name"]), m.get("week"))] = m
     if not by_sh and not by_name:
         return data
 
@@ -429,7 +431,7 @@ def with_web_grades(data: dict, marks: list) -> dict:
         touched = False
         for ev in dis.get("events", []):
             m = (by_sh.get((dkey, _key(ev.get("alias"))))
-                 or by_name.get((dkey, _key(ev.get("name")))))
+                 or by_name.get((dkey, _key(ev.get("name")), ev.get("week"))))
             if m and ev.get("grade") != m["ball"]:
                 ev["grade"] = m["ball"]
                 ev["done"] = True
