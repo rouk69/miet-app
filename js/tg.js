@@ -167,6 +167,43 @@ export function alertDialog(message) {
 }
 
 /** Данные пользователя Telegram, если приложение открыто внутри клиента. */
+/**
+ * Ярлык мини-приложения на рабочем столе телефона (Bot API 8.0).
+ *
+ * Telegram сам показывает системное окно «Добавить на главный экран» —
+ * нам остаётся его вызвать. После этого приложение открывается одним
+ * тапом по иконке, без чата с ботом. На компьютере и в старых клиентах
+ * метода нет: там статус «unsupported», и предлагаем только инструкцию.
+ */
+export const canAddToHome = () => supports('8.0') && typeof tg?.addToHomeScreen === 'function';
+
+export function addToHome() {
+  if (!canAddToHome()) return false;
+  try { tg.addToHomeScreen(); return true; } catch { return false; }
+}
+
+/** 'added' | 'missed' | 'unknown' | 'unsupported' — есть ли уже ярлык. */
+export function homeStatus() {
+  return new Promise(resolve => {
+    if (!supports('8.0') || typeof tg?.checkHomeScreenStatus !== 'function') {
+      resolve('unsupported');
+      return;
+    }
+    // Клиент может не ответить вовсе — экран из-за этого ждать не должен.
+    const timer = setTimeout(() => resolve('unknown'), 1500);
+    try {
+      tg.checkHomeScreenStatus(s => { clearTimeout(timer); resolve(s || 'unknown'); });
+    } catch {
+      clearTimeout(timer);
+      resolve('unsupported');
+    }
+  });
+}
+
+export function onHomeAdded(fn) {
+  try { tg?.onEvent?.('homeScreenAdded', fn); } catch { /* старый клиент */ }
+}
+
 export function tgUser() {
   return tg?.initDataUnsafe?.user || null;
 }

@@ -1,5 +1,5 @@
 /* Собрано tools/stamp.py из js/*.js — не правьте здесь.
-   Версия 25de6f2d. Исходники лежат рядом и остаются модулями. */
+   Версия 25d79d5f. Исходники лежат рядом и остаются модулями. */
 var __mod = {};
 /* ==== js\config.js ==== */
 __mod['js/config.js'] = (function () {
@@ -85,7 +85,7 @@ const API_BASE = base;
 // свежую ли страницу открыл человек: Telegram кеширует мини-приложения
 // по своим правилам, и «у меня ничего не поменялось» разбирается
 // сравнением этой строки, а не на слово.
-const BUILD = '25de6f2d';
+const BUILD = '25d79d5f';
 
 return {'apiBase': apiBase, 'fallBackToHome': fallBackToHome, 'API_BASE': API_BASE, 'BUILD': BUILD};
 })();
@@ -694,6 +694,43 @@ function alertDialog(message) {
 }
 
 /** Данные пользователя Telegram, если приложение открыто внутри клиента. */
+/**
+ * Ярлык мини-приложения на рабочем столе телефона (Bot API 8.0).
+ *
+ * Telegram сам показывает системное окно «Добавить на главный экран» —
+ * нам остаётся его вызвать. После этого приложение открывается одним
+ * тапом по иконке, без чата с ботом. На компьютере и в старых клиентах
+ * метода нет: там статус «unsupported», и предлагаем только инструкцию.
+ */
+const canAddToHome = () => supports('8.0') && typeof tg?.addToHomeScreen === 'function';
+
+function addToHome() {
+  if (!canAddToHome()) return false;
+  try { tg.addToHomeScreen(); return true; } catch { return false; }
+}
+
+/** 'added' | 'missed' | 'unknown' | 'unsupported' — есть ли уже ярлык. */
+function homeStatus() {
+  return new Promise(resolve => {
+    if (!supports('8.0') || typeof tg?.checkHomeScreenStatus !== 'function') {
+      resolve('unsupported');
+      return;
+    }
+    // Клиент может не ответить вовсе — экран из-за этого ждать не должен.
+    const timer = setTimeout(() => resolve('unknown'), 1500);
+    try {
+      tg.checkHomeScreenStatus(s => { clearTimeout(timer); resolve(s || 'unknown'); });
+    } catch {
+      clearTimeout(timer);
+      resolve('unsupported');
+    }
+  });
+}
+
+function onHomeAdded(fn) {
+  try { tg?.onEvent?.('homeScreenAdded', fn); } catch { /* старый клиент */ }
+}
+
 function tgUser() {
   return tg?.initDataUnsafe?.user || null;
 }
@@ -748,7 +785,7 @@ function guardTaps(target = document) {
   }, true);
 }
 
-return {'tg': tg, 'inTelegram': inTelegram, 'syncChrome': syncChrome, 'initTelegram': initTelegram, 'haptic': haptic, 'hapticNotify': hapticNotify, 'hapticSelect': hapticSelect, 'BackButton': BackButton, 'openLink': openLink, 'confirmDialog': confirmDialog, 'alertDialog': alertDialog, 'tgUser': tgUser, 'guardTaps': guardTaps};
+return {'tg': tg, 'inTelegram': inTelegram, 'syncChrome': syncChrome, 'initTelegram': initTelegram, 'haptic': haptic, 'hapticNotify': hapticNotify, 'hapticSelect': hapticSelect, 'BackButton': BackButton, 'openLink': openLink, 'confirmDialog': confirmDialog, 'alertDialog': alertDialog, 'canAddToHome': canAddToHome, 'addToHome': addToHome, 'homeStatus': homeStatus, 'onHomeAdded': onHomeAdded, 'tgUser': tgUser, 'guardTaps': guardTaps};
 })();
 
 /* ==== js\ui.js ==== */
@@ -922,6 +959,17 @@ function fitSheetTitle(header) {
   header.classList.toggle('long', title.scrollWidth > room);
 }
 
+/** Шаги «как добавить ярлык вручную» — одна разметка на все места. */
+const SHORTCUT_STEPS = [
+  'Открой приложение MIET из бота @mietapp_bot.',
+  'Нажми <b>⋮</b> — три точки в правом верхнем углу окна приложения.',
+  'Выбери <b>«Добавить на главный экран»</b> — в некоторых версиях Telegram пункт называется <b>«Создать ярлык»</b>.',
+  'Подтверди. На рабочем столе появится иконка MIET — жми её, и приложение откроется сразу, без чата с ботом.',
+];
+
+const stepsHtml = steps => `<ol class="steps">${steps.map((s, i) =>
+  `<li><span class="step-n">${i + 1}</span><span class="step-t">${s}</span></li>`).join('')}</ol>`;
+
 /** Короткое всплывающее сообщение по центру снизу. */
 function toast(message) {
   const t = el(`<div style="
@@ -970,7 +1018,7 @@ function contactRows({ lead, phone, inner, email, room, address, site }) {
   return rows.length ? listCard(rows) : '';
 }
 
-return {'esc': esc, 'el': el, '$': $, '$$': $$, 'on': on, 'iconTile': iconTile, 'listRow': listRow, 'listCard': listCard, 'pillRow': pillRow, 'segmented': segmented, 'bindChoice': bindChoice, 'emptyState': emptyState, 'toggle': toggle, 'kpi': kpi, 'skeleton': skeleton, 'sheet': sheet, 'fitSheetTitle': fitSheetTitle, 'toast': toast, 'lightbox': lightbox, 'contactRows': contactRows};
+return {'esc': esc, 'el': el, '$': $, '$$': $$, 'on': on, 'iconTile': iconTile, 'listRow': listRow, 'listCard': listCard, 'pillRow': pillRow, 'segmented': segmented, 'bindChoice': bindChoice, 'emptyState': emptyState, 'toggle': toggle, 'kpi': kpi, 'skeleton': skeleton, 'sheet': sheet, 'fitSheetTitle': fitSheetTitle, 'SHORTCUT_STEPS': SHORTCUT_STEPS, 'stepsHtml': stepsHtml, 'toast': toast, 'lightbox': lightbox, 'contactRows': contactRows};
 })();
 
 /* ==== js\api.js ==== */
@@ -4723,6 +4771,8 @@ var toast = __mod['js/ui.js']['toast'];
 var sheet = __mod['js/ui.js']['sheet'];
 var emptyState = __mod['js/ui.js']['emptyState'];
 var toggle = __mod['js/ui.js']['toggle'];
+var SHORTCUT_STEPS = __mod['js/ui.js']['SHORTCUT_STEPS'];
+var stepsHtml = __mod['js/ui.js']['stepsHtml'];
 var data = __mod['js/store.js']['data'];
 var settings = __mod['js/store.js']['settings'];
 var save = __mod['js/store.js']['save'];
@@ -4740,6 +4790,10 @@ var syncChrome = __mod['js/tg.js']['syncChrome'];
 var haptic = __mod['js/tg.js']['haptic'];
 var hapticNotify = __mod['js/tg.js']['hapticNotify'];
 var confirmDialog = __mod['js/tg.js']['confirmDialog'];
+var canAddToHome = __mod['js/tg.js']['canAddToHome'];
+var addToHome = __mod['js/tg.js']['addToHome'];
+var homeStatus = __mod['js/tg.js']['homeStatus'];
+var onHomeAdded = __mod['js/tg.js']['onHomeAdded'];
 var account = __mod['js/api.js']['account'];
 var canTalk = __mod['js/api.js']['canTalk'];
 var post = __mod['js/api.js']['post'];
@@ -4751,6 +4805,10 @@ async function profileScreen() {
   const name = [user?.first_name, user?.last_name].filter(Boolean).join(' ') || 'Студент МИЭТ';
   const initials = (user?.first_name?.[0] || 'М') + (user?.last_name?.[0] || '');
   const favCount = settings.favorites.length;
+
+  // Есть ли ярлык на рабочем столе — клиент отвечает быстро или никак
+  // (тогда через полторы секунды считаем «неизвестно»).
+  const home = await homeStatus();
 
   let weekLabel = '—';
   let baseWeek = null;   // неделя цикла без поправки — от неё считает окно поправки
@@ -4795,6 +4853,10 @@ async function profileScreen() {
         chevron: true, id: 'lunch', cls: 'tap' })] : []),
       listRow({ ico: 'heart', title: 'Избранные кружки', value: String(favCount), chevron: true, id: 'fav', cls: 'tap' }),
     ])}
+
+      <div class="section-head"><div class="section-title">Быстрый доступ</div></div>
+      ${listCard([listRow({ ico: 'zap', title: 'Ярлык на рабочий стол', sub: 'Открывать приложение в один тап',
+    value: home === 'added' ? 'добавлен' : '', chevron: true, id: 'shortcut', cls: 'tap' })])}
 
       ${canTalk ? `
         <div class="section-head"><div class="section-title">Утро</div></div>
@@ -4883,6 +4945,7 @@ async function profileScreen() {
       case 'group': return pickGroup(() => refresh());
       case 'week': return weekShiftSheet(baseWeek);
       case 'lunch': return lunchSheet();
+      case 'shortcut': return shortcutSheet(home);
       case 'fav': return go('clubs');
       case 'about': return go('about');
       case 'campus': return go('campus');
@@ -4916,6 +4979,40 @@ async function profileScreen() {
  * Поправка недели. Цикл в МИЭТе четырёхнедельный, отсчёт ведём от начала
  * семестра — если у деканата счёт другой, здесь его можно сдвинуть.
  */
+/**
+ * Ярлык на рабочий стол: кнопка, которая сама открывает окно Telegram,
+ * и пошаговая инструкция на случай, если кнопка недоступна (компьютер,
+ * старый клиент) или человеку проще руками.
+ */
+function shortcutSheet(status) {
+  const can = canAddToHome() && status !== 'added';
+  sheet({
+    title: 'Ярлык на рабочий стол',
+    cancel: 'Закрыть',
+    body: `
+      <div class="row-subtitle" style="margin-bottom:14px;line-height:1.5">
+        Иконка MIET на рабочем столе телефона открывает приложение сразу —
+        без чата с ботом и лишних нажатий.
+      </div>
+      ${status === 'added' ? `<div class="ok-note">${icon('check', 16)} Ярлык уже на рабочем столе</div>` : ''}
+      ${can ? `<button class="btn-primary" id="add-home">${icon('zap', 18)} Добавить ярлык</button>
+        <div class="field-label" style="margin:18px 2px 10px">Или вручную</div>` : `
+        <div class="field-label" style="margin:4px 2px 10px">Как добавить</div>`}
+      ${stepsHtml(SHORTCUT_STEPS)}
+      <div class="row-subtitle" style="margin-top:12px;line-height:1.5">
+        Это для телефона: на компьютере ярлыков нет. Если такого пункта в меню
+        нет — обнови Telegram.
+      </div>`,
+    onMount(root, close) {
+      root.querySelector('#add-home')?.addEventListener('click', () => {
+        haptic('medium');
+        if (!addToHome()) toast('Не получилось — добавь по шагам ниже');
+      });
+      onHomeAdded(() => { hapticNotify('success'); toast('Ярлык добавлен'); close(); refresh(); });
+    },
+  });
+}
+
 const LUNCH_LABEL = { after2: 'после 2-й пары', after3: 'после 3-й пары' };
 
 /**
@@ -9313,6 +9410,7 @@ var icon = __mod['js/icons.js']['icon'];
 var esc = __mod['js/ui.js']['esc'];
 var listCard = __mod['js/ui.js']['listCard'];
 var listRow = __mod['js/ui.js']['listRow'];
+var toast = __mod['js/ui.js']['toast'];
 var data = __mod['js/store.js']['data'];
 var settings = __mod['js/store.js']['settings'];
 var fetchSchedule = __mod['js/schedule.js']['fetchSchedule'];
@@ -9326,6 +9424,11 @@ var go = __mod['js/router.js']['go'];
 var switchTab = __mod['js/router.js']['switchTab'];
 var tgUser = __mod['js/tg.js']['tgUser'];
 var openLink = __mod['js/tg.js']['openLink'];
+var haptic = __mod['js/tg.js']['haptic'];
+var hapticNotify = __mod['js/tg.js']['hapticNotify'];
+var addToHome = __mod['js/tg.js']['addToHome'];
+var homeStatus = __mod['js/tg.js']['homeStatus'];
+var onHomeAdded = __mod['js/tg.js']['onHomeAdded'];
 var get = __mod['js/api.js']['get'];
 var canTalk = __mod['js/api.js']['canTalk'];
 var account = __mod['js/api.js']['account'];
@@ -9387,6 +9490,7 @@ async function home() {
     actions: iconBtn('search', 'search') + iconBtn('user', 'profile'),
     body: `
       <div id="hello-slot"></div>
+      <div id="tip-slot"></div>
       <div id="now-slot" class="stack"></div>
       <div id="study-slot"></div>
 
@@ -9426,6 +9530,7 @@ async function home() {
 
   // ── знакомство ──
   renderHello(node.querySelector('#hello-slot'), user);
+  renderShortcutTip(node.querySelector('#tip-slot'));
 
   // ── карточка «сейчас» ──
   const slot = node.querySelector('#now-slot');
@@ -9471,6 +9576,45 @@ async function home() {
 // Карточку «что это такое» человек читает один раз. Дальше она мешает:
 // главная нужна, чтобы за две секунды увидеть свою пару.
 const HELLO_KEY = 'miet-hello-seen';
+const TIP_KEY = 'miet-shortcut-tip';
+
+/**
+ * «Открывай в один тап»: ярлык MIET на рабочем столе телефона.
+ *
+ * Показываем, только если клиент умеет ставить ярлык и его ещё нет
+ * ('missed'), и не вместе с приветствием новичка — две карточки подряд
+ * на первом экране уже шум. Закрыл крестиком — больше не появится;
+ * инструкция остаётся в профиле.
+ */
+async function renderShortcutTip(slot) {
+  if (!slot) return;
+  try {
+    if (localStorage.getItem(TIP_KEY) === '1' || localStorage.getItem(HELLO_KEY) !== '1') return;
+  } catch { return; }
+  if (await homeStatus() !== 'missed') return;
+  const forget = () => {
+    try { localStorage.setItem(TIP_KEY, '1'); } catch { /* приватный режим */ }
+    slot.innerHTML = '';
+  };
+  slot.innerHTML = `
+    <div class="tip-card">
+      <span class="tip-ico">${icon('zap', 20)}</span>
+      <div class="tip-body">
+        <div class="tip-title">Открывай в один тап</div>
+        <div class="tip-text">Ярлык MIET на рабочий стол</div>
+      </div>
+      <button class="tip-add" data-tip="add">Добавить</button>
+      <button class="tip-x" data-tip="x" aria-label="Скрыть">${icon('x', 16)}</button>
+    </div>`;
+  slot.addEventListener('click', e => {
+    const b = e.target.closest('[data-tip]');
+    if (!b) return;
+    haptic('light');
+    if (b.dataset.tip === 'x') return forget();
+    if (!addToHome()) { toast('Инструкция — в профиле, раздел «Быстрый доступ»'); forget(); }
+  });
+  onHomeAdded(() => { hapticNotify('success'); toast('Ярлык добавлен'); forget(); });
+}
 
 /**
  * Короткий рассказ о приложении — только тем, кто здесь впервые, и
