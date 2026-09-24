@@ -242,7 +242,9 @@ def check_grades(user_id: int, send: bool = True) -> list:
     if not token:
         return []
     try:
-        data = orioks.tasks(token)
+        # С досыпкой баллов с сайта: API от него отстаёт, и без неё
+        # сторож молчал бы о том, что человек уже видит в ОРИОКС.
+        data = orioks.with_materials(user_id, orioks.tasks(token))
     except orioks.OrioksError as e:
         log.info("баллы %s не забрались: %s", user_id, e)
         return []

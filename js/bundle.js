@@ -1,5 +1,5 @@
 /* Собрано tools/stamp.py из js/*.js — не правьте здесь.
-   Версия c7a78147. Исходники лежат рядом и остаются модулями. */
+   Версия 2eb97112. Исходники лежат рядом и остаются модулями. */
 var __mod = {};
 /* ==== js\config.js ==== */
 __mod['js/config.js'] = (function () {
@@ -85,7 +85,7 @@ const API_BASE = base;
 // свежую ли страницу открыл человек: Telegram кеширует мини-приложения
 // по своим правилам, и «у меня ничего не поменялось» разбирается
 // сравнением этой строки, а не на слово.
-const BUILD = 'c7a78147';
+const BUILD = '2eb97112';
 
 return {'apiBase': apiBase, 'fallBackToHome': fallBackToHome, 'API_BASE': API_BASE, 'BUILD': BUILD};
 })();
@@ -6189,11 +6189,13 @@ var iconBtn = __mod['js/screens/common.js']['iconBtn'];
  */
 const SECTIONS = [
   {
-    title: 'Учёба',
+    // Не «Учёба»: так теперь зовётся плитка внутри (раздел ОРИОКС), а
+    // заголовок, повторяющий имя своей плитки, ничего не сообщает.
+    title: 'Самое нужное',
     note: 'То, что спрашивают чаще всего',
     tiles: [
-      { id: 'tasks', ico: 'backpack', tone: 'blue', title: 'Задания',
-        sub: 'Что задали, сроки и файлы из ОРИОКС' },
+      { id: 'tasks', ico: 'backpack', tone: 'blue', title: 'Учёба',
+        sub: 'Задания, баллы и успеваемость из ОРИОКС' },
       { id: 'teachers', ico: 'teacher', tone: 'blue', title: 'Преподаватели',
         sub: 'Кто, где и когда ведёт' },
       { id: 'rooms', ico: 'door', tone: 'blue', title: 'Аудитории',
@@ -7884,7 +7886,10 @@ return {'default': institutesScreen, 'instituteScreen': instituteScreen};
 
 /* ==== js\screens\tasks.js ==== */
 __mod['js/screens/tasks.js'] = (function () {
-// Задания из ОРИОКС — список дел, а не выгрузка данных.
+// «Учёба»: всё из ОРИОКС — дела со сроками, успеваемость, сдача работ.
+// Раньше раздел звался «Задания», но вырос из этого имени.
+//
+// Дела — список, а не выгрузка данных.
 //
 // Первая версия показывала всё подряд, сгруппированное по предметам, и
 // была нечитаемой: у студента шесть-восемь дисциплин по пять-десять
@@ -8492,7 +8497,7 @@ function homeworkSheet(form, box) {
 async function tasksScreen() {
   if (!canTalk) {
     return screen({
-      title: 'Задания',
+      title: 'Учёба',
       body: emptyState('Раздел работает внутри Telegram', 'backpack'),
     });
   }
@@ -8515,7 +8520,7 @@ async function tasksScreen() {
     web = both[1].web === true;
   } catch (err) {
     return screen({
-      title: 'Задания',
+      title: 'Учёба',
       body: `<div class="card" style="padding:18px">
         <div class="row-subtitle">${esc(err.message)}</div></div>`,
     });
@@ -8566,8 +8571,8 @@ async function tasksScreen() {
   if (tab !== 'perf' && !(tab === 'hw' && hwBeta)) tab = 'todo';
 
   const node = screen({
-    title: 'Задания',
-    subtitle: start ? 'Сроки, баллы и файлы из ОРИОКС'
+    title: 'Учёба',
+    subtitle: start ? 'Дела, баллы и файлы из ОРИОКС'
       : 'Выбери группу в профиле, чтобы видеть даты',
     actions: `<button class="icon-btn" data-action="orioks">${icon('external', 19)}</button>`,
     body: `
@@ -8854,7 +8859,7 @@ async function tasksScreen() {
 
 function notLinked() {
   const node = screen({
-    title: 'Задания',
+    title: 'Учёба',
     subtitle: 'Что задали, что сдать и файлы из ОРИОКС',
     body: `
       <div class="card" style="padding:18px">
@@ -8883,7 +8888,7 @@ function notLinked() {
 
 function linkedButBroken(message) {
   const node = screen({
-    title: 'Задания',
+    title: 'Учёба',
     body: `
       <div class="card" style="padding:18px">
         <div class="row-title" style="margin-bottom:6px">ОРИОКС не ответил</div>
@@ -9130,7 +9135,7 @@ var artState = __mod['js/art.js']['artState'];
 const QUICK = [
   { id: 'url:https://orioks.miet.ru/main/login', ico: 'chart', label: 'ОРИОКС' },
   { id: 'teachers', ico: 'teacher', label: 'Преподаватели' },
-  { id: 'tasks', ico: 'backpack', label: 'Задания' },
+  { id: 'tasks', ico: 'backpack', label: 'Учёба' },
   { id: 'url:https://account.miet.ru/', ico: 'key', label: 'Кабинет' },
   { id: 'campus:canteen', ico: 'utensils', label: 'Столовая' },
   { id: 'campus:library', ico: 'book', label: 'Библиотека' },
@@ -9291,14 +9296,14 @@ const stillFresh = hit =>
 /**
  * Ближайшие дела из ОРИОКС — три строки под расписанием.
  *
- * Экран «Задания» знает про них всё, но открывают его, когда про
+ * Экран «Учёба» знает про них всё, но открывают его, когда про
  * задание и так вспомнили. Главную открывают просто так, по дороге на
  * пару, — и здесь ближайший срок стоит ровно там, где на него смотрят.
  *
  * Молча и последним: ОРИОКС отвечает секундами (обход всех дисциплин),
  * и задерживать из-за него расписание нельзя. Не подключён, не ответил,
  * нечего показать — блока просто нет, а звать подключаться на главной
- * незачем: для этого есть плитка «Задания».
+ * незачем: для этого есть плитка «Учёба».
  */
 async function renderStudy(slot) {
   if (!slot || !canTalk || !settings.group) return;

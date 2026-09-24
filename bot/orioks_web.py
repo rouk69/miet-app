@@ -641,6 +641,45 @@ def study_report(data: dict) -> dict:
     }
 
 
+def grades(data: dict) -> list:
+    """
+    Баллы из веб-версии — то, что человек видит на сайте.
+
+    API ОРИОКС от сайта отстаёт: 24.09.2026 у живого студента сайт
+    показывал баллы на четырёх мероприятиях (ЛР.1 и посещаемость по
+    информатике, КР по языку, посещаемость по командной работе), а API —
+    только на одном. У мероприятия сайта готовый итог `grade.b` (число,
+    «-» если не выставлено); запасной путь — сумма `balls`.
+    """
+    out = []
+    for dis in data.get("dises", []):
+        for seg in dis.get("segments", []):
+            for km in seg.get("allKms", []):
+                g = km.get("grade") if isinstance(km.get("grade"), dict) else {}
+                ball = g.get("b")
+                if not isinstance(ball, (int, float)) or isinstance(ball, bool):
+                    try:
+                        ball = float(str(ball).replace(",", "."))
+                    except ValueError:
+                        ball = None
+                if ball is None:
+                    got = [b.get("ball") for b in km.get("balls") or []
+                           if isinstance(b, dict)
+                           and isinstance(b.get("ball"), (int, float))]
+                    ball = sum(got) if got else None
+                if ball is None:
+                    continue
+                out.append({
+                    "discipline": dis.get("name") or "",
+                    "sh": (km.get("sh") or "").strip(),
+                    "name": (km.get("name") or "").strip(),
+                    "week": km.get("week"),
+                    "ball": ball,
+                    "max": km.get("max_ball"),
+                })
+    return out
+
+
 def materials(data: dict) -> list:
     """
     Файлы и ссылки, прикреплённые преподавателем к мероприятию.
