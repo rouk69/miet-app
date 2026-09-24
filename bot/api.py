@@ -1040,6 +1040,23 @@ def _admin(path: str, method: str, query: dict, body: dict, uid: int, me: dict):
                                   custom=False, buttons=False),
         }
 
+    if path == "/api/admin/orioks-schedule" and method == "GET":
+        # Разделы расписания в API ОРИОКС (время пар, текущая неделя) —
+        # как их видит мобильное приложение ОРИОКС. Только чтение, только
+        # /schedule…, только владельцу и под его же токеном.
+        if uid not in admin_ids():
+            return 404, {"error": "Нет такого маршрута"}
+        sub = (query.get("path", ["/schedule/timetable"])[0] or "").strip()
+        if not sub.startswith("/schedule"):
+            return 400, {"error": "Только /schedule…"}
+        token = orioks.token_of(uid)
+        if not token:
+            return 400, {"error": "ОРИОКС не подключён"}
+        try:
+            return 200, {"path": sub, "data": orioks._with_token(sub, token)}
+        except orioks.OrioksError as e:
+            return 200, {"path": sub, "error": str(e)}
+
     if path == "/api/admin/orioks-probe" and method == "GET":
         # Видит ли наш сервер ОРИОКС вообще: с адресов вне России он
         # рвёт TLS, и проверить это можно только оттуда, где живёт бот.
