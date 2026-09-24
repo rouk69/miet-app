@@ -31,7 +31,7 @@ import time
 import urllib.error
 import urllib.request
 
-from . import orioks_web
+from . import orioks_grades, orioks_web
 from .db import conn
 
 log = logging.getLogger("miet.orioks")
@@ -303,6 +303,9 @@ def tasks(token: str) -> dict:
             got = grade is not None and grade >= 0
             task = is_task(e)
             events.append({
+                # Имя точки, по которому сторож баллов узнаёт её между
+                # обходами, а приложение — отмечает «поставили недавно».
+                "key": orioks_grades.event_key(d.get("id"), e),
                 "name": e.get("name") or e.get("type") or "Задание",
                 "type": e.get("type") or "",
                 "week": e.get("week"),
@@ -324,7 +327,12 @@ def tasks(token: str) -> dict:
             "teachers": d.get("teachers") or [],
             "control_form": d.get("control_form") or "",
             "current_grade": d.get("current_grade"),
+            # ВНИМАНИЕ: `max_grade` дисциплины в ОРИОКС — максимум только по
+            # уже оценённым точкам («10 из 10» после первой лабораторной),
+            # а не за семестр. Проверено на живом аккаунте. Сколько можно
+            # набрать всего — сумма максимумов всех точек, её и считаем.
             "max_grade": d.get("max_grade"),
+            "semester_max": sum(e.get("max_grade") or 0 for e in events),
             "exam_date": d.get("exam_date"),
             "events": events,
         })
