@@ -30,8 +30,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
 from . import analytics, appconf, auth, directory, help_board, notify
-from . import (oops, orioks, orioks_grades, orioks_homework, orioks_watch,
-               orioks_web, posts)
+from . import (oops, orioks, orioks_access, orioks_grades, orioks_homework,
+               orioks_watch, orioks_web, posts)
 from . import morning
 from . import paths, raffle, render, storage, uptime
 from . import webapp as webapp_watch
@@ -216,6 +216,12 @@ def _me(user: dict, me: dict) -> dict:
         # что людям он пока не показан.
         "raffle_open": appconf.get("raffle_on"),
         "orioks": bool(orioks.token_of(me["id"])),
+        # Открыт ли раздел «Учёба». Решает сервер: спрятанная плитка
+        # без проверки на сервере ничего бы не закрывала.
+        "orioks_access": orioks_access.allowed(me),
+        "orioks_open": appconf.get(orioks_access.FLAG),
+        # Владелец из ADMIN_IDS: только он выдаёт доступ к «Учёбе».
+        "root": bool(me.get("root")),
         "morning": storage.morning_on(me["id"]),
         "label": _label(me),
         # Группа с сервера: человек выбрал её в боте — приложение подхватит
@@ -307,6 +313,11 @@ def _orioks(path: str, method: str, body: dict, uid: int, me: dict):
     """
     if me["blocked"]:
         return 403, {"error": "Доступ закрыт"}
+
+    # Раздел закрыт всем, кроме владельца и тех, кому он выдан. Отключить
+    # ОРИОКС можно и закрытому: забрать свой токен — его право всегда.
+    if not orioks_access.allowed(me) and path != "/api/orioks/unlink":
+        return 403, {"error": "Раздел «Учёба» пока закрыт"}
 
     if path == "/api/orioks" and method == "GET":
         token = orioks.token_of(uid)
@@ -872,6 +883,8 @@ def _admin(path: str, method: str, query: dict, body: dict, uid: int, me: dict):
             if not me["is_admin"]:
                 return 403, {"error": "Настройки меняет только полный админ"}
             key = str(body.get("key") or "")
+            if key == orioks_access.FLAG and uid not in admin_ids():
+                return 403, {"error": "Открыть «Учёбу» всем может только владелец"}
             try:
                 appconf.set_flag(key, bool(body.get("value")))
             except KeyError:
@@ -1075,8 +1088,16 @@ def _admin(path: str, method: str, query: dict, body: dict, uid: int, me: dict):
             role = str(body.get("role") or "none")
             if role not in analytics.ROLES:
                 return 400, {"error": "Неизвестная роль"}
-            analytics.set_role(target, role,
-                               body.get("perms") or [], body.get("sections") or [])
+            sections = [str(s) for s in (body.get("sections") or [])]
+            if uid not in admin_ids():
+                # Доступ к «Учёбе» выдаёт и снимает только владелец. Чужое
+                # сохранение роли не должно ни выдать его, ни молча стереть.
+                had = orioks_access.SECTION in analytics.identity(
+                    target, admin_ids())["granted_sections"]
+                sections = [s for s in sections if s != orioks_access.SECTION]
+                if had:
+                    sections.append(orioks_access.SECTION)
+            analytics.set_role(target, role, body.get("perms") or [], sections)
             return 200, {"ok": True, "access": analytics.identity(target, admin_ids())}
 
         if tail == "/block" and method == "POST":

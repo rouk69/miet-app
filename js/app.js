@@ -9,7 +9,7 @@ import { loadMe, account, track, syncGroup, post } from './api.js';
 import { checkFresh } from './fresh.js';
 import { watchErrors, reportOops } from './oops.js';
 
-import home from './screens/home.js';
+import home, { applyAccess } from './screens/home.js';
 import schedule from './screens/schedule.js';
 import newsArchive, { articleScreen } from './screens/news.js';
 import feed, { moderationScreen } from './screens/feed.js';
@@ -183,6 +183,8 @@ loadData()
       return;
     }
     track('open');
+    // Права приехали: «Учёба» на главной появляется или уступает место.
+    applyAccess();
     // Длинные тексты карточек — фоном, после первого экрана. Ждать их
     // на старте незачем: они нужны, только когда карточку откроют, а
     // это 107 КБ, которые раньше стояли в очереди перед расписанием.

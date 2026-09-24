@@ -630,6 +630,51 @@ def fake_study(cookie):
 
 orioks_web.study_json = fake_study
 
+# ─── доступ к «Учёбе»: закрыто всем, кроме владельца ───
+from bot import orioks_access  # noqa: E402
+
+s, r = api.handle("GET", "/api/orioks", {}, {}, USER)
+check("студенту раздел закрыт", s == 403, (s, r))
+s, r = api.handle("GET", "/api/me", {}, {}, USER)
+check("и приложение об этом знает", r.get("orioks_access") is False, r)
+s, r = api.handle("GET", "/api/me", {}, {}, ADMIN)
+check("владельцу открыт", r.get("orioks_access") is True and r.get("root") is True, r)
+
+# Полный админ, но не владелец: раздел ему сам собой не достаётся,
+# выдать его другим и открыть всем он тоже не может.
+SUB_ADMIN = init_data(555, "Второй", "second")
+api.handle("GET", "/api/me", {}, {}, SUB_ADMIN)
+api.handle("POST", "/api/admin/users/555/role", {},
+           {"role": "admin", "perms": [], "sections": []}, ADMIN)
+s, r = api.handle("GET", "/api/orioks", {}, {}, SUB_ADMIN)
+check("полному админу не открыт сам собой", s == 403, (s, r))
+s, r = api.handle("POST", "/api/admin/users/42/role", {},
+                  {"role": "none", "perms": [], "sections": ["orioks"]}, SUB_ADMIN)
+check("выдать доступ админ не может",
+      not orioks_access.allowed_id(42), orioks_access.allowed_id(42))
+s, r = api.handle("POST", "/api/admin/settings", {},
+                  {"key": "orioks_open", "value": True}, SUB_ADMIN)
+check("открыть всем админ не может", s == 403, (s, r))
+
+# Владелец открывает всем — и закрывает обратно.
+s, r = api.handle("POST", "/api/admin/settings", {},
+                  {"key": "orioks_open", "value": True}, ADMIN)
+check("владелец открывает всем", s == 200 and orioks_access.allowed_id(42), (s, r))
+api.handle("POST", "/api/admin/settings", {},
+           {"key": "orioks_open", "value": False}, ADMIN)
+check("и закрывает", not orioks_access.allowed_id(42))
+
+# Владелец выдаёт доступ одному человеку.
+s, r = api.handle("POST", "/api/admin/users/42/role", {},
+                  {"role": "none", "perms": [], "sections": ["orioks"]}, ADMIN)
+check("владелец выдаёт доступ", s == 200 and orioks_access.allowed_id(42), (s, r))
+# Сохранение роли другим админом не стирает выданное владельцем.
+api.handle("POST", "/api/admin/users/42/role", {},
+           {"role": "none", "perms": [], "sections": []}, SUB_ADMIN)
+check("чужое сохранение роли доступ не стирает", orioks_access.allowed_id(42))
+api.handle("POST", "/api/admin/users/555/role", {},
+           {"role": "none", "perms": [], "sections": []}, ADMIN)
+
 s, r = api.handle("GET", "/api/orioks", {}, {}, USER)
 check("без подключения так и сказано", s == 200 and r["linked"] is False, r)
 
@@ -1295,6 +1340,15 @@ api.handle("POST", "/api/orioks/link", {},
 check("подписка включена по умолчанию", orioks_watch.notify_on(42))
 check("подписчик виден обходу", 42 in orioks_watch.watchers(),
       orioks_watch.watchers())
+api.handle("POST", "/api/admin/users/42/role", {},
+           {"role": "none", "perms": [], "sections": []}, ADMIN)
+check("закрыли раздел — сторож молчит", 42 not in orioks_watch.watchers(),
+      orioks_watch.watchers())
+check("а подключение осталось", orioks.token_of(42) != "")
+s_, r_ = api.handle("POST", "/api/orioks/notify", {}, {"on": True}, USER)
+check("закрытому раздел не отвечает", s_ == 403, s_)
+api.handle("POST", "/api/admin/users/42/role", {},
+           {"role": "none", "perms": [], "sections": ["orioks"]}, ADMIN)
 s_, r_ = api.handle("POST", "/api/orioks/notify", {}, {"on": False}, USER)
 check("подписка выключается", s_ == 200 and r_["notify"] is False, (s_, r_))
 check("выключивший выпал из обхода", 42 not in orioks_watch.watchers(),

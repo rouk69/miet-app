@@ -23,6 +23,10 @@ export const account = {
   blocked: false,
   is_admin: false,
   can_stats: false,
+  // Раздел «Учёба» закрыт, пока сервер не скажет иначе: открыть по
+  // ошибке хуже, чем показать секундой позже.
+  orioks_access: false,
+  root: false,
   group: null,
 };
 

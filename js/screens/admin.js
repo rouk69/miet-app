@@ -786,6 +786,17 @@ export async function adminUserScreen({ id }) {
           сможет писать в выбранное.
         </p>
         <div class="list-card" id="sections">
+          ${account.root ? `
+            <div class="list-row">
+              <div class="icon-tile">${icon('backpack', 19)}</div>
+              <div class="list-row-body">
+                <div class="row-title">Раздел «Учёба» (ОРИОКС)</div>
+                <div class="row-subtitle">${account.orioks_open
+    ? 'Сейчас открыт всем — это на случай, если закроешь'
+    : 'Баллы, дела и уведомления из ОРИОКС. Выдаёт только владелец'}</div>
+              </div>
+              ${toggle(access.granted_sections.includes('orioks'), 'sec:orioks')}
+            </div>` : ''}
           ${clubs.map(c => `
             <div class="list-row">
               <div class="icon-tile">${icon(c.icon || 'sparkles', 19)}</div>
