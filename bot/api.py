@@ -30,7 +30,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
 from . import analytics, appconf, auth, directory, help_board, notify
-from . import oops, orioks, orioks_grades, orioks_watch, orioks_web, posts
+from . import (oops, orioks, orioks_grades, orioks_homework, orioks_watch,
+               orioks_web, posts)
 from . import morning
 from . import paths, raffle, render, storage, uptime
 from . import webapp as webapp_watch
@@ -318,7 +319,9 @@ def _orioks(path: str, method: str, body: dict, uid: int, me: dict):
                          # Какие баллы сторож видел выставленными недавно:
                          # ключ точки → когда (UTC). Приложение по ним
                          # собирает блок «Новые баллы».
-                         "recent": orioks_grades.recent(uid)}
+                         "recent": orioks_grades.recent(uid),
+                         # Сдача работ — фундамент, виден только владельцу.
+                         "homework_beta": uid in admin_ids()}
         except orioks.OrioksError as e:
             # Токен мог протухнуть или быть отозван — тогда честнее
             # предложить подключиться заново, чем показывать ошибку.
@@ -387,6 +390,37 @@ def _orioks(path: str, method: str, body: dict, uid: int, me: dict):
         if not token:
             return 400, {"error": "ОРИОКС не подключён"}
         return 200, orioks.raw_dump(token)
+
+    if path == "/api/orioks/homework":
+        # Сдача работ в ОРИОКС. Пока это фундамент: открыт ТОЛЬКО
+        # владельцам из ADMIN_IDS — не полным админам и не по праву.
+        # Остальным маршрута как будто нет, 404, а не 403: незачем
+        # сообщать, что он существует.
+        if uid not in admin_ids():
+            return 404, {"error": "Нет такого маршрута"}
+        cookie = orioks.cookie_of(uid)
+        if not cookie:
+            return 200, {"web": False, "error": "Нужен вход на сайт ОРИОКС — "
+                                                "переподключи ОРИОКС в разделе заданий"}
+        try:
+            if method == "GET":
+                return 200, {"web": True,
+                             "threads": orioks_homework.threads(cookie),
+                             "form": orioks_homework.form(cookie)}
+            if method == "POST":
+                # Отправка уходит преподавателю по-настоящему: без явного
+                # подтверждения из клиента не отправляем ничего.
+                if body.get("confirm") is not True:
+                    return 400, {"error": "Нужно подтверждение отправки"}
+                return 200, orioks_homework.submit(cookie, body)
+        except ValueError as e:
+            return 400, {"error": str(e)}
+        except orioks_web.SessionExpired:
+            orioks.drop_cookie(uid)
+            return 200, {"web": False, "error": "ОРИОКС попросил войти заново"}
+        except orioks_web.WebError as e:
+            return 502, {"error": str(e)}
+        return 405, {"error": "Метод не поддерживается"}
 
     if path == "/api/orioks/unlink" and method == "POST":
         token = orioks.token_of(uid)

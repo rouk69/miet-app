@@ -1139,6 +1139,107 @@ orioks._request = graded_request
 s_, r_ = api.handle("GET", "/api/orioks", {}, {}, USER)
 check("приложение получает недавние баллы",
       s_ == 200 and "7:dz.2" in r_.get("recent", {}), r_.get("recent"))
+check("сдача работ студенту не видна", r_.get("homework_beta") is False, r_)
+
+# ─── сдача работ: фундамент только для владельца ───
+from bot import orioks_homework  # noqa: E402
+
+# Страница формы — выжимка настоящей: список дисциплин, мероприятия в
+# data-kms, CSRF. Мероприятия у ОРИОКС — «N неделя: имя».
+CREATE_HTML = (
+    '<form id="w0" action="/student/homework/create?id_type=2" method="post">'
+    '<input type="hidden" name="_csrf" value="CSRF-1">'
+    '<select id="homework-discipline-field" name="HomeworkTreadForm[dis_id]">'
+    '<option value=""></option><option value="300169">Информатика</option>'
+    '<option value="300175">Математический анализ</option></select>'
+    '<select id="homework-km-field" class="form-control" name="HomeworkTreadForm[id_km]" '
+    "data-kms='{\"300169\":{\"2071580\":{\"name\":\"2 неделя: ЛР.1 ЛР.1\"}},"
+    "\"300175\":{\"2080001\":{\"name\":\"3 неделя: ДЗ.1\"}}}'></select>"
+    '<textarea name="HomeworkTreadForm[message]"></textarea></form>')
+LIST_HTML = (
+    '<table><tr><th>Статус</th><th>Название</th><th>Дисциплина</th>'
+    '<th>Контрольное мероприятие</th><th>Студент</th><th>Группа</th>'
+    '<th>Время создания</th><th>Новых</th></tr>'
+    '<tr><td>В работе</td><td><a href="/student/homework/view?id=55">Отчёт ЛР1</a></td>'
+    '<td>Информатика</td><td>ЛР.1</td><td>Иванов</td><td>ПИН-11</td>'
+    '<td>20.09.2026 12:00</td><td>2</td></tr></table>')
+POSTED = []
+HW = {"reply": ("", "https://orioks.miet.ru/student/homework/view?id=56")}
+
+
+def fake_page(cookie, path, ajax=False):
+    if path.startswith("/student/homework/create"):
+        return CREATE_HTML
+    if path.startswith("/student/homework/list"):
+        return LIST_HTML
+    raise orioks_web.WebError("нет такой страницы в фикстуре")
+
+
+def fake_post(cookie, path, data):
+    POSTED.append((cookie, path, dict(data)))
+    return HW["reply"]
+
+
+orioks_web.get_page = fake_page
+orioks_homework._post = fake_post
+
+form = orioks_homework.parse_form(CREATE_HTML)
+check("дисциплины разобраны",
+      [d["name"] for d in form["disciplines"]] == ["Информатика", "Математический анализ"],
+      form)
+check("мероприятия пришли из data-kms",
+      form["disciplines"][0]["events"] == [{"id": 2071580, "name": "2 неделя: ЛР.1 ЛР.1"}],
+      form["disciplines"][0])
+lst = orioks_homework.parse_list(LIST_HTML)
+check("обращение разобрано по заголовкам",
+      len(lst) == 1 and lst[0]["status"] == "В работе" and lst[0]["new"] == 2
+      and lst[0]["href"] == "/student/homework/view?id=55", lst)
+
+orioks.save_token(777, "T" * 32)
+orioks.save_cookie(777, "PHPSESSID=owner")
+s_, r_ = api.handle("GET", "/api/orioks/homework", {}, {}, USER)
+check("студенту маршрута нет", s_ == 404, s_)
+s_, r_ = api.handle("GET", "/api/orioks/homework", {}, {}, ADMIN)
+check("владелец видит форму и обращения",
+      s_ == 200 and r_["threads"] and r_["form"]["disciplines"], (s_, r_))
+
+good = {"dis_id": 300169, "km_id": 2071580, "type": 2,
+        "title": "Отчёт", "variant": "3", "message": "Готово, отчёт во вложении"}
+s_, r_ = api.handle("POST", "/api/orioks/homework", {}, good, ADMIN)
+check("без подтверждения не отправляет", s_ == 400 and not POSTED, (s_, POSTED))
+s_, r_ = api.handle("POST", "/api/orioks/homework", {},
+                    {**good, "km_id": 2080001, "confirm": True}, ADMIN)
+check("мероприятие чужой дисциплины отклонено до ОРИОКС",
+      s_ == 400 and not POSTED, (s_, r_))
+s_, r_ = api.handle("POST", "/api/orioks/homework", {},
+                    {**good, "message": "  ", "confirm": True}, ADMIN)
+check("пустое описание отклонено", s_ == 400 and not POSTED, (s_, r_))
+s_, r_ = api.handle("POST", "/api/orioks/homework", {},
+                    {**good, "variant": "123456", "confirm": True}, ADMIN)
+check("вариант длиннее пяти отклонён", s_ == 400 and not POSTED, (s_, r_))
+s_, r_ = api.handle("POST", "/api/orioks/homework", {},
+                    {**good, "confirm": True}, USER)
+check("студент отправить не может", s_ == 404 and not POSTED, s_)
+
+s_, r_ = api.handle("POST", "/api/orioks/homework", {},
+                    {**good, "confirm": True}, ADMIN)
+sent = POSTED[-1][2] if POSTED else {}
+check("работа ушла", s_ == 200 and r_.get("ok") and len(POSTED) == 1, (s_, r_))
+check("со свежим CSRF и под сессией владельца",
+      sent.get("_csrf") == "CSRF-1" and POSTED[0][0] == "PHPSESSID=owner", POSTED)
+check("поля формы названы как в ОРИОКС",
+      sent.get("HomeworkTreadForm[id_km]") == "2071580"
+      and sent.get("HomeworkTreadForm[message]") == "Готово, отчёт во вложении", sent)
+
+# ОРИОКС вернул ту же форму с ошибкой — значит не принял.
+HW["reply"] = ('<form><textarea name="HomeworkTreadForm[message]"></textarea>'
+               '<p class="help-block help-block-error">Файл обязателен</p></form>',
+               "https://orioks.miet.ru/student/homework/create?id_type=2")
+s_, r_ = api.handle("POST", "/api/orioks/homework", {},
+                    {**good, "confirm": True}, ADMIN)
+check("отказ ОРИОКС показан его словами",
+      s_ == 502 and r_["error"] == "Файл обязателен", (s_, r_))
+orioks.forget(777)
 
 # Подписка: по умолчанию включена, выключается своим маршрутом.
 api.handle("POST", "/api/orioks/link", {},
