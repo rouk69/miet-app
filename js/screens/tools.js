@@ -16,7 +16,7 @@ import { screen } from './common.js';
 // Пороги взяты из общей практики БРС и подписаны как ориентир: у разных
 // дисциплин вес контрольных точек свой, и выдавать это за точный расчёт
 // нельзя.
-const GRADES = [
+export const GRADES = [
   { from: 86, label: 'Отлично', tone: 'success' },
   { from: 69, label: 'Хорошо', tone: 'primary' },
   { from: 50, label: 'Удовлетворительно', tone: 'warning' },

@@ -20,6 +20,7 @@ import { fetchSchedule, semesterStart, mondayOf, weekOfCycle }
 import { refresh } from '../router.js';
 import { hapticNotify, haptic, confirmDialog, openLink } from '../tg.js';
 import { screen } from './common.js';
+import { GRADES } from './tools.js';
 
 const MONTHS = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня',
   'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
@@ -317,6 +318,147 @@ const doneRow = t => `
     </div>
   </div>`;
 
+// ─────────────── успеваемость ───────────────
+
+/** Балл без лишних нулей: 8, 7,5. */
+export const num = x => {
+  const n = Number(x) || 0;
+  return Number.isInteger(n) ? String(n) : n.toFixed(1).replace('.', ',');
+};
+
+/**
+ * Где человек сейчас по предмету.
+ *
+ * У дисциплины ОРИОКС отдаёт `max_grade` — максимум по УЖЕ оценённым
+ * точкам («10 из 10» после первой лабораторной), а не за семестр. Семестр
+ * — это `semester_max`, сумма максимумов всех точек (сервер считает; для
+ * старого ответа досчитываем здесь). Процент «от выставленного» — второе
+ * число: 10 из 100 в сентябре не провал, если это 10 из 10 возможных.
+ *
+ * У зачёта одна граница — «зачтено» с 50; у экзамена и дифзачёта шкала.
+ */
+export function standing(d) {
+  const ev = (d && d.events) || [];
+  const sum = (list, f) => list.reduce((n, e) => n + (Number(f(e)) || 0), 0);
+  const got = d && d.current_grade != null ? Number(d.current_grade) || 0
+    : sum(ev.filter(e => e.done), e => e.grade);
+  const max = Number(d && d.semester_max) || sum(ev, e => e.max_grade);
+  const gradedMax = sum(ev.filter(e => e.done), e => e.max_grade);
+  const pct = gradedMax ? Math.round(got / gradedMax * 100) : null;
+  const pass = /^зач[её]т$/i.test(((d && d.control_form) || '').trim());
+  const scale = pass ? [{ from: 50, label: 'Зачтено' }]
+    : GRADES.filter(g => g.from > 0);
+  const now = scale.find(g => got >= g.from) || null;
+  const next = scale.slice().reverse().find(g => got < g.from) || null;
+  return {
+    got, max, gradedMax, pct,
+    now: now ? now.label : null,
+    next: next ? { label: next.label, left: next.from - got } : null,
+    share: max ? Math.min(100, Math.round(got / max * 100)) : 0,
+  };
+}
+
+/** «Сегодня», «вчера», «3 дня назад» — по времени UTC из базы. */
+export function agoLabel(utc, now = new Date()) {
+  const t = Date.parse(String(utc || '').replace(' ', 'T') + 'Z');
+  if (!t) return '';
+  const day = d => Math.floor((d - new Date(d).getTimezoneOffset() * 60000) / 86400000);
+  const n = day(now.getTime()) - day(t);
+  if (n <= 0) return 'сегодня';
+  if (n === 1) return 'вчера';
+  const m10 = n % 10, m100 = n % 100;
+  const w = m10 === 1 && m100 !== 11 ? 'день'
+    : m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14) ? 'дня' : 'дней';
+  return `${n} ${w} назад`;
+}
+
+/** Недавно выставленные баллы: точки, которые сторож видел меняющимися. */
+export function recentGrades(tasks, recent) {
+  const out = [];
+  ((tasks && tasks.disciplines) || []).forEach((d, di) => (d.events || []).forEach(e => {
+    const at = recent && e.key && recent[e.key];
+    if (at && e.done) out.push({ ...e, subject: d.name, di, at });
+  }));
+  return out.sort((a, b) => String(b.at).localeCompare(String(a.at)));
+}
+
+const perfRow = (d, i) => {
+  const s = standing(d);
+  const tail = s.next ? `до «${s.next.label}» ${num(s.next.left)} б.`
+    : s.now ? s.now : '';
+  return `
+    <button class="perf-row" data-disc="${i}">
+      <div class="perf-top">
+        <div class="perf-name">${esc(d.name)}</div>
+        <div class="perf-score"><b>${num(s.got)}</b> из ${num(s.max)}</div>
+      </div>
+      <div class="perf-bar"><i style="width:${s.share}%"></i></div>
+      <div class="perf-sub">
+        ${[d.control_form ? esc(d.control_form) : '',
+    s.pct === null ? 'оценок пока нет' : `взято ${s.pct}% от выставленного`,
+    esc(tail)].filter(Boolean).join(' · ')}
+      </div>
+    </button>`;
+};
+
+const recentRow = r => `
+  <div class="todo tap" data-disc="${r.di}">
+    <div class="todo-main">
+      <div class="todo-subject">${esc(r.subject)}</div>
+      <div class="todo-what">${esc(r.name)}</div>
+    </div>
+    <div class="todo-side">
+      <div class="todo-when"><b>${num(r.grade)}</b> из ${num(r.max_grade)}</div>
+      <div class="todo-left">${esc(agoLabel(r.at))}</div>
+    </div>
+  </div>`;
+
+/** Все контрольные точки предмета — то, ради чего открывают ОРИОКС. */
+function disciplineSheet(d, recent) {
+  const s = standing(d);
+  const events = (d.events || []).slice()
+    .sort((a, b) => (a.week ?? 99) - (b.week ?? 99));
+  sheet({
+    title: d.name,
+    cancel: 'Закрыть',
+    height: '78vh',
+    body: `
+      <div class="perf-head">
+        <div class="perf-big"><b>${num(s.got)}</b> из ${num(s.max)}</div>
+        <div class="row-subtitle">
+          ${[d.control_form ? esc(d.control_form) : '',
+    d.exam_date ? `сдача ${esc(String(d.exam_date))}` : '',
+    s.pct === null ? '' : `взято ${s.pct}% от выставленного`]
+    .filter(Boolean).join(' · ')}
+        </div>
+        <div class="perf-bar" style="margin-top:10px"><i style="width:${s.share}%"></i></div>
+        ${s.next ? `<div class="row-subtitle" style="margin-top:8px">
+          До «${esc(s.next.label)}» не хватает ${num(s.next.left)} б. —
+          пороги оценок ориентировочные.</div>` : ''}
+        ${(d.teachers || []).length ? `<div class="row-subtitle" style="margin-top:8px">
+          ${icon('teacher', 14)} ${esc(d.teachers.join(', '))}</div>` : ''}
+      </div>
+      <div class="list-card" style="margin-top:12px">
+        ${events.map(e => {
+    const fresh = recent && e.key && recent[e.key];
+    return `
+          <div class="todo ${e.done ? '' : 'perf-wait'}">
+            <div class="todo-main">
+              <div class="todo-subject">${esc(e.name)}${fresh
+      ? ' <span class="perf-new">новое</span>' : ''}</div>
+              <div class="todo-what">${[esc(e.type), e.week ? `${e.week}-я неделя` : '']
+      .filter(Boolean).join(' · ')}</div>
+            </div>
+            <div class="todo-side">
+              <div class="todo-when">${e.done ? `<b>${num(e.grade)}</b> из ${num(e.max_grade)}`
+      : `— из ${num(e.max_grade)}`}</div>
+            </div>
+          </div>`;
+  }).join('')}
+      </div>`,
+  });
+}
+
 export default async function tasksScreen() {
   if (!canTalk) {
     return screen({
@@ -384,12 +526,38 @@ export default async function tasksScreen() {
   all.forEach(t => (t.materials || []).forEach(
     m => files.push({ ...m, subject: t.subject, event: t.title.main })));
 
+  const recent = data.recent || {};
+  const fresh = recentGrades(data.tasks, recent);
+  // Какая вкладка была открыта — удобство, а не данные: пропала память —
+  // откроются «Дела».
+  let tab = 'todo';
+  try { tab = localStorage.getItem('miet-tasks-tab') || 'todo'; } catch { /* нет памяти */ }
+  if (tab !== 'perf') tab = 'todo';
+
   const node = screen({
     title: 'Задания',
     subtitle: start ? 'Сроки, баллы и файлы из ОРИОКС'
       : 'Выбери группу в профиле, чтобы видеть даты',
     actions: `<button class="icon-btn" data-action="orioks">${icon('external', 19)}</button>`,
     body: `
+      <div class="pill-row" id="tabs" style="margin-bottom:14px">
+        <button class="pill ${tab === 'todo' ? 'active' : ''}" data-tab="todo">Дела</button>
+        <button class="pill ${tab === 'perf' ? 'active' : ''}" data-tab="perf">
+          Успеваемость${fresh.length ? ` · ${fresh.length} нов.` : ''}
+        </button>
+      </div>
+
+      <div id="tab-todo" ${tab === 'todo' ? '' : 'hidden'}>
+      ${fresh.length ? `
+        <button class="list-card perf-hint" data-tab="perf">
+          <div class="list-row">
+            <div class="list-row-body">
+              <div class="row-title">${icon('star', 16)} Новые баллы: ${fresh.length}</div>
+              <div class="row-subtitle">${esc(fresh[0].subject)} — ${esc(fresh[0].name)}:
+                ${num(fresh[0].grade)} из ${num(fresh[0].max_grade)}</div>
+            </div>
+          </div>
+        </button>` : ''}
       <div class="kpi-grid">
         <div class="kpi-tile">
           <div class="kpi-number">${pending.length}</div>
@@ -419,19 +587,6 @@ export default async function tasksScreen() {
           ${news.slice(3).map(newsRow).join('')}
         </div>` : ''}
 
-      ${web ? `
-        <div class="list-card watch-card">
-          <div class="list-row">
-            <div class="list-row-body">
-              <div class="row-title">Сообщать о новом</div>
-              <div class="row-subtitle">
-                Бот напишет в личку, когда преподаватель выложит
-                объявление. Проверяет днём, раз в полтора часа.
-              </div>
-            </div>
-            ${toggle(data.notify !== false, 'watch')}
-          </div>
-        </div>` : ''}
 
       <div class="pill-row" id="kinds" style="margin:14px 0 4px">
         ${KINDS.map(k => `
@@ -489,24 +644,40 @@ export default async function tasksScreen() {
             </div>`).join('')}
         </div>` : ''}
 
-      <div class="section-head"><div class="section-title">По предметам</div></div>
-      <div class="list-card">
-        ${data.tasks.disciplines.map(d => {
-      const left = d.events.filter(e => e.task && !e.done).length;
-      return `
-          <div class="list-row">
-            <div class="list-row-body">
-              <div class="row-title">${esc(d.name)}</div>
-              <div class="row-subtitle">
-                ${d.current_grade ?? 0} из ${d.max_grade ?? 0} б.
-                ${d.control_form ? ` · ${esc(d.control_form)}` : ''}
-              </div>
+      </div>
+
+      <div id="tab-perf" ${tab === 'perf' ? '' : 'hidden'}>
+        ${fresh.length ? `
+          <div class="section-head" style="margin-top:0">
+            <div class="section-title with-icon">${icon('star', 17)} Новые баллы</div>
+          </div>
+          <p class="section-note">Выставленное за последние две недели.</p>
+          <div class="list-card">${fresh.slice(0, 8).map(recentRow).join('')}</div>` : ''}
+
+        <div class="section-head" ${fresh.length ? '' : 'style="margin-top:0"'}>
+          <div class="section-title with-icon">${icon('chart', 17)} По предметам</div>
+        </div>
+        <p class="section-note">
+          Сумма баллов за семестр из ОРИОКС. Нажми на предмет — покажу все
+          контрольные точки. Пороги оценок — ориентир.
+        </p>
+        <div class="list-card">
+          ${data.tasks.disciplines.map(perfRow).join('')}
+        </div>
+      </div>
+
+      <div class="list-card watch-card" style="margin-top:16px">
+        <div class="list-row">
+          <div class="list-row-body">
+            <div class="row-title">Сообщать о новом</div>
+            <div class="row-subtitle">
+              Бот напишет в личку, когда поставят баллы${web
+    ? ' или преподаватель выложит объявление' : ''}.
+              Проверяет днём, раз в полтора часа.
             </div>
-            <div class="list-row-value ${left ? '' : 'muted'}">
-              ${left ? `${left} ост.` : 'всё'}
-            </div>
-          </div>`;
-    }).join('')}
+          </div>
+          ${toggle(data.notify !== false, 'watch')}
+        </div>
       </div>
 
       <button class="btn-secondary danger-btn" id="unlink" style="margin-top:14px">
@@ -593,6 +764,21 @@ export default async function tasksScreen() {
     if (row) openLink(row.dataset.link);
   });
   toggler('#toggle-formal', '#formal-list', formal.length);
+
+  const showTab = id => {
+    tab = id;
+    try { localStorage.setItem('miet-tasks-tab', id); } catch { /* нет памяти */ }
+    node.querySelectorAll('#tabs .pill').forEach(
+      p => p.classList.toggle('active', p.dataset.tab === id));
+    node.querySelector('#tab-todo').hidden = id !== 'todo';
+    node.querySelector('#tab-perf').hidden = id !== 'perf';
+  };
+  node.addEventListener('click', e => {
+    const t = e.target.closest('[data-tab]');
+    if (t) { haptic('light'); return showTab(t.dataset.tab); }
+    const d = e.target.closest('[data-disc]');
+    if (d) disciplineSheet(data.tasks.disciplines[+d.dataset.disc], recent);
+  });
   node.querySelector('[data-toggle="watch"]')?.addEventListener('click', async e => {
     const t = e.currentTarget;
     const on = !t.classList.contains('on');

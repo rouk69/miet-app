@@ -390,6 +390,32 @@ CASES = [
     ("неделя 2 — 2-й числитель", "weekName(2)", "2-й числитель"),
     ("неделя 3 — 2-й знаменатель", "weekName(3)", "2-й знаменатель"),
     ("сдвиг за конец цикла — по кругу", "weekName(3 + 2)", "1-й знаменатель"),
+    # Успеваемость. Главная ловушка — `max_grade` дисциплины: это максимум
+    # по оценённому, а не за семестр; сумма берётся по всем точкам.
+    ("семестр — сумма всех точек", "standing(INF).max", "100"),
+    ("набрано — из ОРИОКС", "standing(INF).got", "10"),
+    ("процент — от выставленного", "standing(INF).pct", "100"),
+    ("полоса — от семестра", "standing(INF).share", "10"),
+    ("до тройки не хватает", "standing(INF).next.label + ' ' + standing(INF).next.left",
+     "Удовлетворительно 40"),
+    ("у зачёта одна граница", "standing(PASS).now + ' ' + standing(PASS).next", "Зачтено null"),
+    ("экзамен: текущая оценка", "standing(EXAM).now", "Хорошо"),
+    ("экзамен: до пятёрки", "standing(EXAM).next.left", "16"),
+    ("без оценок процента нет", "standing(NONE).pct", "null"),
+    ("дробный балл с запятой", "gnum(7.5)", "7,5"),
+    ("целый балл без нулей", "gnum(8)", "8"),
+    ("выставлено сегодня", "agoLabel(daysAgo(0), NOW)", "сегодня"),
+    ("выставлено вчера", "agoLabel(daysAgo(1), NOW)", "вчера"),
+    ("три дня назад", "agoLabel(daysAgo(3), NOW)", "3 дня назад"),
+    ("пять дней назад", "agoLabel(daysAgo(5), NOW)", "5 дней назад"),
+    ("двадцать один день", "agoLabel(daysAgo(21), NOW)", "21 день назад"),
+    ("кривое время — пусто", "agoLabel('', NOW)", ""),
+    ("новые баллы — только выставленные",
+     "recentGrades({disciplines:[INF]}, {'1:ЛР.1': daysAgo(1), '1:ЛР.2': daysAgo(0)})"
+     ".map(function (r) { return r.name; }).join(',')", "ЛР.1"),
+    ("свежие сверху",
+     "recentGrades({disciplines:[{name:'А', events:[{key:'a', done:true},{key:'b', done:true}]}]},"
+     " {a: daysAgo(3), b: daysAgo(1)}).map(function (r) { return r.key; }).join(',')", "b,a"),
 ]
 
 # Бот подписывает недели тем же словарём (bot/schedule_api.WEEK_NAMES):
@@ -407,7 +433,23 @@ var _t = __mod['js/screens/tasks.js'];
 var subjectLook = _t.subjectLook, newsDate = _t.newsDate,
     linkify = _t.linkify, NUMBERED = _t.NUMBERED, fileLook = _t.fileLook,
     weekMonday = _t.weekMonday, subjectKey = _t.subjectKey,
-    lessonDay = _t.lessonDay, flatten = _t.flatten, pendingOf = _t.pendingOf;
+    lessonDay = _t.lessonDay, flatten = _t.flatten, pendingOf = _t.pendingOf,
+    standing = _t.standing, agoLabel = _t.agoLabel,
+    recentGrades = _t.recentGrades, gnum = _t.num;
+
+// Предмет, как его видит живой ОРИОКС после первой лабораторной: у
+// дисциплины «10 из 10», хотя за семестр можно набрать 100.
+var INF = { name: 'Информатика', control_form: 'Дифференцированный зачёт',
+  current_grade: 10, max_grade: 10, events: [
+    { key: '1:ЛР.1', name: 'ЛР.1', done: true, grade: 10, max_grade: 10 },
+    { key: '1:ЛР.2', name: 'ЛР.2', done: false, grade: null, max_grade: 90 }] };
+var PASS = { control_form: 'Зачёт', current_grade: 55, semester_max: 100, events: [] };
+var EXAM = { control_form: 'Экзамен', current_grade: 70, semester_max: 100, events: [] };
+var NONE = { control_form: 'Экзамен', current_grade: 0, max_grade: 0,
+  events: [{ done: false, max_grade: 100 }] };
+var NOW = new Date(2026, 8, 24, 15, 0);
+var utcOf = function (d) { return d.toISOString().slice(0, 19).replace('T', ' '); };
+var daysAgo = function (n) { var d = new Date(NOW); d.setDate(d.getDate() - n); return utcOf(d); };
 // Адрес серверной части: откуда спрашиваем данные и куда уходим, если
 // раздатчик страницы сервером не оказался.
 var _cfg = __mod['js/config.js'];

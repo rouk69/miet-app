@@ -1026,9 +1026,119 @@ orioks_watch.check_user(42)
 check("кончившаяся сессия убрана сторожем", orioks.cookie_of(42) == "")
 check("человеку сказано, что надо войти заново",
       len(SENT) == 1 and "войти заново" in SENT[0][1], SENT)
-check("без сессии обход этого человека пропускает",
-      42 not in orioks_watch.watchers(), orioks_watch.watchers())
+# Без сессии сайта объявления не проверить, но баллы идут по токену —
+# человек из обхода не выпадает, выпадают только объявления.
+check("без сессии в обходе остаётся ради баллов",
+      42 in orioks_watch.watchers(), orioks_watch.watchers())
+SENT.clear()
+check("а объявления без сессии не проверяются",
+      not orioks_watch.check_user(42) and not SENT, SENT)
 FEED["how"] = None
+
+# ─── сторож баллов ───
+# Мероприятия дисциплины 7 подменяем на изменяемый список: так видно,
+# как сторож реагирует на новый, исправленный и снятый балл.
+from bot import orioks_grades  # noqa: E402
+
+EVENTS7 = [
+    {"alias": "dz.1", "name": "Домашнее задание 1", "type": "Домашнее задание",
+     "week": 4, "max_grade": 10.0, "current_grade": 8.0},
+    {"alias": "dz.2", "name": "Домашнее задание 2", "type": "Домашнее задание",
+     "week": 11, "max_grade": 10.0, "current_grade": -1.0},
+    {"alias": "ex.1", "name": "Экзамен", "type": "Экзамен",
+     "week": 17, "max_grade": 30.0, "current_grade": -1.0},
+]
+_plain_request = orioks._request
+
+
+def graded_request(path, headers, method="GET"):
+    if path == "/student/disciplines/7/events":
+        _plain_request(path, headers, method)      # та же проверка токена
+        return [dict(e) for e in EVENTS7]
+    return _plain_request(path, headers, method)
+
+
+orioks._request = graded_request
+
+data = orioks.tasks("T" * 32)
+mat = data["disciplines"][0]
+# ОРИОКС отдаёт у дисциплины максимум только по оценённому (здесь 70 —
+# из фикстуры); за семестр можно набрать сумму максимумов всех точек.
+check("максимум за семестр — сумма точек", mat["semester_max"] == 50,
+      mat["semester_max"])
+check("у точки есть ключ", mat["events"][0]["key"] == "7:dz.1",
+      mat["events"][0].get("key"))
+
+orioks_grades.forget(42)
+SENT.clear()
+check("первый обход баллов молчит",
+      not orioks_watch.check_grades(42) and not SENT, SENT)
+check("но всё запомнил",
+      len(orioks_grades._known(42)) == len(EVENTS7) + 1, orioks_grades._known(42))
+check("и ничего не считает недавним", orioks_grades.recent(42) == {},
+      orioks_grades.recent(42))
+row = db.conn().execute("SELECT group_concat(sig) FROM orioks_grades "
+                     "WHERE user_id=42").fetchone()[0]
+check("самих баллов в базе нет — только отпечатки",
+      "8.0" not in row and "|8" not in row, row)
+
+SENT.clear()
+check("повторный обход без перемен молчит",
+      not orioks_watch.check_grades(42) and not SENT, SENT)
+
+# Поставили за второе ДЗ.
+EVENTS7[1]["current_grade"] = 9.0
+SENT.clear()
+got = orioks_watch.check_grades(42)
+check("новый балл замечен",
+      len(got) == 1 and got[0]["name"] == "Домашнее задание 2"
+      and got[0]["fixed"] is False, got)
+told = SENT[0][1] if SENT else ""
+check("сообщение ушло человеку", len(SENT) == 1 and SENT[0][0] == 42, SENT)
+check("в сообщении предмет, точка и балл",
+      "Матанализ" in told and "Домашнее задание 2" in told
+      and "<b>9</b> из 10" in told, told)
+check("и итог по предмету за семестр", "из 50" in told, told)
+check("недавнее видно приложению", "7:dz.2" in orioks_grades.recent(42),
+      orioks_grades.recent(42))
+
+# Исправили первое ДЗ: 8 → 10.
+EVENTS7[0]["current_grade"] = 10.0
+SENT.clear()
+got = orioks_watch.check_grades(42)
+check("исправленный балл помечен",
+      len(got) == 1 and got[0]["fixed"] is True
+      and "исправлен" in (SENT[0][1] if SENT else ""), (got, SENT))
+
+# Балл сняли: запоминаем молча — «балл убрали» без причины только пугает.
+EVENTS7[0]["current_grade"] = -1.0
+SENT.clear()
+check("снятый балл не объявляется",
+      not orioks_watch.check_grades(42) and not SENT, SENT)
+EVENTS7[0]["current_grade"] = 10.0
+SENT.clear()
+check("а вернувшийся — это новый балл",
+      len(orioks_watch.check_grades(42)) == 1 and len(SENT) == 1, SENT)
+
+# Сухой прогон ничего не записывает и не шлёт.
+EVENTS7[2]["current_grade"] = 25.0
+SENT.clear()
+dry = orioks_watch.check_grades(42, send=False)
+check("сухой прогон видит новое", len(dry) == 1, dry)
+check("но не шлёт и не запоминает",
+      not SENT and len(orioks_watch.check_grades(42)) == 1, SENT)
+
+# Сломанный ОРИОКС — ничего не стираем и не шлём.
+orioks._request = lambda *a, **k: (_ for _ in ()).throw(
+    orioks.OrioksError("ОРИОКС недоступен"))
+SENT.clear()
+check("отказ ОРИОКС — тишина", not orioks_watch.check_grades(42) and not SENT)
+check("и память цела", len(orioks_grades._known(42)) > 1)
+orioks._request = graded_request
+
+s_, r_ = api.handle("GET", "/api/orioks", {}, {}, USER)
+check("приложение получает недавние баллы",
+      s_ == 200 and "7:dz.2" in r_.get("recent", {}), r_.get("recent"))
 
 # Подписка: по умолчанию включена, выключается своим маршрутом.
 api.handle("POST", "/api/orioks/link", {},

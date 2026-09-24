@@ -2,6 +2,9 @@
 """
 Сторож объявлений ОРИОКС: бот сам говорит, что задали.
 
+А заодно и что поставили: тот же обход спрашивает баллы, правила
+сравнения живут в `orioks_grades`.
+
 Объявление преподавателя («Задание к семинару», «Подготовка к ЛР №1») —
 единственное место, где в ОРИОКС лежит текст домашнего задания. Оно уже
 собирается для экрана «Учёба», но экран открывают, когда задание и так
@@ -32,7 +35,7 @@ import logging
 import threading
 import time
 
-from . import notify, orioks, orioks_web
+from . import notify, orioks, orioks_grades, orioks_web
 from .db import conn
 from .render import esc
 
@@ -94,10 +97,16 @@ def forget(user_id: int) -> None:
 
 
 def watchers() -> list:
-    """Кому есть что сторожить: подключённые, с сессией и без отказа."""
+    """
+    Кому есть что сторожить: подключённые и без отказа.
+
+    Сессия сайта для этого не нужна: баллы приходят по токену API. Без
+    сессии у человека не проверяются только объявления — `check_user`
+    сам его пропустит.
+    """
     return [row[0] for row in conn().execute(
         "SELECT user_id FROM orioks_links "
-        "WHERE web_cookie IS NOT NULL AND web_cookie<>'' "
+        "WHERE token IS NOT NULL AND token<>'' "
         "AND COALESCE(notify, 1)=1")]
 
 
@@ -221,15 +230,40 @@ def check_user(user_id: int, send: bool = True) -> list:
     return fresh
 
 
+def check_grades(user_id: int, send: bool = True) -> list:
+    """
+    Один студент: какие баллы появились или исправлены с прошлого обхода.
+
+    Правила те же, что у объявлений: первый заход молчит, `send=False` —
+    сухой прогон без записи. Отказ ОРИОКС — не повод что-то стирать:
+    токен мог просто не пройти сквозь заминку института.
+    """
+    token = orioks.token_of(user_id)
+    if not token:
+        return []
+    try:
+        data = orioks.tasks(token)
+    except orioks.OrioksError as e:
+        log.info("баллы %s не забрались: %s", user_id, e)
+        return []
+    changed = orioks_grades.diff(user_id, data, save=send)
+    if send and changed:
+        notify.to_user(user_id, orioks_grades.message(changed, data))
+    return changed
+
+
 def round_once(send: bool = True) -> int:
     """Обход всех, кто подписан. Возвращает, скольким ушло."""
     told = 0
     for uid in watchers():
-        try:
-            if check_user(uid, send=send):
-                told += 1
-        except Exception:                                  # noqa: BLE001
-            log.exception("сторож ОРИОКС споткнулся на %s", uid)
+        for step in (check_grades, check_user):
+            # Шаги независимы: сломался разбор объявлений — баллы
+            # всё равно должны дойти, и наоборот.
+            try:
+                if step(uid, send=send):
+                    told += 1
+            except Exception:                              # noqa: BLE001
+                log.exception("сторож ОРИОКС споткнулся на %s", uid)
         time.sleep(BETWEEN)
     return told
 

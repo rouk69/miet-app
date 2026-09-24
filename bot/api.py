@@ -30,7 +30,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
 from . import analytics, appconf, auth, directory, help_board, notify
-from . import oops, orioks, orioks_watch, orioks_web, posts
+from . import oops, orioks, orioks_grades, orioks_watch, orioks_web, posts
 from . import morning
 from . import paths, raffle, render, storage, uptime
 from . import webapp as webapp_watch
@@ -314,7 +314,11 @@ def _orioks(path: str, method: str, body: dict, uid: int, me: dict):
         watch = orioks_watch.notify_on(uid)
         try:
             return 200, {"linked": True, "notify": watch,
-                         "tasks": orioks.with_materials(uid, orioks.tasks(token))}
+                         "tasks": orioks.with_materials(uid, orioks.tasks(token)),
+                         # Какие баллы сторож видел выставленными недавно:
+                         # ключ точки → когда (UTC). Приложение по ним
+                         # собирает блок «Новые баллы».
+                         "recent": orioks_grades.recent(uid)}
         except orioks.OrioksError as e:
             # Токен мог протухнуть или быть отозван — тогда честнее
             # предложить подключиться заново, чем показывать ошибку.
@@ -394,6 +398,7 @@ def _orioks(path: str, method: str, body: dict, uid: int, me: dict):
         # держать её после отключения не за чем, а при следующем
         # подключении она бы молча съела первую рассылку.
         orioks_watch.forget(uid)
+        orioks_grades.forget(uid)
         return 200, {"ok": True, "linked": False}
 
     return 404, {"error": "Нет такого маршрута"}
@@ -927,7 +932,10 @@ def _admin(path: str, method: str, query: dict, body: dict, uid: int, me: dict):
         send = bool(query.get("send"))
         known = len(orioks_watch.seen_ids(me["id"]))
         fresh = orioks_watch.check_user(me["id"], send=send)
+        grades = orioks_watch.check_grades(me["id"], send=send)
         return 200, {
+            "grades_fresh": [{"discipline": g["discipline"], "name": g["name"],
+                              "fixed": g["fixed"]} for g in grades],
             "known_before": known,
             "notify": orioks_watch.notify_on(me["id"]),
             "daytime": orioks_watch.daytime(),

@@ -255,6 +255,18 @@ SCHEMA = [
         seen_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         PRIMARY KEY (user_id, news_id)
     )""",
+    # Баллы ОРИОКС, какими их видел сторож: по строке на контрольную
+    # точку. Самого балла здесь нет — только отпечаток (`sig`), чтобы
+    # заметить перемену; число показываем из свежего ответа ОРИОКС.
+    # `changed_at` пуст у того, что застали при первом обходе: это не
+    # «новый балл», а то, что уже было.
+    """CREATE TABLE IF NOT EXISTS orioks_grades (
+        user_id    INTEGER NOT NULL,
+        key        TEXT NOT NULL,
+        sig        TEXT NOT NULL,
+        changed_at TEXT,
+        PRIMARY KEY (user_id, key)
+    )""",
 ]
 
 # Столбцы, доросшие к таблицам позже. У баз, созданных раньше, их нет —
