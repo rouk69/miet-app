@@ -7,7 +7,7 @@ import { fetchSchedule, weekOfCycle, weekName, nowState, slotsOf, semesterStart,
   from '../schedule.js';
 import { go, switchTab } from '../router.js';
 import { tgUser, openLink } from '../tg.js';
-import { get, canTalk } from '../api.js';
+import { get, canTalk, account } from '../api.js';
 import { screen, pickGroup, newsRow, humanDate, iconBtn } from './common.js';
 import { dayRows, teacherOf } from './schedule.js';
 import { subjectBadge } from '../subjects.js';
@@ -17,10 +17,27 @@ import { art, artState } from '../art.js';
 
 // ОРИОКС и личный кабинет — внешние сервисы, но студенту они нужнее
 // всего, поэтому стоят прямо на главной.
+/** Видна ли плитка с условием `need` («orioks» / «!orioks»). */
+const shown = need => (need.startsWith('!')
+  ? !account.orioks_access : Boolean(account.orioks_access));
+
+/**
+ * Главная рисуется раньше, чем сервер скажет права, — после его ответа
+ * плитки с условием переключаются на месте, без перерисовки экрана.
+ */
+export function applyAccess(root = document) {
+  root.querySelectorAll('[data-need]').forEach(el => {
+    el.hidden = !shown(el.dataset.need);
+  });
+}
+
 const QUICK = [
   { id: 'url:https://orioks.miet.ru/main/login', ico: 'chart', label: 'ОРИОКС' },
   { id: 'teachers', ico: 'teacher', label: 'Преподаватели' },
-  { id: 'tasks', ico: 'backpack', label: 'Учёба' },
+  // Пара на одно место: «Учёба» открыта не всем, и пустая клетка в
+  // сетке 4×2 выглядела бы поломкой. Какая видна — решает applyAccess().
+  { id: 'tasks', ico: 'backpack', label: 'Учёба', need: 'orioks' },
+  { id: 'free', ico: 'door', label: 'Аудитории', need: '!orioks' },
   { id: 'url:https://account.miet.ru/', ico: 'key', label: 'Кабинет' },
   { id: 'campus:canteen', ico: 'utensils', label: 'Столовая' },
   { id: 'campus:library', ico: 'book', label: 'Библиотека' },
@@ -46,7 +63,8 @@ export default async function home() {
 
       <div class="section-head"><div class="section-title">Разделы</div></div>
       <div class="quick-grid">
-        ${QUICK.map(q => `<button class="quick-item" data-quick="${q.id}">
+        ${QUICK.map(q => `<button class="quick-item" data-quick="${q.id}"
+            ${q.need ? `data-need="${q.need}" ${shown(q.need) ? '' : 'hidden'}` : ''}>
             <span class="quick-icon">${icon(q.ico, 21)}</span>
             <span class="quick-label">${esc(q.label)}</span>
           </button>`).join('')}
@@ -192,6 +210,9 @@ const stillFresh = hit =>
  */
 async function renderStudy(slot) {
   if (!slot || !canTalk || !settings.group) return;
+  // Права ещё не приехали — спросим: сервер сам ответит отказом. Приехали
+  // и раздел закрыт — не спрашиваем вовсе.
+  if (account.loaded && !account.orioks_access) return;
 
   let data = stillFresh(studyCache);
   if (!data) {

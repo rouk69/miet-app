@@ -116,7 +116,8 @@ export default async function usefulScreen() {
     body: SECTIONS.map(s => `
       <div class="section-head"><div class="section-title">${esc(s.title)}</div></div>
       ${s.note ? `<p class="section-note">${esc(s.note)}</p>` : ''}
-      <div class="tile-grid">${s.tiles.map(tile).join('')}</div>
+      <div class="tile-grid">${s.tiles
+    .filter(t => t.id !== 'tasks' || account.orioks_access).map(tile).join('')}</div>
     `).join('') + (account.raffle ? `
       <div class="section-head"><div class="section-title">Розыгрыш</div></div>
       ${!appOpen() ? '<p class="section-note">Виден только админам, пока не открыт всем</p>' : ''}

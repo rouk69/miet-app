@@ -1,5 +1,5 @@
 /* Собрано tools/stamp.py из js/*.js — не правьте здесь.
-   Версия 2eb97112. Исходники лежат рядом и остаются модулями. */
+   Версия 8f246b15. Исходники лежат рядом и остаются модулями. */
 var __mod = {};
 /* ==== js\config.js ==== */
 __mod['js/config.js'] = (function () {
@@ -85,7 +85,7 @@ const API_BASE = base;
 // свежую ли страницу открыл человек: Telegram кеширует мини-приложения
 // по своим правилам, и «у меня ничего не поменялось» разбирается
 // сравнением этой строки, а не на слово.
-const BUILD = '2eb97112';
+const BUILD = '8f246b15';
 
 return {'apiBase': apiBase, 'fallBackToHome': fallBackToHome, 'API_BASE': API_BASE, 'BUILD': BUILD};
 })();
@@ -1394,6 +1394,10 @@ const account = {
   blocked: false,
   is_admin: false,
   can_stats: false,
+  // Раздел «Учёба» закрыт, пока сервер не скажет иначе: открыть по
+  // ошибке хуже, чем показать секундой позже.
+  orioks_access: false,
+  root: false,
   group: null,
 };
 
@@ -6284,7 +6288,8 @@ async function usefulScreen() {
     body: SECTIONS.map(s => `
       <div class="section-head"><div class="section-title">${esc(s.title)}</div></div>
       ${s.note ? `<p class="section-note">${esc(s.note)}</p>` : ''}
-      <div class="tile-grid">${s.tiles.map(tile).join('')}</div>
+      <div class="tile-grid">${s.tiles
+    .filter(t => t.id !== 'tasks' || account.orioks_access).map(tile).join('')}</div>
     `).join('') + (account.raffle ? `
       <div class="section-head"><div class="section-title">Розыгрыш</div></div>
       ${!appOpen() ? '<p class="section-note">Виден только админам, пока не открыт всем</p>' : ''}
@@ -7393,6 +7398,17 @@ async function adminUserScreen({ id }) {
           сможет писать в выбранное.
         </p>
         <div class="list-card" id="sections">
+          ${account.root ? `
+            <div class="list-row">
+              <div class="icon-tile">${icon('backpack', 19)}</div>
+              <div class="list-row-body">
+                <div class="row-title">Раздел «Учёба» (ОРИОКС)</div>
+                <div class="row-subtitle">${account.orioks_open
+    ? 'Сейчас открыт всем — это на случай, если закроешь'
+    : 'Баллы, дела и уведомления из ОРИОКС. Выдаёт только владелец'}</div>
+              </div>
+              ${toggle(access.granted_sections.includes('orioks'), 'sec:orioks')}
+            </div>` : ''}
           ${clubs.map(c => `
             <div class="list-row">
               <div class="icon-tile">${icon(c.icon || 'sparkles', 19)}</div>
@@ -9115,6 +9131,7 @@ var tgUser = __mod['js/tg.js']['tgUser'];
 var openLink = __mod['js/tg.js']['openLink'];
 var get = __mod['js/api.js']['get'];
 var canTalk = __mod['js/api.js']['canTalk'];
+var account = __mod['js/api.js']['account'];
 var screen = __mod['js/screens/common.js']['screen'];
 var pickGroup = __mod['js/screens/common.js']['pickGroup'];
 var newsRow = __mod['js/screens/common.js']['newsRow'];
@@ -9132,10 +9149,27 @@ var artState = __mod['js/art.js']['artState'];
 
 // ОРИОКС и личный кабинет — внешние сервисы, но студенту они нужнее
 // всего, поэтому стоят прямо на главной.
+/** Видна ли плитка с условием `need` («orioks» / «!orioks»). */
+const shown = need => (need.startsWith('!')
+  ? !account.orioks_access : Boolean(account.orioks_access));
+
+/**
+ * Главная рисуется раньше, чем сервер скажет права, — после его ответа
+ * плитки с условием переключаются на месте, без перерисовки экрана.
+ */
+function applyAccess(root = document) {
+  root.querySelectorAll('[data-need]').forEach(el => {
+    el.hidden = !shown(el.dataset.need);
+  });
+}
+
 const QUICK = [
   { id: 'url:https://orioks.miet.ru/main/login', ico: 'chart', label: 'ОРИОКС' },
   { id: 'teachers', ico: 'teacher', label: 'Преподаватели' },
-  { id: 'tasks', ico: 'backpack', label: 'Учёба' },
+  // Пара на одно место: «Учёба» открыта не всем, и пустая клетка в
+  // сетке 4×2 выглядела бы поломкой. Какая видна — решает applyAccess().
+  { id: 'tasks', ico: 'backpack', label: 'Учёба', need: 'orioks' },
+  { id: 'free', ico: 'door', label: 'Аудитории', need: '!orioks' },
   { id: 'url:https://account.miet.ru/', ico: 'key', label: 'Кабинет' },
   { id: 'campus:canteen', ico: 'utensils', label: 'Столовая' },
   { id: 'campus:library', ico: 'book', label: 'Библиотека' },
@@ -9161,7 +9195,8 @@ async function home() {
 
       <div class="section-head"><div class="section-title">Разделы</div></div>
       <div class="quick-grid">
-        ${QUICK.map(q => `<button class="quick-item" data-quick="${q.id}">
+        ${QUICK.map(q => `<button class="quick-item" data-quick="${q.id}"
+            ${q.need ? `data-need="${q.need}" ${shown(q.need) ? '' : 'hidden'}` : ''}>
             <span class="quick-icon">${icon(q.ico, 21)}</span>
             <span class="quick-label">${esc(q.label)}</span>
           </button>`).join('')}
@@ -9307,6 +9342,9 @@ const stillFresh = hit =>
  */
 async function renderStudy(slot) {
   if (!slot || !canTalk || !settings.group) return;
+  // Права ещё не приехали — спросим: сервер сам ответит отказом. Приехали
+  // и раздел закрыт — не спрашиваем вовсе.
+  if (account.loaded && !account.orioks_access) return;
 
   let data = stillFresh(studyCache);
   if (!data) {
@@ -9471,7 +9509,7 @@ async function renderNow(slot, now) {
           'Свободно: можно закрыть хвосты или выдохнуть')}</div>`}`;
 }
 
-return {'default': home};
+return {'default': home, 'applyAccess': applyAccess};
 })();
 
 /* ==== js\app.js ==== */
@@ -9503,6 +9541,7 @@ var checkFresh = __mod['js/fresh.js']['checkFresh'];
 var watchErrors = __mod['js/oops.js']['watchErrors'];
 var reportOops = __mod['js/oops.js']['reportOops'];
 
+var applyAccess = __mod['js/screens/home.js']['applyAccess'];
 var home = __mod['js/screens/home.js']['default'];
 var schedule = __mod['js/screens/schedule.js']['default'];
 var articleScreen = __mod['js/screens/news.js']['articleScreen'];
@@ -9690,6 +9729,8 @@ loadData()
       return;
     }
     track('open');
+    // Права приехали: «Учёба» на главной появляется или уступает место.
+    applyAccess();
     // Длинные тексты карточек — фоном, после первого экрана. Ждать их
     // на старте незачем: они нужны, только когда карточку откроют, а
     // это 107 КБ, которые раньше стояли в очереди перед расписанием.

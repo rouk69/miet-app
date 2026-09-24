@@ -143,6 +143,11 @@ body {
   }
 }
 
+/* Атрибут hidden обязан прятать всегда. Без этого любой класс с
+   display (плитки, списки-сетки) перебивал его, и «скрытый» элемент
+   оставался на экране. */
+[hidden] { display: none !important; }
+
 button {
   font-family: inherit;
   border: none;

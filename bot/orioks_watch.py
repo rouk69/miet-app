@@ -35,7 +35,7 @@ import logging
 import threading
 import time
 
-from . import notify, orioks, orioks_grades, orioks_web
+from . import notify, orioks, orioks_access, orioks_grades, orioks_web
 from .db import conn
 from .render import esc
 
@@ -104,10 +104,12 @@ def watchers() -> list:
     сессии у человека не проверяются только объявления — `check_user`
     сам его пропустит.
     """
-    return [row[0] for row in conn().execute(
+    ids = [row[0] for row in conn().execute(
         "SELECT user_id FROM orioks_links "
         "WHERE token IS NOT NULL AND token<>'' "
         "AND COALESCE(notify, 1)=1")]
+    # Раздел закрыт — молчит и сторож: иначе закрытие было бы видимостью.
+    return [u for u in ids if orioks_access.allowed_id(u)]
 
 
 def notify_on(user_id: int) -> bool:
