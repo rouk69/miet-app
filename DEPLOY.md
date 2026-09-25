@@ -290,6 +290,17 @@ ERR_CONNECTION_CLOSED». Дорога рвётся не у нас: пока ко
 (`js/config.js`), поэтому через воркер идёт всё приложение целиком, а
 не одна разметка.
 
+**Выложен 25.09.2026:** `https://miet-mirror.rokdoker09.workers.dev`
+(аккаунт Cloudflare rokdoker09). Проверено: через VPN прямой адрес
+Amvera отвечал 2 раза из 8, зеркало — 8 из 8; напрямую из России — тоже
+8 из 8; подпись Telegram проходит. Обновлять код воркера — одной
+командой, без веб-редактора:
+
+    set CLOUDFLARE_API_TOKEN=<токен «Edit Cloudflare Workers»>
+    python tools/deploy_mirror.py
+
+Вручную (если вдруг понадобится заново):
+
 1. `dash.cloudflare.com` → **Workers & Pages** → **Create** →
    **Create Worker**. Имя любое, например `miet`.
 2. **Deploy**, затем **Edit code**: вставить `mirror/worker.js`
