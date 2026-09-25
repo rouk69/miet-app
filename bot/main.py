@@ -233,22 +233,24 @@ def sched_for(group: str, uid: int | None = None) -> dict:
     return api.with_lunch(api.fetch_schedule(group), storage.lunch_for(uid, group))
 
 
-def build_rich_day(group: str, week: int | None = None, day: int | None = None,
+def build_rich_day(group: str, off: int | None = None, day: int | None = None,
                    shift: int = 0, webapp: bool = True, custom: bool = True,
                    uid: int | None = None) -> tuple[str, dict, int]:
-    """Та же карточка дня, но разметкой Rich HTML — с таблицей и кнопками."""
+    """Та же карточка дня, но разметкой Rich HTML — с таблицей и кнопками.
+    `off` — сдвиг в неделях от текущей (None — текущая)."""
     sched = sched_for(group, uid)
     if uid is not None:
         shift = storage.shift_for(uid, sched["semestr"])
     cur_week = api.week_of_cycle(dt.date.today(), sched["semestr"], shift)
-    w = cur_week if week is None else week % 4
+    off = 0 if off is None else api.clamp_off(off)
+    w = (cur_week + off) % 4
     d = today_day() if day is None else max(1, min(6, day))
     html = rich.day_html(group, sched, w, d, cur_week, custom=custom,
-                         webapp_url=app_url(uid) if webapp else None)
+                         webapp_url=app_url(uid) if webapp else None, off=off)
     return html, sched, cur_week
 
 
-def build_day(group: str, week: int | None = None, day: int | None = None,
+def build_day(group: str, off: int | None = None, day: int | None = None,
               shift: int = 0, webapp: bool = True, custom: bool = True,
               uid: int | None = None
               ) -> tuple[str, types.InlineKeyboardMarkup, dict, int]:
@@ -263,11 +265,12 @@ def build_day(group: str, week: int | None = None, day: int | None = None,
     if uid is not None:
         shift = storage.shift_for(uid, sched["semestr"])
     cur_week = api.week_of_cycle(dt.date.today(), sched["semestr"], shift)
-    w = cur_week if week is None else week % 4
+    off = 0 if off is None else api.clamp_off(off)
+    w = (cur_week + off) % 4
     d = today_day() if day is None else max(1, min(6, day))
-    text = render.schedule_card(group, sched, w, d, cur_week, custom=custom)
+    text = render.schedule_card(group, sched, w, d, cur_week, custom=custom, off=off)
     kb = kbs.day_keyboard(group, sched, w, d, cur_week,
-                          app_url(uid) if webapp else None)
+                          app_url(uid) if webapp else None, off=off)
     return text, kb, sched, cur_week
 
 
@@ -306,7 +309,7 @@ def group_saved_text(group: str) -> str:
     return text
 
 
-def edit_day(call: types.CallbackQuery, group: str, week: int | None,
+def edit_day(call: types.CallbackQuery, group: str, off: int | None,
              day: int | None, shift: int, scope: str,
              uid: int | None = None) -> None:
     """Перерисовывает карточку дня в уже отправленном сообщении."""
@@ -315,14 +318,14 @@ def edit_day(call: types.CallbackQuery, group: str, week: int | None,
         try:
             return with_emoji_fallback(lambda c: safe_edit(
                 call, None, None,
-                rich_html=build_rich_day(group, week, day, shift,
+                rich_html=build_rich_day(group, off, day, shift,
                                          webapp=webapp, custom=c,
                                          uid=uid)[0]), scope)
         except ApiTelegramException as e:
             _rich[scope] = False
             log.warning("rich-правка недоступна (%s) — перехожу на обычные", e)
     with_emoji_fallback(
-        lambda c: safe_edit(call, *build_day(group, week, day, shift,
+        lambda c: safe_edit(call, *build_day(group, off, day, shift,
                                              webapp=webapp, custom=c,
                                              uid=uid)[:2]),
         scope)
@@ -529,13 +532,14 @@ def cmd_tomorrow(m: types.Message) -> None:
     ctx = user_ctx(m.from_user.id)
     if not ctx["group"]:
         return ask_group(m.chat.id)
-    tomorrow = dt.date.today() + dt.timedelta(days=1)
-    sched = api.fetch_schedule(ctx["group"])
-    week = api.week_of_cycle(tomorrow, sched["semestr"], ctx["shift"])
+    today = dt.date.today()
+    tomorrow = today + dt.timedelta(days=1)
     day = tomorrow.isoweekday()
     if day > 6:                     # воскресенье — показываем понедельник
-        day, week = 1, (week + 1) % 4
-    send_day(m.chat.id, ctx["group"], week=week, day=day,
+        tomorrow, day = tomorrow + dt.timedelta(days=1), 1
+    # Сдвиг недели, а не номер в цикле: завтра может быть уже в следующей.
+    off = (api.monday_of(tomorrow) - api.monday_of(today)).days // 7
+    send_day(m.chat.id, ctx["group"], off=off, day=day,
              shift=ctx["shift"], uid=m.from_user.id)
 
 
@@ -708,7 +712,7 @@ def cmd_lunch(m: types.Message) -> None:
     bot.send_message(m.chat.id, LUNCH_TEXT.format(group=render.esc(ctx["group"])), reply_markup=kb)
 
 
-def send_day(chat_id: int, group: str, week: int | None = None,
+def send_day(chat_id: int, group: str, off: int | None = None,
              day: int | None = None, shift: int = 0,
              uid: int | None = None) -> None:
     """Шлёт карточку дня: сначала таблицей, при отказе — цитатами."""
@@ -717,7 +721,7 @@ def send_day(chat_id: int, group: str, week: int | None = None,
             return with_emoji_fallback(lambda c: bot.send_rich_message(
                 chat_id,
                 types.InputRichMessage(
-                    html=build_rich_day(group, week, day, shift, custom=c,
+                    html=build_rich_day(group, off, day, shift, custom=c,
                                        uid=uid)[0])))
         except ApiTelegramException as e:
             _rich["direct"] = False
@@ -727,7 +731,7 @@ def send_day(chat_id: int, group: str, week: int | None = None,
             return bot.send_message(chat_id, "⚠️ Не получилось загрузить расписание")
 
     def attempt(custom: bool):
-        text, kb, _, _ = build_day(group, week, day, shift, custom=custom,
+        text, kb, _, _ = build_day(group, off, day, shift, custom=custom,
                                    uid=uid)
         return bot.send_message(chat_id, text, reply_markup=kb,
                                 disable_web_page_preview=True)
@@ -973,9 +977,17 @@ def on_callback(call: types.CallbackQuery) -> None:
 
         scope = "inline" if call.inline_message_id else "direct"
 
-        if action == "d":                       # день конкретной недели
-            week, day, group = int(parts[1]), int(parts[2]), parts[3]
-            edit_day(call, group, week, day, shift, scope, uid)
+        if action == "D":                       # день недели со сдвигом от текущей
+            off, day, group = api.clamp_off(int(parts[1])), int(parts[2]), parts[3]
+            edit_day(call, group, off, day, shift, scope, uid)
+            return bot.answer_callback_query(call.id)
+
+        if action == "d":                       # старые кнопки: номер в цикле
+            # В уже отправленных сообщениях лежит номер недели цикла (0..3).
+            # Трактуем его как ближайшую такую неделю впереди — не назад.
+            week, day, group = int(parts[1]) % 4, int(parts[2]), parts[3]
+            cur = api.week_of_cycle(dt.date.today(), sched_for(group, uid)["semestr"], shift)
+            edit_day(call, group, api.ahead_off(week, cur), day, shift, scope, uid)
             return bot.answer_callback_query(call.id)
 
         if action == "today":                   # вернуться на сегодня
@@ -983,25 +995,30 @@ def on_callback(call: types.CallbackQuery) -> None:
             edit_day(call, group, None, None, shift, scope, uid)
             return bot.answer_callback_query(call.id, "Сегодня")
 
-        if action == "w":                       # свод на неделю
-            week, group = int(parts[1]) % 4, parts[2]
+        if action in ("w", "W"):                # свод на неделю
+            group = parts[2]
             sched = sched_for(group, uid)
             cur = api.week_of_cycle(dt.date.today(), sched["semestr"], shift)
+            # «W» несёт сдвиг от текущей недели, старое «w» — номер в цикле.
+            off = (api.clamp_off(int(parts[1])) if action == "W"
+                   else api.ahead_off(int(parts[1]) % 4, cur))
+            week = (cur + off) % 4
             webapp = None if call.inline_message_id else app_url(uid)
             if _rich[scope]:
                 try:
                     with_emoji_fallback(lambda c: safe_edit(
                         call, None, None,
                         rich_html=rich.week_html(group, sched, week, cur,
-                                                 custom=c, webapp_url=webapp)),
+                                                 custom=c, webapp_url=webapp,
+                                                 off=off)),
                         scope)
                     return bot.answer_callback_query(call.id)
                 except ApiTelegramException as e:
                     _rich[scope] = False
                     log.warning("rich-свод в правке недоступен (%s)", e)
             with_emoji_fallback(lambda c: safe_edit(
-                call, render.week_card(group, sched, week, cur, custom=c),
-                kbs.week_keyboard(group, week, webapp)), scope)
+                call, render.week_card(group, sched, week, cur, custom=c, off=off),
+                kbs.week_keyboard(group, week, webapp, off=off)), scope)
             return bot.answer_callback_query(call.id)
 
         if action == "grp":                     # список направлений

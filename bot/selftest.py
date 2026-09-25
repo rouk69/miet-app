@@ -152,7 +152,7 @@ kb = kbs.day_keyboard("ПИН-31", sched, cur, 3, cur, "https://example.com")
 rows = kb.keyboard
 check(f"рядов кнопок: {len(rows)}", len(rows) >= 4)
 check("6 кнопок дней", sum(1 for r in rows for b in r
-                           if b.callback_data and b.callback_data.startswith("d|")) == 6 + 2)
+                           if b.callback_data and b.callback_data.startswith("D|")) == 6 + 2)
 buttons = [b for r in rows for b in r]
 check("есть кнопка мини-приложения", any(b.web_app for b in buttons))
 
@@ -259,7 +259,7 @@ webapp_watch._seen["version"] = ""
 
 longest = max(groups, key=lambda g: len(g.encode()))
 try:
-    data = kbs.cb("d", 3, 6, longest)
+    data = kbs.cb("D", api.OFF_MIN, 6, longest)   # худший случай: самый длинный сдвиг
     check(f"самая длинная группа влезает в callback_data "
           f"({len(data.encode())} б, «{longest}»)", True)
 except ValueError as e:
@@ -268,7 +268,7 @@ except ValueError as e:
 bad = 0
 for g in groups:
     try:
-        kbs.cb("d", 3, 6, g)
+        kbs.cb("D", api.OFF_MIN, 6, g)
     except ValueError:
         bad += 1
 check(f"все {len(groups)} групп влезают в callback_data", bad == 0, f"не влезло: {bad}")

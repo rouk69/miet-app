@@ -125,32 +125,32 @@ def lesson_rows(slots: list[dict], live: dict | None, custom: bool) -> str:
 
 
 def day_buttons(group: str, sched: dict, week: int, day: int, cur_week: int,
-                webapp_url: str | None) -> str:
+                webapp_url: str | None, off: int | None = None) -> str:
     """Ряды кнопок под таблицей: дни, недели, действия."""
     counts = api.day_counts(sched, week)
+    o = off if off is not None else week - cur_week
     parts = []
 
     days = []
     for d in range(1, 7):
-        date = api.date_for(week, d, cur_week)
+        date = api.date_for(week, d, cur_week, off=o)
         label = f"{api.DAY_SHORT[d]} {date.strftime('%d.%m')}"
         if not counts[d]:
             label = f"· {label}"
-        days.append(button(label, data=kbs.cb("d", week, d, group),
+        days.append(button(label, data=kbs.cb("D", o, d, group),
                            style=STYLE_ACTIVE if d == day else ""))
     parts.append(row(*days[:3]))
     parts.append(row(*days[3:]))
 
-    prev_w, next_w = (week - 1) % 4, (week + 1) % 4
     parts.append(row(
-        button("◀️", data=kbs.cb("d", prev_w, day, group)),
+        button("◀️", data=kbs.cb("D", api.clamp_off(o - 1), day, group)),
         button(api.week_name(week), type="disabled"),
-        button("▶️", data=kbs.cb("d", next_w, day, group)),
+        button("▶️", data=kbs.cb("D", api.clamp_off(o + 1), day, group)),
     ))
 
     parts.append(row(
         button("Сегодня", data=kbs.cb("today", group), style=STYLE_ACTION),
-        button("Неделя", data=kbs.cb("w", week, group), style=STYLE_ACTION),
+        button("Неделя", data=kbs.cb("W", o, group), style=STYLE_ACTION),
         button("Группа", data=kbs.cb("grp"), style=STYLE_ACTION),
     ))
 
@@ -168,9 +168,10 @@ def day_buttons(group: str, sched: dict, week: int, day: int, cur_week: int,
 
 def day_html(group: str, sched: dict, week: int, day: int, cur_week: int,
              now: dt.datetime | None = None, custom: bool = True,
-             webapp_url: str | None = None, buttons: bool = True) -> str:
+             webapp_url: str | None = None, buttons: bool = True,
+             off: int | None = None) -> str:
     now = now or dt.datetime.now()
-    date = api.date_for(week, day, cur_week, now.date())
+    date = api.date_for(week, day, cur_week, now.date(), off=off)
     is_today = date == now.date()
     slots = api.slots_of(sched, week, day)
     live = render._now_pair(api.lessons_of(sched, week, day), now) \
@@ -199,7 +200,7 @@ def day_html(group: str, sched: dict, week: int, day: int, cur_week: int,
     else:
         body = "<blockquote>☕ Пар нет — можно выдохнуть</blockquote>"
 
-    tail = day_buttons(group, sched, week, day, cur_week, webapp_url) \
+    tail = day_buttons(group, sched, week, day, cur_week, webapp_url, off=off) \
         if buttons else ""
     return head + sub + body + tail
 
@@ -208,14 +209,15 @@ def day_html(group: str, sched: dict, week: int, day: int, cur_week: int,
 
 def week_html(group: str, sched: dict, week: int, cur_week: int,
               custom: bool = True, webapp_url: str | None = None,
-              buttons: bool = True) -> str:
+              buttons: bool = True, off: int | None = None) -> str:
+    o = off if off is not None else week - cur_week
     head = (f'<h3>{em.ico("calendar", custom)} Неделя · {api.week_name(week)}</h3>'
             f'<p><i>{esc(group)}</i></p>')
 
     rows_html = []
     for d in range(1, 7):
         slots = api.slots_of(sched, week, d)
-        date = api.date_for(week, d, cur_week)
+        date = api.date_for(week, d, cur_week, off=o)
         left = f'<b>{api.DAY_SHORT[d]}</b><br>{date.strftime("%d.%m")}'
         if not slots:
             right = "<i>пар нет</i>"
@@ -239,11 +241,10 @@ def week_html(group: str, sched: dict, week: int, cur_week: int,
 
     tail = ""
     if buttons:
-        prev_w, next_w = (week - 1) % 4, (week + 1) % 4
         tail = row(
-            button("◀️", data=kbs.cb("w", prev_w, group)),
+            button("◀️", data=kbs.cb("W", api.clamp_off(o - 1), group)),
             button(api.week_name(week), type="disabled"),
-            button("▶️", data=kbs.cb("w", next_w, group)),
+            button("▶️", data=kbs.cb("W", api.clamp_off(o + 1), group)),
         ) + row(
             button("Сегодня", data=kbs.cb("today", group), style=STYLE_ACTION),
             button("Группа", data=kbs.cb("grp"), style=STYLE_ACTION),

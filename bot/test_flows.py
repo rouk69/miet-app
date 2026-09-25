@@ -229,7 +229,7 @@ check("в карточке есть предмет из фикстуры", "Ба
 check("в таблице есть выравнивание по центру", 'valign="middle"' in card["text"])
 check("карточка ушла таблицей", "<table bordered" in card["text"])
 check("6 кнопок дней в разметке",
-      card["text"].count('type="callback_data" data="d|') >= 6)
+      card["text"].count('type="callback_data" data="D|') >= 6)
 check("есть «Сегодня»", ">Сегодня</tg-button>" in card["text"])
 check("есть «Отправить в чат»", ">Отправить в чат</tg-button>" in card["text"])
 check("кнопка недели неактивна", 'type="disabled"' in card["text"])
@@ -274,6 +274,33 @@ check("поправка недели сохранена", storage.get_user(UID)[
 storage.set_shift(UID, 0)
 tg.reset(); press("noop")
 check("noop ничего не ломает", len(tg.edited) == 0 and len(tg.answers) == 1)
+
+print("\n6б. Недели листаются сдвигом, а не номером в цикле")
+# Живой случай: на «2-м знаменателе» (последней неделе цикла) кнопка
+# «вперёд» показывала не следующий понедельник, а начало цикла — 31 августа
+# вместо 28 сентября. Даты считаем от сегодняшнего дня, чтобы проверка
+# была верна в любой день.
+_mon = api.monday_of(dt.date.today())
+_next = api.human_date(_mon + dt.timedelta(weeks=1))
+_prev = api.human_date(_mon - dt.timedelta(weeks=1))
+_far = api.human_date(_mon + dt.timedelta(weeks=5))
+tg.reset(); press("D|1|1|ПИН-31")
+check("«вперёд» — следующий понедельник", _next in edited_body(), (_next, edited_body()[:160]))
+tg.reset(); press("D|-1|1|ПИН-31")
+check("«назад» — прошлый понедельник", _prev in edited_body(), (_prev, edited_body()[:160]))
+tg.reset(); press("D|5|1|ПИН-31")
+check("можно уйти дальше цикла — дата честная", _far in edited_body(), (_far, edited_body()[:160]))
+_cur = api.week_of_cycle(dt.date.today(), FIXTURE["semestr"], 0)
+_old = (_cur + 1) % 4                     # старая кнопка «следующая неделя цикла»
+tg.reset(); press(f"d|{_old}|1|ПИН-31")
+check("старая кнопка не прыгает назад", _next in edited_body(), (_next, edited_body()[:160]))
+tg.reset(); press("W|1|ПИН-31")
+check("свод следующей недели — с её датами",
+      (_mon + dt.timedelta(weeks=1)).strftime("%d.%m") in edited_body(), edited_body()[:200])
+check("стрелки свода несут сдвиг", 'data="W|0|' in edited_body() and 'data="W|2|' in edited_body(),
+      edited_body()[-400:])
+tg.reset(); press("D|999|1|ПИН-31")
+check("безумный сдвиг обрезается, а не роняет бота", len(tg.edited) == 1, tg.edited)
 
 print("\n6а. Обед группы: время 3-й пары 12:00 или 12:30")
 _prev_group = storage.get_user(UID)["group"]
@@ -328,7 +355,7 @@ content = res[0].input_message_content
 rich_html = getattr(getattr(content, "rich_message", None), "html", None)
 check("результат ушёл rich-разметкой", bool(rich_html))
 check("в таблице есть расписание", "Базы данных" in rich_html)
-check("кнопки внутри разметки несут группу", 'data="d|' in rich_html
+check("кнопки внутри разметки несут группу", 'data="D|' in rich_html
       and "ПИН-31" in rich_html)
 check("web_app в inline не пробрался — Telegram его там запрещает",
       'type="web_app"' not in rich_html, "web_app найден")
