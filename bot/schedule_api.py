@@ -478,11 +478,37 @@ def resolve_group(query: str, groups: list[str]) -> list[str]:
             if q in re.sub(r"\s+", "", g.lower()).replace("ё", "е")]
 
 
-def date_for(week: int, day: int, cur_week: int, today: dt.date | None = None) -> dt.date:
-    """Календарная дата для дня выбранной недели цикла."""
+def date_for(week: int, day: int, cur_week: int, today: dt.date | None = None,
+             off: int | None = None) -> dt.date:
+    """
+    Календарная дата для дня выбранной недели.
+
+    `off` — сдвиг в неделях от текущей (+1 — следующая, −1 — прошлая).
+    Без него дата считалась разностью НОМЕРОВ в цикле, и после
+    «2-го знаменателя» (3) следующая неделя цикла (0) уезжала на три недели
+    НАЗАД: вместо 28 сентября бот показывал 31 августа. Номер в цикле
+    повторяется каждые четыре недели, а сдвиг — нет.
+    """
     today = today or dt.date.today()
-    mon = monday_of(today) + dt.timedelta(weeks=week - cur_week)
+    if off is None:
+        off = week - cur_week
+    mon = monday_of(today) + dt.timedelta(weeks=off)
     return mon + dt.timedelta(days=day - 1)
+
+
+# Насколько далеко листать: семестр — это ~20 недель, дальше смысла нет,
+# а в callback_data число не должно расти без предела.
+OFF_MIN, OFF_MAX = -26, 26
+
+
+def clamp_off(off: int) -> int:
+    return max(OFF_MIN, min(OFF_MAX, int(off)))
+
+
+def ahead_off(week: int, cur_week: int) -> int:
+    """Ближайшая впереди неделя с этим номером цикла: 0..3 недели вперёд.
+    Нужна для кнопок старого формата, где лежал номер, а не сдвиг."""
+    return (week - cur_week) % 4
 
 
 def group_prefix(g: str) -> str:

@@ -80,7 +80,8 @@ def parse_cb(data: str) -> list[str]:
 
 
 def day_keyboard(group: str, sched: dict, week: int, day: int, cur_week: int,
-                 webapp_url: str | None = None) -> types.InlineKeyboardMarkup:
+                 webapp_url: str | None = None,
+                 off: int | None = None) -> types.InlineKeyboardMarkup:
     """
     Дни недели с датами, переключение недель цикла и быстрые действия.
     webapp_url передаётся только в личке: в inline-сообщениях Telegram
@@ -88,31 +89,33 @@ def day_keyboard(group: str, sched: dict, week: int, day: int, cur_week: int,
     """
     kb = types.InlineKeyboardMarkup(row_width=3)
     counts = api.day_counts(sched, week)
+    # Неделя в кнопках — сдвиг от текущей, а не номер в цикле: номер
+    # повторяется каждые четыре недели, и листать им дальше цикла нельзя.
+    o = off if off is not None else week - cur_week
 
     row: list[types.InlineKeyboardButton] = []
     for d in range(1, 7):
-        date = api.date_for(week, d, cur_week)
+        date = api.date_for(week, d, cur_week, off=o)
         mark = "•" if d == day else ("" if counts[d] else "·")
         label = f"{mark}{api.DAY_SHORT[d]} {date.strftime('%d.%m')}".strip()
         row.append(types.InlineKeyboardButton(
-            label, callback_data=cb("d", week, d, group)))
+            label, callback_data=cb("D", o, d, group)))
         if len(row) == 3:
             kb.row(*row)
             row = []
     if row:
         kb.row(*row)
 
-    prev_w, next_w = (week - 1) % 4, (week + 1) % 4
     kb.row(
-        types.InlineKeyboardButton("◀️", callback_data=cb("d", prev_w, day, group)),
+        types.InlineKeyboardButton("◀️", callback_data=cb("D", api.clamp_off(o - 1), day, group)),
         types.InlineKeyboardButton(api.week_name(week),
                                    callback_data=cb("noop")),
-        types.InlineKeyboardButton("▶️", callback_data=cb("d", next_w, day, group)),
+        types.InlineKeyboardButton("▶️", callback_data=cb("D", api.clamp_off(o + 1), day, group)),
     )
 
     kb.row(
         types.InlineKeyboardButton("📍 Сегодня", callback_data=cb("today", group)),
-        types.InlineKeyboardButton("🗓 Неделя", callback_data=cb("w", week, group)),
+        types.InlineKeyboardButton("🗓 Неделя", callback_data=cb("W", o, group)),
         types.InlineKeyboardButton("👥 Группа", callback_data=cb("grp")),
     )
 
@@ -128,13 +131,13 @@ def day_keyboard(group: str, sched: dict, week: int, day: int, cur_week: int,
 
 
 def week_keyboard(group: str, week: int,
-                  webapp_url: str | None = None) -> types.InlineKeyboardMarkup:
+                  webapp_url: str | None = None,
+                  off: int = 0) -> types.InlineKeyboardMarkup:
     kb = types.InlineKeyboardMarkup()
-    prev_w, next_w = (week - 1) % 4, (week + 1) % 4
     kb.row(
-        types.InlineKeyboardButton("◀️", callback_data=cb("w", prev_w, group)),
+        types.InlineKeyboardButton("◀️", callback_data=cb("W", api.clamp_off(off - 1), group)),
         types.InlineKeyboardButton(api.week_name(week), callback_data=cb("noop")),
-        types.InlineKeyboardButton("▶️", callback_data=cb("w", next_w, group)),
+        types.InlineKeyboardButton("▶️", callback_data=cb("W", api.clamp_off(off + 1), group)),
     )
     kb.row(
         types.InlineKeyboardButton("📍 Сегодня", callback_data=cb("today", group)),

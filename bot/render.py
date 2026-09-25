@@ -159,10 +159,11 @@ def from_label(s: dict) -> str:
 
 
 def schedule_card(group: str, sched: dict, week: int, day: int, cur_week: int,
-                  now: dt.datetime | None = None, custom: bool = True) -> str:
+                  now: dt.datetime | None = None, custom: bool = True,
+                  off: int | None = None) -> str:
     """Основная карточка расписания на конкретный день."""
     now = now or dt.datetime.now()
-    date = api.date_for(week, day, cur_week, now.date())
+    date = api.date_for(week, day, cur_week, now.date(), off=off)
     is_today = date == now.date()
 
     slots = api.slots_of(sched, week, day)
@@ -218,14 +219,14 @@ def plural(n: int, one: str, few: str, many: str) -> str:
 
 
 def week_card(group: str, sched: dict, week: int, cur_week: int,
-              custom: bool = True) -> str:
+              custom: bool = True, off: int | None = None) -> str:
     """Свод на всю неделю. Дни с парами разворачиваются по нажатию."""
     counts = api.day_counts(sched, week)
     lines = [f"{em.ico('calendar', custom)} <b>Неделя · {api.week_name(week)}</b> · "
              f"<i>{esc(group)}</i>", ""]
     for d in range(1, 7):
         slots = api.slots_of(sched, week, d)
-        date = api.date_for(week, d, cur_week)
+        date = api.date_for(week, d, cur_week, off=off)
         head = f"<b>{api.DAY_NAMES[d]}</b>, {date.strftime('%d.%m')}"
         if not slots:
             lines.append(f"<blockquote>{head} — <i>пар нет</i></blockquote>")
