@@ -1147,7 +1147,7 @@ def _admin(path: str, method: str, query: dict, body: dict, uid: int, me: dict):
 # Откуда раздаётся приложение и что из него можно отдавать наружу.
 SITE_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PUBLIC_DIRS = {"css", "js", "fonts", "img", "data"}
-PUBLIC_FILES = {"index.html", "webapp.version", "favicon.ico"}
+PUBLIC_FILES = {"index.html", "webapp.version", "favicon.ico", "sw.js"}
 
 MIME = {
     ".html": "text/html; charset=utf-8",
@@ -1275,7 +1275,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(blob)))
         # Адреса файлов несут метку выкладки (?v=…), кроме самой
         # страницы: её держим свежей, иначе новая сборка не доедет.
-        fresh = rel == "index.html"
+        fresh = rel in ("index.html", "sw.js")
         self.send_header("Cache-Control", "no-cache" if fresh
                          else "public, max-age=604800")
         self._cors()

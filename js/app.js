@@ -154,6 +154,26 @@ if (settings.group) {
 const whoAmI = loadMe();
 
 /**
+ * Копия приложения в телефоне (sw.js): открыться, даже когда адрес, с
+ * которого пришла страница, в этой сети закрыт. Только по https и не на
+ * iOS-клиентах, где воркеры во встроенном браузере не работают — там
+ * register просто откажет, и ничего не сломается. Выключатель на случай
+ * беды: localStorage 'miet-no-sw' = '1' снимает воркер.
+ */
+function keepCopy() {
+  const local = ['localhost', '127.0.0.1'].includes(location.hostname);   // проверки
+  if (!('serviceWorker' in navigator) || (location.protocol !== 'https:' && !local)) return;
+  try {
+    if (localStorage.getItem('miet-no-sw') === '1') {
+      navigator.serviceWorker.getRegistrations()
+        .then(list => list.forEach(r => r.unregister())).catch(() => {});
+      return;
+    }
+  } catch { /* нет памяти — просто ставим */ }
+  navigator.serviceWorker.register('sw.js', { scope: './' }).catch(() => {});
+}
+
+/**
  * Запуск.
  *
  * Раньше приложение ждало и свои данные, и ответ сервера бота. Данные
@@ -185,6 +205,7 @@ loadData()
     track('open');
     // Права приехали: «Учёба» на главной появляется или уступает место.
     applyAccess();
+    keepCopy();
     // Обед групп — общий с ботом: выбор мог прийти оттуда.
     syncLunch();
     // Длинные тексты карточек — фоном, после первого экрана. Ждать их

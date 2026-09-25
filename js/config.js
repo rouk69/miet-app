@@ -17,6 +17,12 @@
 // выключённый сервер и там остаётся.
 const HOME = 'https://miet-bot-rouk.amvera.io';
 
+// Запасной вход — воркер Cloudflare (mirror/worker.js), проксирующий к
+// тому же серверу. Нужен не «на всякий случай»: 25.09.2026 у владельца на
+// мобильном интернете открывался только он, а на Wi-Fi — только HOME.
+// Поэтому клиент знает обе дороги и сам переходит на ту, что работает.
+export const MIRROR = 'https://miet-mirror.rokdoker09.workers.dev';
+
 // Зеркало на GitHub Pages — единственное место, откуда страница
 // раздаётся, а сервера рядом нет: там спрашивать надо Amvera.
 const PAGES_HOST = 'rouk69.github.io';
@@ -51,7 +57,28 @@ function stored() {
   }
 }
 
-let base = (stored() || DEFAULT_BASE).replace(/\/+$/, '');
+// Дороги к серверу по порядку: откуда пришла страница, прямая, зеркало.
+const ROUTES = [...new Set([DEFAULT_BASE, HOME, MIRROR].filter(Boolean))];
+
+// Какая дорога сработала в этой сети — помним полчаса: сеть у человека
+// меняется (Wi-Fi → мобильный), и вечная память завела бы не туда.
+const ROUTE_KEY = 'miet-route';
+const ROUTE_TTL = 30 * 60 * 1000;
+
+function rememberedRoute() {
+  try {
+    const r = JSON.parse(localStorage.getItem(ROUTE_KEY) || 'null');
+    if (r && ROUTES.includes(r.base) && Date.now() - r.at < ROUTE_TTL) return r.base;
+  } catch { /* нет памяти — начнём с первой дороги */ }
+  return '';
+}
+
+/** Запомнить дорогу, которая сейчас ответила. */
+export function rememberRoute(b = base) {
+  try { localStorage.setItem(ROUTE_KEY, JSON.stringify({ base: b, at: Date.now() })); } catch { /* ну и ладно */ }
+}
+
+let base = (stored() || rememberedRoute() || DEFAULT_BASE).replace(/\/+$/, '');
 
 /** Адрес серверной части прямо сейчас. */
 export const apiBase = () => base;
@@ -73,6 +100,19 @@ export function fallBackToHome() {
   return true;
 }
 
+/**
+ * Следующая дорога, которую этот запрос ещё не пробовал. Возвращает false,
+ * если пробовать больше нечего. При ручной настройке (`miet-api`) дорогу
+ * не меняем: отладка должна идти туда, куда сказали.
+ */
+export function switchRoute(tried) {
+  if (stored()) return false;
+  const next = ROUTES.find(r => !tried.has(r));
+  if (!next) return false;
+  base = next;
+  return true;
+}
+
 // Совместимость: адрес, с которого начали. Для новых мест — apiBase().
 export const API_BASE = base;
 
@@ -80,4 +120,4 @@ export const API_BASE = base;
 // свежую ли страницу открыл человек: Telegram кеширует мини-приложения
 // по своим правилам, и «у меня ничего не поменялось» разбирается
 // сравнением этой строки, а не на слово.
-export const BUILD = 'c4e79528';
+export const BUILD = '4d9331aa';

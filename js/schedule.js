@@ -12,7 +12,7 @@
 
 import { API_BASE, apiBase } from './config.js';
 import { settings, save } from './store.js';
-import { post, account } from './api.js';
+import { post, get, account, canTalk } from './api.js';
 
 const API = 'https://miet.ru/schedule/data';
 const CACHE_KEY = g => `miet-sched:${g}`;
@@ -173,15 +173,18 @@ function saved(group) {
  */
 async function fromBot(group) {
   if (!API_BASE) return null;
+  const ok = data => (data && data.ready && Array.isArray(data.lessons) ? data : null);
+  const path = `/api/schedule?group=${encodeURIComponent(group)}`;
+  // Внутри Telegram — общим запросом: он сам перебирает дороги (прямая,
+  // зеркало), если в этой сети одна из них закрыта.
+  if (canTalk) {
+    try { return ok(await get(path, { timeout: 8000, retries: 0 })); } catch { return null; }
+  }
   const stop = new AbortController();
   const bell = setTimeout(() => stop.abort(), 8000);
   try {
-    const res = await fetch(
-      `${apiBase()}/api/schedule?group=${encodeURIComponent(group)}`,
-      { signal: stop.signal, headers: initDataHeader() });
-    if (!res.ok) return null;
-    const data = await res.json();
-    return data && data.ready && Array.isArray(data.lessons) ? data : null;
+    const res = await fetch(apiBase() + path, { signal: stop.signal, headers: initDataHeader() });
+    return res.ok ? ok(await res.json()) : null;
   } catch {
     return null;                        // молчит — пойдём на miet.ru сами
   } finally {
