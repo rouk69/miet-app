@@ -7,7 +7,7 @@
 // Вне Telegram (обычный браузер, локальная отладка) initData пустая — тогда
 // сеть не трогаем вовсе и приложение работает как раньше, без учёта.
 
-import { API_BASE, apiBase, fallBackToHome } from './config.js';
+import { API_BASE, apiBase, switchRoute, rememberRoute } from './config.js';
 import { tg } from './tg.js';
 
 const initData = tg?.initData || '';
@@ -83,15 +83,22 @@ async function request(path, { method = 'GET', body, timeout = 12000,
   retries = 1 } = {}) {
   if (!canTalk) throw new Error('Сервер недоступен');
   let last;
+  const first = apiBase();
+  const tried = new Set([first]);
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
-      return await once(path, { method, body, timeout });
+      const data = await once(path, { method, body, timeout });
+      // Ответила другая дорога — запоминаем её на эту сеть.
+      if (apiBase() !== first) rememberRoute();
+      return data;
     } catch (err) {
       last = err;
-      // Раздатчик оказался не сервером — уходим на прямой адрес и
-      // пробуем ещё раз, не тратя попытку повтора.
-      if ((err.wrongHost || err.retriable) && fallBackToHome()) {
-        console.warn('API по адресу страницы не отвечает, идём напрямую');
+      // Дорога не довела (обрыв, молчание, чужой раздатчик) — сразу
+      // пробуем следующую: прямую, зеркало. Попытку повтора не тратим.
+      // Так приложение живёт в сети, где закрыт один из адресов.
+      if ((err.wrongHost || err.retriable) && switchRoute(tried)) {
+        tried.add(apiBase());
+        console.warn('дорога к серверу не отвечает, пробую', apiBase());
         attempt--;
         continue;
       }

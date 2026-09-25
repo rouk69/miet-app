@@ -1,5 +1,5 @@
 /* Собрано tools/stamp.py из js/*.js — не правьте здесь.
-   Версия c4e79528. Исходники лежат рядом и остаются модулями. */
+   Версия 4d9331aa. Исходники лежат рядом и остаются модулями. */
 var __mod = {};
 /* ==== js\config.js ==== */
 __mod['js/config.js'] = (function () {
@@ -21,6 +21,12 @@ __mod['js/config.js'] = (function () {
 // работающее приложение, которое при первой же осечке уходит на
 // выключённый сервер и там остаётся.
 const HOME = 'https://miet-bot-rouk.amvera.io';
+
+// Запасной вход — воркер Cloudflare (mirror/worker.js), проксирующий к
+// тому же серверу. Нужен не «на всякий случай»: 25.09.2026 у владельца на
+// мобильном интернете открывался только он, а на Wi-Fi — только HOME.
+// Поэтому клиент знает обе дороги и сам переходит на ту, что работает.
+const MIRROR = 'https://miet-mirror.rokdoker09.workers.dev';
 
 // Зеркало на GitHub Pages — единственное место, откуда страница
 // раздаётся, а сервера рядом нет: там спрашивать надо Amvera.
@@ -56,7 +62,28 @@ function stored() {
   }
 }
 
-let base = (stored() || DEFAULT_BASE).replace(/\/+$/, '');
+// Дороги к серверу по порядку: откуда пришла страница, прямая, зеркало.
+const ROUTES = [...new Set([DEFAULT_BASE, HOME, MIRROR].filter(Boolean))];
+
+// Какая дорога сработала в этой сети — помним полчаса: сеть у человека
+// меняется (Wi-Fi → мобильный), и вечная память завела бы не туда.
+const ROUTE_KEY = 'miet-route';
+const ROUTE_TTL = 30 * 60 * 1000;
+
+function rememberedRoute() {
+  try {
+    const r = JSON.parse(localStorage.getItem(ROUTE_KEY) || 'null');
+    if (r && ROUTES.includes(r.base) && Date.now() - r.at < ROUTE_TTL) return r.base;
+  } catch { /* нет памяти — начнём с первой дороги */ }
+  return '';
+}
+
+/** Запомнить дорогу, которая сейчас ответила. */
+function rememberRoute(b = base) {
+  try { localStorage.setItem(ROUTE_KEY, JSON.stringify({ base: b, at: Date.now() })); } catch { /* ну и ладно */ }
+}
+
+let base = (stored() || rememberedRoute() || DEFAULT_BASE).replace(/\/+$/, '');
 
 /** Адрес серверной части прямо сейчас. */
 const apiBase = () => base;
@@ -78,6 +105,19 @@ function fallBackToHome() {
   return true;
 }
 
+/**
+ * Следующая дорога, которую этот запрос ещё не пробовал. Возвращает false,
+ * если пробовать больше нечего. При ручной настройке (`miet-api`) дорогу
+ * не меняем: отладка должна идти туда, куда сказали.
+ */
+function switchRoute(tried) {
+  if (stored()) return false;
+  const next = ROUTES.find(r => !tried.has(r));
+  if (!next) return false;
+  base = next;
+  return true;
+}
+
 // Совместимость: адрес, с которого начали. Для новых мест — apiBase().
 const API_BASE = base;
 
@@ -85,9 +125,9 @@ const API_BASE = base;
 // свежую ли страницу открыл человек: Telegram кеширует мини-приложения
 // по своим правилам, и «у меня ничего не поменялось» разбирается
 // сравнением этой строки, а не на слово.
-const BUILD = 'c4e79528';
+const BUILD = '4d9331aa';
 
-return {'apiBase': apiBase, 'fallBackToHome': fallBackToHome, 'API_BASE': API_BASE, 'BUILD': BUILD};
+return {'MIRROR': MIRROR, 'rememberRoute': rememberRoute, 'apiBase': apiBase, 'fallBackToHome': fallBackToHome, 'switchRoute': switchRoute, 'API_BASE': API_BASE, 'BUILD': BUILD};
 })();
 
 /* ==== js\fresh.js ==== */
@@ -1034,7 +1074,8 @@ __mod['js/api.js'] = (function () {
 
 var API_BASE = __mod['js/config.js']['API_BASE'];
 var apiBase = __mod['js/config.js']['apiBase'];
-var fallBackToHome = __mod['js/config.js']['fallBackToHome'];
+var switchRoute = __mod['js/config.js']['switchRoute'];
+var rememberRoute = __mod['js/config.js']['rememberRoute'];
 var tg = __mod['js/tg.js']['tg'];
 
 const initData = tg?.initData || '';
@@ -1110,15 +1151,22 @@ async function request(path, { method = 'GET', body, timeout = 12000,
   retries = 1 } = {}) {
   if (!canTalk) throw new Error('Сервер недоступен');
   let last;
+  const first = apiBase();
+  const tried = new Set([first]);
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
-      return await once(path, { method, body, timeout });
+      const data = await once(path, { method, body, timeout });
+      // Ответила другая дорога — запоминаем её на эту сеть.
+      if (apiBase() !== first) rememberRoute();
+      return data;
     } catch (err) {
       last = err;
-      // Раздатчик оказался не сервером — уходим на прямой адрес и
-      // пробуем ещё раз, не тратя попытку повтора.
-      if ((err.wrongHost || err.retriable) && fallBackToHome()) {
-        console.warn('API по адресу страницы не отвечает, идём напрямую');
+      // Дорога не довела (обрыв, молчание, чужой раздатчик) — сразу
+      // пробуем следующую: прямую, зеркало. Попытку повтора не тратим.
+      // Так приложение живёт в сети, где закрыт один из адресов.
+      if ((err.wrongHost || err.retriable) && switchRoute(tried)) {
+        tried.add(apiBase());
+        console.warn('дорога к серверу не отвечает, пробую', apiBase());
         attempt--;
         continue;
       }
@@ -1613,7 +1661,9 @@ var apiBase = __mod['js/config.js']['apiBase'];
 var settings = __mod['js/store.js']['settings'];
 var save = __mod['js/store.js']['save'];
 var post = __mod['js/api.js']['post'];
+var get = __mod['js/api.js']['get'];
 var account = __mod['js/api.js']['account'];
+var canTalk = __mod['js/api.js']['canTalk'];
 
 const API = 'https://miet.ru/schedule/data';
 const CACHE_KEY = g => `miet-sched:${g}`;
@@ -1774,15 +1824,18 @@ function saved(group) {
  */
 async function fromBot(group) {
   if (!API_BASE) return null;
+  const ok = data => (data && data.ready && Array.isArray(data.lessons) ? data : null);
+  const path = `/api/schedule?group=${encodeURIComponent(group)}`;
+  // Внутри Telegram — общим запросом: он сам перебирает дороги (прямая,
+  // зеркало), если в этой сети одна из них закрыта.
+  if (canTalk) {
+    try { return ok(await get(path, { timeout: 8000, retries: 0 })); } catch { return null; }
+  }
   const stop = new AbortController();
   const bell = setTimeout(() => stop.abort(), 8000);
   try {
-    const res = await fetch(
-      `${apiBase()}/api/schedule?group=${encodeURIComponent(group)}`,
-      { signal: stop.signal, headers: initDataHeader() });
-    if (!res.ok) return null;
-    const data = await res.json();
-    return data && data.ready && Array.isArray(data.lessons) ? data : null;
+    const res = await fetch(apiBase() + path, { signal: stop.signal, headers: initDataHeader() });
+    return res.ok ? ok(await res.json()) : null;
   } catch {
     return null;                        // молчит — пойдём на miet.ru сами
   } finally {
@@ -10076,6 +10129,26 @@ if (settings.group) {
 const whoAmI = loadMe();
 
 /**
+ * Копия приложения в телефоне (sw.js): открыться, даже когда адрес, с
+ * которого пришла страница, в этой сети закрыт. Только по https и не на
+ * iOS-клиентах, где воркеры во встроенном браузере не работают — там
+ * register просто откажет, и ничего не сломается. Выключатель на случай
+ * беды: localStorage 'miet-no-sw' = '1' снимает воркер.
+ */
+function keepCopy() {
+  const local = ['localhost', '127.0.0.1'].includes(location.hostname);   // проверки
+  if (!('serviceWorker' in navigator) || (location.protocol !== 'https:' && !local)) return;
+  try {
+    if (localStorage.getItem('miet-no-sw') === '1') {
+      navigator.serviceWorker.getRegistrations()
+        .then(list => list.forEach(r => r.unregister())).catch(() => {});
+      return;
+    }
+  } catch { /* нет памяти — просто ставим */ }
+  navigator.serviceWorker.register('sw.js', { scope: './' }).catch(() => {});
+}
+
+/**
  * Запуск.
  *
  * Раньше приложение ждало и свои данные, и ответ сервера бота. Данные
@@ -10107,6 +10180,7 @@ loadData()
     track('open');
     // Права приехали: «Учёба» на главной появляется или уступает место.
     applyAccess();
+    keepCopy();
     // Обед групп — общий с ботом: выбор мог прийти оттуда.
     syncLunch();
     // Длинные тексты карточек — фоном, после первого экрана. Ждать их

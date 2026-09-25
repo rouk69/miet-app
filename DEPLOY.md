@@ -290,6 +290,18 @@ ERR_CONNECTION_CLOSED». Дорога рвётся не у нас: пока ко
 (`js/config.js`), поэтому через воркер идёт всё приложение целиком, а
 не одна разметка.
 
+**Копия приложения (sw.js) — аварийное выключение для всех.** Если с
+копией что-то пойдёт не так, заменить `sw.js` на этот текст и выложить в
+оба места — браузеры перепроверяют sw.js при каждом открытии и сами её
+снимут:
+
+    self.addEventListener('install', () => self.skipWaiting());
+    self.addEventListener('activate', e => e.waitUntil((async () => {
+      for (const k of await caches.keys()) await caches.delete(k);
+      await self.registration.unregister();
+      for (const c of await self.clients.matchAll()) c.navigate(c.url);
+    })()));
+
 **Выложен 25.09.2026:** `https://miet-mirror.rokdoker09.workers.dev`
 (аккаунт Cloudflare rokdoker09). Проверено: через VPN прямой адрес
 Amvera отвечал 2 раза из 8, зеркало — 8 из 8; напрямую из России — тоже
