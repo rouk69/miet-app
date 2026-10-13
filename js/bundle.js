@@ -1,5 +1,5 @@
 /* Собрано tools/stamp.py из js/*.js — не правьте здесь.
-   Версия 4d9331aa. Исходники лежат рядом и остаются модулями. */
+   Версия fbaabaac. Исходники лежат рядом и остаются модулями. */
 var __mod = {};
 /* ==== js\config.js ==== */
 __mod['js/config.js'] = (function () {
@@ -20,7 +20,7 @@ __mod['js/config.js'] = (function () {
 // «Переезд на Railway» в DEPLOY.md. Пропустить её значит получить
 // работающее приложение, которое при первой же осечке уходит на
 // выключённый сервер и там остаётся.
-const HOME = 'https://miet-bot-rouk.amvera.io';
+const HOME = 'https://miet-bot-rouk.msk1.amvera.tech';
 
 // Запасной вход — воркер Cloudflare (mirror/worker.js), проксирующий к
 // тому же серверу. Нужен не «на всякий случай»: 25.09.2026 у владельца на
@@ -125,7 +125,7 @@ const API_BASE = base;
 // свежую ли страницу открыл человек: Telegram кеширует мини-приложения
 // по своим правилам, и «у меня ничего не поменялось» разбирается
 // сравнением этой строки, а не на слово.
-const BUILD = '4d9331aa';
+const BUILD = 'fbaabaac';
 
 return {'MIRROR': MIRROR, 'rememberRoute': rememberRoute, 'apiBase': apiBase, 'fallBackToHome': fallBackToHome, 'switchRoute': switchRoute, 'API_BASE': API_BASE, 'BUILD': BUILD};
 })();
