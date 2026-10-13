@@ -19,6 +19,7 @@ import logging
 import os
 import re
 import sys
+import time
 
 import telebot
 from telebot import apihelper, types
@@ -643,6 +644,21 @@ def point_menu_for(uid: int) -> None:
         log.info("личная кнопка меню для %s не встала: %s", uid, e)
 
 
+def repoint_mirror_users() -> None:
+    """
+    Зеркало умерло или ожило — переставляем личные кнопки тем, кто на
+    запасном входе. Сами они узнали бы об этом, только нажав кнопку и
+    увидев ошибку. Выбор человека в базе не трогаем: оживёт зеркало —
+    кнопка сама вернётся туда.
+    """
+    ids = storage.mirror_ids()
+    for uid in ids:
+        point_menu_for(uid)
+        time.sleep(0.1)             # Telegram не любит очередей
+    if ids:
+        log.info("личные кнопки переставлены: %d чел.", len(ids))
+
+
 @bot.message_handler(commands=["group"])
 def cmd_group(m: types.Message) -> None:
     if not seen(m.from_user, "/group"):
@@ -1230,7 +1246,8 @@ def main() -> None:
         # метки приходилось перезапускать контейнер — то есть ронять
         # бота на пару минут из-за правки цвета кнопки. Теперь он сам
         # замечает выкладку и переставляет ссылку.
-        webapp_watch.run_in_background(WEBAPP_URL, point_menu_at_app)
+        webapp_watch.run_in_background(WEBAPP_URL, point_menu_at_app,
+                                       repoint_mirror_users)
 
     # HTTP-API для мини-приложения: приём событий и админка. Отдельным
     # потоком в том же процессе — база у них общая, и разносить их по

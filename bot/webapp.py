@@ -90,7 +90,7 @@ def app_url_for(user_id: int | None) -> str:
     в проверках клиента и в setup_bot.
     """
     mirror = mirror_url()
-    if not mirror or not user_id:
+    if not mirror or not user_id or not mirror_alive():
         return app_url()
     try:
         from .storage import mirror_on
@@ -98,6 +98,53 @@ def app_url_for(user_id: int | None) -> str:
     except Exception:                                   # noqa: BLE001
         log.exception("не удалось узнать вход для %s", user_id)
         return app_url()
+
+
+# Жив ли запасной вход. None — ещё не спрашивали: тогда верим выбору
+# человека, иначе каждый перезапуск на минуту отбирал бы у него зеркало.
+_mirror = {"alive": None}
+
+
+def mirror_alive() -> bool:
+    """
+    Доходит ли зеркало до нас. 13.10.2026 Amvera переселила бота в новый
+    регион с новым адресом, а воркер остался проксировать на старый —
+    и все, кто сидел на запасном входе, жали кнопку и получали 522, пока
+    сами не догадались бы набрать /fix. Мёртвое зеркало хуже прямого
+    пути при любой сети, поэтому кнопки ведут туда только живое.
+    """
+    return _mirror["alive"] is not False
+
+
+def probe_mirror() -> bool | None:
+    """
+    Спрашивает у зеркала наше же /api/health. Ответил наш сервер — жив;
+    ошибка Cloudflare, чужая страница, обрыв — мёртв. None — зеркала нет.
+    """
+    mirror = mirror_url()
+    if not mirror:
+        return None
+    try:
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        with opener.open(mirror + "/api/health", timeout=TIMEOUT) as r:
+            body = r.read(512).decode("utf-8", "replace")
+        return '"ok": true' in body or '"ok":true' in body
+    except (urllib.error.URLError, OSError, ValueError) as e:
+        log.info("зеркало не ответило: %s", e)
+        return False
+
+
+def check_mirror() -> bool:
+    """Обновляет знание о зеркале. True — если оно поменялось."""
+    got = probe_mirror()
+    if got is None:
+        return False
+    was = mirror_alive()
+    _mirror["alive"] = got
+    if got != was:
+        log.info("запасной вход %s", "снова жив" if got else "не отвечает — веду всех прямо")
+        return True
+    return False
 
 
 def version() -> str:
@@ -131,7 +178,8 @@ def fetch(url: str) -> str:
     return ""
 
 
-def run_in_background(url: str, on_check=None) -> threading.Thread:
+def run_in_background(url: str, on_check=None,
+                      on_mirror=None) -> threading.Thread:
     """
     Следит за меткой выложенного клиента.
 
@@ -140,6 +188,9 @@ def run_in_background(url: str, on_check=None) -> threading.Thread:
     часто», сеть моргнула), и тогда чинить её было бы некому — метка-то
     не менялась. Пусть решает тот, кто ставит: он видит, куда кнопка
     ведёт сейчас.
+
+    `on_mirror` зовётся, когда зеркало умерло или ожило: личные кнопки
+    меню тех, кто на запасном входе, надо переставить без их участия.
     """
     def loop():
         # Первый заход почти сразу: контейнер только что поднялся, и
@@ -156,6 +207,8 @@ def run_in_background(url: str, on_check=None) -> threading.Thread:
                         log.info("клиент обновился: %s → %s", was or "—", got)
                 if on_check:
                     on_check(version())
+                if check_mirror() and on_mirror:
+                    on_mirror()
             except Exception:                           # noqa: BLE001
                 log.exception("проверка метки приложения сорвалась")
             time.sleep(EVERY)

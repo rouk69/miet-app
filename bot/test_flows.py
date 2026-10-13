@@ -676,6 +676,24 @@ check("кнопка под расписанием ведёт запасным в
 check("у соседа по чату вход остался обычным",
       B.app_url(UID + 1) == B.WEBAPP_URL, B.app_url(UID + 1))
 
+# Зеркало умерло (13.10.2026: бот переехал, воркер смотрел на старый
+# адрес). Человек ничего не нажимал — бот сам ведёт его прямо.
+from bot import webapp as W
+W.probe_mirror = lambda: False
+menu_set.clear()
+check("смерть зеркала замечена", W.check_mirror())
+B.repoint_mirror_users()
+check("мёртвое зеркало — адрес прямой", B.app_url(UID) == B.WEBAPP_URL, B.app_url(UID))
+check("личная кнопка переставлена сама",
+      menu_set and menu_set[-1].get("chat_id") == UID
+      and MIRROR not in menu_set[-1]["menu_button"].web_app.url,
+      menu_set[-1] if menu_set else None)
+check("выбор человека не стёрт", storage.mirror_on(UID))
+check("повтор без перемен не дёргает", not W.check_mirror())
+W.probe_mirror = lambda: True
+check("ожившее зеркало замечено", W.check_mirror())
+check("и адрес снова запасной", B.app_url(UID) == MIRROR, B.app_url(UID))
+
 press("entry|main")
 check("возврат на обычный вход работает", not storage.mirror_on(UID))
 check("и адрес вернулся", B.app_url(UID) == B.WEBAPP_URL, B.app_url(UID))
