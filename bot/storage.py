@@ -186,6 +186,12 @@ def mirror_users() -> int:
     ).fetchone()[0]
 
 
+def mirror_ids() -> list:
+    """Кто на запасном входе — им переставляем личную кнопку меню."""
+    return [r[0] for r in conn().execute(
+        "SELECT user_id FROM users WHERE COALESCE(entry_mirror, 0) = 1")]
+
+
 def morning_list() -> list:
     """
     Кому слать: всем, у кого выбрана группа и кто не отказался.
