@@ -651,7 +651,9 @@ def repoint_mirror_users() -> None:
     увидев ошибку. Выбор человека в базе не трогаем: оживёт зеркало —
     кнопка сама вернётся туда.
     """
-    ids = storage.mirror_ids()
+    # Владельцу кнопку на зеркало ставили и в обход /fix, так что в
+    # базе его отметки может не быть, — его переставляем всегда.
+    ids = sorted(set(storage.mirror_ids()) | web.admin_ids())
     for uid in ids:
         point_menu_for(uid)
         time.sleep(0.1)             # Telegram не любит очередей

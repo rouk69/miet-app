@@ -71,7 +71,7 @@ python tools/check_app.py      # клиент: выполнение модуле
 python tools/check_contrast.py # клиент: читаемость палитры
 python tools/stamp.py          # клиент: метки версий и разрез справочника
 python -m bot.selftest     # 74 — единицы кода и живой API miet.ru
-python -m bot.test_flows   # 163 — сценарии целиком
+python -m bot.test_flows   # 164 — сценарии целиком
 python -m bot.test_admin   # 361 — права, справочник, доска, ОРИОКС, поломки
 python -m bot.test_posts   # 141 — лента, комментарии, режимы
 python -m bot.test_raffle  # 68 — розыгрыш: зачёт, накрутка, видимость
@@ -423,7 +423,7 @@ bot/auth.py           проверка подписи initData
 bot/emoji.py          премиум-иконки с запасными эмодзи
 bot/rich.py           карточки rich-разметкой: таблицы, кнопки, выбор группы
 bot/selftest.py       74 проверки: единицы кода и живой API
-bot/test_flows.py     163 проверки: сценарии через настоящие обработчики
+bot/test_flows.py     164 проверки: сценарии через настоящие обработчики
 bot/test_admin.py     268 проверок: права, справочник, доска, ОРИОКС
 bot/test_posts.py     141 проверка: лента, комментарии, режимы
 bot/setup_bot.py      разовая настройка команд, описания, кнопки меню

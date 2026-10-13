@@ -1150,7 +1150,7 @@ python tools/update.py
 
 ```bash
 python -m bot.selftest      # логика, рендер, клавиатуры, лимиты — 74
-python -m bot.test_flows    # обработчики целиком, Telegram подменён — 163
+python -m bot.test_flows    # обработчики целиком, Telegram подменён — 164
 python -m bot.test_admin    # права, справочник, доска, ОРИОКС — 361
 python -m bot.test_posts    # лента, комментарии, режимы — 141
 python -m bot.test_raffle   # розыгрыш: зачёт, накрутка, видимость — 68
