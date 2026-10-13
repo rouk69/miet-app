@@ -684,10 +684,12 @@ menu_set.clear()
 check("смерть зеркала замечена", W.check_mirror())
 B.repoint_mirror_users()
 check("мёртвое зеркало — адрес прямой", B.app_url(UID) == B.WEBAPP_URL, B.app_url(UID))
+mine = [x for x in menu_set if x.get("chat_id") == UID]
 check("личная кнопка переставлена сама",
-      menu_set and menu_set[-1].get("chat_id") == UID
-      and MIRROR not in menu_set[-1]["menu_button"].web_app.url,
-      menu_set[-1] if menu_set else None)
+      mine and MIRROR not in mine[-1]["menu_button"].web_app.url, menu_set)
+check("владельцу тоже, даже без отметки в базе",
+      any(x.get("chat_id") in B.web.admin_ids() for x in menu_set)
+      or not B.web.admin_ids(), menu_set)
 check("выбор человека не стёрт", storage.mirror_on(UID))
 check("повтор без перемен не дёргает", not W.check_mirror())
 W.probe_mirror = lambda: True
