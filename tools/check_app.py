@@ -166,7 +166,7 @@ CASES = [
     # Откат на прямой адрес. Вне браузера (и на Pages) база и так прямая,
     # значит уходить некуда — это и проверяем: второй раз не дёргаемся.
     ("адрес сервера известен",
-     "String(apiBase().indexOf('miet-bot-rouk.amvera.io') > 0)", "true"),
+     "String(apiBase().indexOf('miet-bot-rouk.msk1.amvera.tech') > 0)", "true"),
     ("с прямого адреса уходить некуда", "String(fallBackToHome())", "false"),
     ("и он не испортился", "String(apiBase().indexOf('https://') === 0)", "true"),
     # Обновление страницы на свежую сборку: метка ставится, а параметры

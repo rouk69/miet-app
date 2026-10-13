@@ -48,7 +48,7 @@ _seen = {"version": "", "at": 0.0}
 # операторов соединение к github.io рвётся — человек видит «не удалось
 # загрузить» вместо расписания. Теперь клиент раздаёт сам бот, и адрес
 # по умолчанию — его собственный.
-SELF_URL = "https://miet-bot-rouk.amvera.io"
+SELF_URL = "https://miet-bot-rouk.msk1.amvera.tech"
 
 
 def app_url() -> str:

@@ -22,7 +22,7 @@
 // https://<имя>.<аккаунт>.workers.dev положить в переменную MIRROR_URL
 // в панели Amvera — без неё бот запасной вход не предлагает.
 
-const ORIGIN = 'https://miet-bot-rouk.amvera.io';
+const ORIGIN = 'https://miet-bot-rouk.msk1.amvera.tech';
 
 // Сколько ждём наш сервер. Дольше держать незачем: контейнер
 // перезапускается три минуты, и в это время он отвечает 503 сам.

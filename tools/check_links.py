@@ -33,7 +33,7 @@ LINK = re.compile(r"https?://[^\s'\"`<>)]+")
 
 # Служебные адреса, которые ссылками не являются.
 SKIP = ("telegram.org/js", "fonts.googleapis", "fonts.gstatic",
-        "miet-bot-rouk.amvera.io", "yandex.ru/maps/?text=",
+        "miet-bot-rouk.msk1.amvera.tech", "yandex.ru/maps/?text=",
         "localhost", "127.0.0.1")
 
 # Адреса, которые снаружи не проверяются, хотя работают у студентов.

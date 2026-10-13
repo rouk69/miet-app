@@ -68,9 +68,9 @@ __mod['js/config.js'] = (function () {
 // просто без учёта заходов и без админки.
 //
 // Домен подставляется из логина и названия проекта на Amvera:
-// git.amvera.ru/rouk/miet-bot → miet-bot-rouk.amvera.io. Чтобы он отвечал,
+// git.amvera.ru/rouk/miet-bot → miet-bot-rouk.msk1.amvera.tech. Чтобы он отвечал,
 // в панели проекта должен быть включён внешний доступ на порт 80.
-const DEFAULT_BASE = 'https://miet-bot-rouk.amvera.io';
+const DEFAULT_BASE = 'https://miet-bot-rouk.msk1.amvera.tech';
 
 // Локальная отладка: в консоли браузера
 //   localStorage.setItem('miet-api', 'http://localhost:8080')
