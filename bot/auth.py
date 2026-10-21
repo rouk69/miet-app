@@ -18,21 +18,30 @@ from urllib.parse import parse_qsl
 
 
 def validate_init_data(init_data: str, bot_token: str, max_age: int = 86400):
+    """Словарь пользователя или None — подробности в check_init_data."""
+    return check_init_data(init_data, bot_token, max_age)[0]
+
+
+def check_init_data(init_data: str, bot_token: str, max_age: int = 86400):
     """
     Проверяет подпись Telegram WebApp initData.
-    Возвращает словарь пользователя или None, если подпись не сходится.
+    Возвращает (пользователь, причина): пользователь — словарь или None,
+    причина — пустая строка при успехе, иначе «empty», «signature»,
+    «expired» или «user». Причина нужна для разбора отказов: молчаливый
+    None больше недели прятал от владельца админку, и по нему нельзя было
+    понять, устарела подпись, не сошлась или до сервера не дошла вовсе.
 
     Telegram считает HMAC от отсортированных пар «ключ=значение», где ключом
     служит HMAC('WebAppData') от токена бота. Сравнивать нужно постоянным
     по времени сравнением, иначе подпись можно подобрать по таймингам.
     """
     if not init_data or not bot_token:
-        return None
+        return None, "empty"
 
     pairs = dict(parse_qsl(init_data, keep_blank_values=True))
     received_hash = pairs.pop("hash", None)
     if not received_hash:
-        return None
+        return None, "empty"
 
     data_check_string = "\n".join(f"{k}={v}" for k, v in sorted(pairs.items()))
     secret_key = hmac.new(b"WebAppData", bot_token.encode(), hashlib.sha256).digest()
@@ -45,19 +54,28 @@ def validate_init_data(init_data: str, bot_token: str, max_age: int = 86400):
     try:
         given = received_hash.encode("ascii")
     except UnicodeEncodeError:
-        return None
+        return None, "signature"
     if not hmac.compare_digest(expected.encode("ascii"), given):
-        return None
+        return None, "signature"
 
     # Просроченный initData принимать нельзя: перехваченную строку иначе
     # можно переиспользовать сколько угодно долго.
     try:
         if max_age and time.time() - int(pairs.get("auth_date", 0)) > max_age:
-            return None
+            return None, "expired"
     except (TypeError, ValueError):
-        return None
+        return None, "expired"
 
     try:
-        return json.loads(pairs["user"])
+        return json.loads(pairs["user"]), ""
     except (KeyError, json.JSONDecodeError):
-        return None
+        return None, "user"
+
+
+def unverified_id(init_data: str) -> str:
+    """id из initData БЕЗ проверки подписи — только для журнала отказов."""
+    try:
+        user = json.loads(dict(parse_qsl(init_data or "")).get("user") or "{}")
+        return str(int(user.get("id") or 0) or "?")
+    except (ValueError, TypeError, AttributeError):
+        return "?"

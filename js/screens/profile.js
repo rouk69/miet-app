@@ -6,7 +6,7 @@ import { data, settings, save, applyTheme, resolveTheme } from '../store.js';
 import { BUILD } from '../config.js';
 import { fetchSchedule, weekOfCycle, weekName, setLunch } from '../schedule.js';
 import { go, refresh } from '../router.js';
-import { tgUser, openLink, syncChrome, haptic, hapticNotify, confirmDialog,
+import { tg, tgUser, openLink, syncChrome, haptic, hapticNotify, confirmDialog,
   canAddToHome, addToHome, homeStatus, onHomeAdded }
   from '../tg.js';
 import { account, canTalk, post } from '../api.js';
@@ -44,6 +44,19 @@ export default async function profileScreen() {
         </div>
       </div>
 
+      ${account.problem ? `
+        <div class="section-head" style="margin-top:0">
+          <div class="section-title">Связь с сервером</div>
+        </div>
+        ${listCard([listRow({
+    ico: 'info',
+    title: 'Сервер вас не узнал',
+    sub: account.problemText,
+    chevron: account.problem === 'auth',
+    id: account.problem === 'auth' ? 'reopen' : '',
+    cls: account.problem === 'auth' ? 'tap' : '',
+  })])}` : ''}
+
       ${account.can_stats ? `
         <div class="section-head" style="margin-top:0">
           <div class="section-title">Управление</div>
@@ -55,7 +68,7 @@ export default async function profileScreen() {
     chevron: true, id: 'admin', cls: 'tap',
   })])}` : ''}
 
-      <div class="section-head" ${account.can_stats ? '' : 'style="margin-top:0"'}>
+      <div class="section-head" ${account.can_stats || account.problem ? '' : 'style="margin-top:0"'}>
         <div class="section-title">Учёба</div>
       </div>
       ${listCard([
@@ -154,6 +167,8 @@ export default async function profileScreen() {
     if (!row) return;
     switch (row.dataset.id) {
       case 'admin': return go('admin');
+      // Новую подпись Telegram выдаёт только при новом открытии.
+      case 'reopen': return tg?.close();
       case 'group': return pickGroup(() => refresh());
       case 'week': return weekShiftSheet(baseWeek);
       case 'lunch': return lunchSheet();

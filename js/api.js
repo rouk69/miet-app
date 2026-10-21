@@ -28,6 +28,13 @@ export const account = {
   orioks_access: false,
   root: false,
   group: null,
+  // Почему сервер нас не узнал: 'network' — ни одна дорога не ответила,
+  // 'auth' — ответил, но подпись не принял, 'nodata' — Telegram её не
+  // дал. Пусто — всё в порядке. Без этого приложение молча становилось
+  // гостевым, и владелец больше недели не понимал, куда делись админка
+  // и «Учёба».
+  problem: '',
+  problemText: '',
 };
 
 async function once(path, { method, body, timeout }) {
@@ -59,6 +66,7 @@ async function once(path, { method, body, timeout }) {
   } catch { /* сервер ответил не JSON — разберёмся по коду */ }
   if (!res.ok) {
     const e = new Error(data?.error || `Сервер ответил ${res.status}`);
+    e.status = res.status;
     // 502/503 — контейнер перезапускается после выкладки, это проходит
     // само за несколько секунд. Отказ по правам повторять бессмысленно.
     e.retriable = res.status >= 500;
@@ -119,15 +127,26 @@ export const post = (path, body, opts) => request(path, { ...opts, method: 'POST
  * работать — просто без админки и без переноса группы между устройствами.
  */
 export async function loadMe() {
-  if (!canTalk) return account;
+  if (!canTalk) {
+    // Внутри Telegram без подписи — значит, открыли не кнопкой бота, а
+    // обычной ссылкой: так сервер человека не узнает никогда.
+    if (API_BASE && tg?.platform && tg.platform !== 'unknown') {
+      Object.assign(account, { problem: 'nodata',
+        problemText: 'Приложение открыто не из бота — откройте его кнопкой «Приложение» в @mietapp_bot' });
+    }
+    return account;
+  }
   try {
     // На старте ждём сервер недолго и без повторов: расписание и данные
     // лежат в приложении, и молчащий сервер не повод держать человека на
     // экране загрузки. Права подтянутся при следующем открытии.
     Object.assign(account, await request('/api/me', { timeout: 4000, retries: 0 }),
-      { loaded: true });
+      { loaded: true, problem: '', problemText: '' });
   } catch (err) {
     console.warn('сервер не ответил:', err.message);
+    Object.assign(account, err.status === 401
+      ? { problem: 'auth', problemText: err.message }
+      : { problem: 'network', problemText: 'Сервер не отвечает из этой сети — попробуйте Wi-Fi или другой VPN' });
   }
   return account;
 }

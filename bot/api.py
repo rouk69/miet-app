@@ -26,6 +26,7 @@ import logging
 import os
 import re
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
@@ -76,13 +77,31 @@ def admin_ids() -> set:
 
 # ─────────────────────────── маршруты ───────────────────────────
 
+AUTH_ERRORS = {
+    "empty": "Telegram не передал подпись — откройте приложение из бота",
+    "signature": "Подпись Telegram не сошлась",
+    "expired": "Подпись Telegram устарела — закройте приложение и откройте снова",
+    "user": "В подписи Telegram нет пользователя",
+}
+
+# Когда кого последний раз писали в журнал: отказ повторяется на каждый
+# запрос, и без этого один человек за минуту заваливал бы журнал строками.
+_auth_logged: dict = {}
+_AUTH_LOG_EVERY = 60
+
+
 def _actor(init_data: str):
-    """Возвращает (профиль Telegram, права) или None, если подпись не сошлась."""
+    """Возвращает ((профиль Telegram, права), "") или (None, причина отказа)."""
     token = os.environ.get("BOT_TOKEN", "").strip()
-    user = auth.validate_init_data(init_data, token)
+    user, reason = auth.check_init_data(init_data, token)
     if not user:
-        return None
-    return user, analytics.identity(int(user.get("id") or 0), admin_ids())
+        who = auth.unverified_id(init_data)
+        now = time.time()
+        if now - _auth_logged.get((who, reason), 0) > _AUTH_LOG_EVERY:
+            _auth_logged[(who, reason)] = now
+            log.info("подпись отвергнута: id=%s причина=%s длина=%d", who, reason, len(init_data or ""))
+        return None, reason
+    return (user, analytics.identity(int(user.get("id") or 0), admin_ids())), ""
 
 
 def handle(method: str, path: str, query: dict, body: dict, init_data: str):
@@ -108,9 +127,9 @@ def handle(method: str, path: str, query: dict, body: dict, init_data: str):
         answer.update(uptime.state())
         return 200, answer
 
-    who = _actor(init_data)
+    who, reason = _actor(init_data)
     if not who:
-        return 401, {"error": "Подпись Telegram не сошлась"}
+        return 401, {"error": AUTH_ERRORS.get(reason, AUTH_ERRORS["signature"]), "reason": reason}
     user, me = who
     uid = int(user["id"])
 

@@ -67,15 +67,19 @@ ADMIN = init_data(777, "Админ", "byrouk")
 USER = init_data(42, "Студент", "student")
 
 print("1. Подпись Telegram — единственный пропуск")
-s, _ = api.handle("GET", "/api/me", {}, {}, "user=%7B%22id%22%3A1%7D&hash=деадбиф")
-check("подделанная initData отвергнута", s == 401, s)
-s, _ = api.handle("GET", "/api/me", {}, {}, "")
-check("пустая initData отвергнута", s == 401, s)
-s, _ = api.handle("GET", "/api/me", {}, {}, init_data(1, "Чужой", "x", token="999:OTHER"))
-check("подпись чужим токеном не проходит", s == 401, s)
-s, _ = api.handle("GET", "/api/me", {}, {},
+s, r = api.handle("GET", "/api/me", {}, {}, "user=%7B%22id%22%3A1%7D&hash=деадбиф")
+check("подделанная initData отвергнута", s == 401 and r.get("reason") == "signature", (s, r))
+s, r = api.handle("GET", "/api/me", {}, {}, "")
+check("пустая initData отвергнута", s == 401 and r.get("reason") == "empty", (s, r))
+s, r = api.handle("GET", "/api/me", {}, {}, init_data(1, "Чужой", "x", token="999:OTHER"))
+check("подпись чужим токеном не проходит", s == 401 and r.get("reason") == "signature", (s, r))
+s, r = api.handle("GET", "/api/me", {}, {},
                   init_data(1, "Старый", "x", auth_date=int(time.time()) - 90000))
-check("просроченная initData отвергнута", s == 401, s)
+# Причина в ответе нужна приложению: по ней оно говорит человеку, что
+# делать, вместо того чтобы молча стать гостевым
+check("просроченная initData отвергнута с причиной", s == 401 and r.get("reason") == "expired", (s, r))
+s, _ = api.handle("GET", "/api/me", {}, {}, init_data(5, "︎", "invisible"))
+check("имя из одного невидимого символа не мешает подписи", s == 200, s)
 s, h = api.handle("GET", "/api/health", {}, {}, "")
 check("проверка живости не требует подписи", s == 200, s)
 # Здоровье процесса отдаётся без подписи, и это осознанно: по нему
