@@ -13,6 +13,7 @@ import os
 import re
 import sys
 import tempfile
+import time
 
 sys.stdout.reconfigure(encoding="utf-8")
 os.environ.setdefault("BOT_TOKEN", "0:TEST")
@@ -699,7 +700,32 @@ check("и адрес снова запасной", B.app_url(UID) == MIRROR, B.a
 press("entry|main")
 check("возврат на обычный вход работает", not storage.mirror_on(UID))
 check("и адрес вернулся", B.app_url(UID) == B.WEBAPP_URL, B.app_url(UID))
+
+# Вход подбирается сам: приложение говорит, какая дорога не довела.
+print("\n20. Вход подбирается сам")
+B.web.on_entry = lambda uid: menu_set.append({"chat_id": uid, "auto": True})
+user = {"id": UID, "first_name": "Т"}
+me = {"blocked": False}
+def entry(rep):
+    menu_set.clear()
+    B.web._track(user, me, {"events": [], "entry": rep})
+    time.sleep(0.05)
+entry({"failed": ["direct"], "works": "mirror"})
+check("прямой не довёл — включён запасной", storage.mirror_on(UID))
+check("и кнопка переставлена сама", menu_set and menu_set[-1]["chat_id"] == UID, menu_set)
+entry({"failed": ["direct"], "works": "mirror"})
+check("повтор не дёргает Telegram", not menu_set, menu_set)
+entry({"failed": [], "works": "direct"})
+check("без отказа ничего не меняем", storage.mirror_on(UID))
+entry({"failed": ["direct", "mirror"], "works": "mirror"})
+check("противоречивый отчёт не трогаем", storage.mirror_on(UID))
+entry({"failed": ["mirror"], "works": "direct"})
+check("зеркало не довело — обратно на обычный", not storage.mirror_on(UID))
+entry("мусор")
+check("мусор не роняет", not storage.mirror_on(UID))
 os.environ.pop("MIRROR_URL", None)
+entry({"failed": ["direct"], "works": "mirror"})
+check("без воркера запасной не включаем", not storage.mirror_on(UID))
 
 
 print("\n" + "=" * 58)

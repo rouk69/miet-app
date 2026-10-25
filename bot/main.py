@@ -1256,6 +1256,8 @@ def main() -> None:
     # процессам значило бы делить одну SQLite между контейнерами.
     # Серверная часть не умеет писать в Telegram сама и не должна: импорт
     # main из api замкнул бы круг. Отдаём ей отправку сообщений здесь.
+    # Приложение само сообщает, какой вход у человека работает.
+    web.on_entry = point_menu_for
     notify.bind(lambda uid, text: bot.send_message(
         uid, text, disable_web_page_preview=True))
     notify.bind_rich(lambda uid, html: bot.send_rich_message(

@@ -546,7 +546,47 @@ def _track(user: dict, me: dict, body: dict):
                  if isinstance(ev, dict)
                  and ev.get("kind") in ("open", "tab", "screen")]
         analytics.note_many(uid, batch)
+
+    _learn_entry(uid, body.get("entry"))
     return 200, {"ok": True}
+
+
+# Кто переставляет человеку кнопку меню, когда вход сменился. Ставит
+# main: писать в Telegram отсюда нельзя — импорт main замкнул бы круг.
+on_entry = None
+
+
+def _learn_entry(uid: int, entry) -> None:
+    """
+    Вход в приложение подбирается сам.
+
+    Раньше прямой или запасной вход человек выбирал командой /fix — а до
+    неё доходили единицы: остальные видели пустую «Статистику» и «Учёбу»
+    и решали, что приложение сломано (25.10.2026). Теперь приложение
+    сообщает, какая дорога у него не довела и какая ответила, и бот
+    ведёт кнопки по той, что ответила. Меняем только при явном отказе
+    одной дороги: «сработала первая же» ничего не говорит о второй.
+    """
+    if not isinstance(entry, dict) or not webapp_watch.mirror_url():
+        return
+    failed = entry.get("failed") or []
+    works = entry.get("works")
+    if not isinstance(failed, list) or works not in ("direct", "mirror"):
+        return
+    if works in failed:
+        return
+    want = works == "mirror"
+    if ("mirror" if not want else "direct") not in failed:
+        return
+    if storage.mirror_on(uid) == want:
+        return
+    storage.set_mirror(uid, want)
+    log.info("вход для %s подобран сам: %s", uid, "запасной" if want else "обычный")
+    if on_entry:
+        # Отдельным потоком: Telegram может отвечать секундами, а ответа
+        # на /api/track ждёт закрывающееся приложение.
+        threading.Thread(target=on_entry, args=(uid,), daemon=True,
+                         name="entry-menu").start()
 
 
 POST_PATH = re.compile(

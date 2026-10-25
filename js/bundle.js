@@ -1,5 +1,5 @@
 /* Собрано tools/stamp.py из js/*.js — не правьте здесь.
-   Версия 087a01af. Исходники лежат рядом и остаются модулями. */
+   Версия 6a7ac3d4. Исходники лежат рядом и остаются модулями. */
 var __mod = {};
 /* ==== js\config.js ==== */
 __mod['js/config.js'] = (function () {
@@ -118,6 +118,26 @@ function switchRoute(tried) {
   return true;
 }
 
+// Какие дороги в этот заход не довели. По ним бот решает, каким входом
+// открывать приложение этому человеку: раньше он выбирал его сам через
+// /fix, а до /fix мало кто доходил (25.10.2026).
+const failed = new Set();
+
+/** Дорога не довела до сервера — сама, а не потому что сервер занят. */
+function routeFailed(b = base) { failed.add(b); }
+
+const kindOf = b => (b === MIRROR ? 'mirror' : b === HOME ? 'direct' : '');
+
+/**
+ * Что сказать серверу о дорогах: какие не довели и какая ответила. Пусто,
+ * если всё прошло с первой попытки, — тогда и менять нечего.
+ */
+function routeReport() {
+  const bad = [...failed].map(kindOf).filter(Boolean);
+  if (!bad.length) return null;
+  return { failed: bad, works: kindOf(base) };
+}
+
 // Совместимость: адрес, с которого начали. Для новых мест — apiBase().
 const API_BASE = base;
 
@@ -125,9 +145,9 @@ const API_BASE = base;
 // свежую ли страницу открыл человек: Telegram кеширует мини-приложения
 // по своим правилам, и «у меня ничего не поменялось» разбирается
 // сравнением этой строки, а не на слово.
-const BUILD = '087a01af';
+const BUILD = '6a7ac3d4';
 
-return {'MIRROR': MIRROR, 'rememberRoute': rememberRoute, 'apiBase': apiBase, 'fallBackToHome': fallBackToHome, 'switchRoute': switchRoute, 'API_BASE': API_BASE, 'BUILD': BUILD};
+return {'MIRROR': MIRROR, 'rememberRoute': rememberRoute, 'apiBase': apiBase, 'fallBackToHome': fallBackToHome, 'switchRoute': switchRoute, 'routeFailed': routeFailed, 'routeReport': routeReport, 'API_BASE': API_BASE, 'BUILD': BUILD};
 })();
 
 /* ==== js\fresh.js ==== */
@@ -1076,6 +1096,8 @@ var API_BASE = __mod['js/config.js']['API_BASE'];
 var apiBase = __mod['js/config.js']['apiBase'];
 var switchRoute = __mod['js/config.js']['switchRoute'];
 var rememberRoute = __mod['js/config.js']['rememberRoute'];
+var routeFailed = __mod['js/config.js']['routeFailed'];
+var routeReport = __mod['js/config.js']['routeReport'];
 var tg = __mod['js/tg.js']['tg'];
 
 const initData = tg?.initData || '';
@@ -1172,6 +1194,10 @@ async function request(path, { method = 'GET', body, timeout = 12000,
       // Дорога не довела (обрыв, молчание, чужой раздатчик) — сразу
       // пробуем следующую: прямую, зеркало. Попытку повтора не тратим.
       // Так приложение живёт в сети, где закрыт один из адресов.
+      // Обрыв или ошибка самого Cloudflare (520–530) — значит, не довела
+      // дорога. 502/503 от нашего сервера — он перезапускается, дорога
+      // ни при чём, и вход человеку из-за этого не меняем.
+      if (!err.status || (err.status >= 520 && err.status <= 530)) routeFailed(apiBase());
       if ((err.wrongHost || err.retriable) && switchRoute(tried)) {
         tried.add(apiBase());
         console.warn('дорога к серверу не отвечает, пробую', apiBase());
@@ -1244,6 +1270,8 @@ function syncGroup(group) {
   if (!timer) timer = setTimeout(flush, 300);
 }
 
+let reported = false;
+
 function flush() {
   clearTimeout(timer);
   timer = null;
@@ -1251,13 +1279,16 @@ function flush() {
   const events = queue.splice(0, queue.length);
   const group = pendingGroup;
   pendingGroup = null;
-  if (!events.length && !group) return;
+  // О дорогах сообщаем один раз за заход: сервер переставит кнопку.
+  const entry = reported ? null : routeReport();
+  if (entry) reported = true;
+  if (!events.length && !group && !entry) return;
   // keepalive: запрос переживает уход со страницы, иначе последний экран
   // перед закрытием мини-аппа терялся бы всегда.
   fetch(apiBase() + '/api/track', {
     method: 'POST',
     headers: { 'X-Init-Data': initData, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ events, group }),
+    body: JSON.stringify({ events, group, entry }),
     keepalive: true,
   }).catch(() => { /* учёт не должен мешать пользоваться приложением */ });
 }

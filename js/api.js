@@ -7,7 +7,7 @@
 // Вне Telegram (обычный браузер, локальная отладка) initData пустая — тогда
 // сеть не трогаем вовсе и приложение работает как раньше, без учёта.
 
-import { API_BASE, apiBase, switchRoute, rememberRoute } from './config.js';
+import { API_BASE, apiBase, switchRoute, rememberRoute, routeFailed, routeReport } from './config.js';
 import { tg } from './tg.js';
 
 const initData = tg?.initData || '';
@@ -104,6 +104,10 @@ async function request(path, { method = 'GET', body, timeout = 12000,
       // Дорога не довела (обрыв, молчание, чужой раздатчик) — сразу
       // пробуем следующую: прямую, зеркало. Попытку повтора не тратим.
       // Так приложение живёт в сети, где закрыт один из адресов.
+      // Обрыв или ошибка самого Cloudflare (520–530) — значит, не довела
+      // дорога. 502/503 от нашего сервера — он перезапускается, дорога
+      // ни при чём, и вход человеку из-за этого не меняем.
+      if (!err.status || (err.status >= 520 && err.status <= 530)) routeFailed(apiBase());
       if ((err.wrongHost || err.retriable) && switchRoute(tried)) {
         tried.add(apiBase());
         console.warn('дорога к серверу не отвечает, пробую', apiBase());
@@ -176,6 +180,8 @@ export function syncGroup(group) {
   if (!timer) timer = setTimeout(flush, 300);
 }
 
+let reported = false;
+
 export function flush() {
   clearTimeout(timer);
   timer = null;
@@ -183,13 +189,16 @@ export function flush() {
   const events = queue.splice(0, queue.length);
   const group = pendingGroup;
   pendingGroup = null;
-  if (!events.length && !group) return;
+  // О дорогах сообщаем один раз за заход: сервер переставит кнопку.
+  const entry = reported ? null : routeReport();
+  if (entry) reported = true;
+  if (!events.length && !group && !entry) return;
   // keepalive: запрос переживает уход со страницы, иначе последний экран
   // перед закрытием мини-аппа терялся бы всегда.
   fetch(apiBase() + '/api/track', {
     method: 'POST',
     headers: { 'X-Init-Data': initData, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ events, group }),
+    body: JSON.stringify({ events, group, entry }),
     keepalive: true,
   }).catch(() => { /* учёт не должен мешать пользоваться приложением */ });
 }

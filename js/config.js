@@ -113,6 +113,26 @@ export function switchRoute(tried) {
   return true;
 }
 
+// Какие дороги в этот заход не довели. По ним бот решает, каким входом
+// открывать приложение этому человеку: раньше он выбирал его сам через
+// /fix, а до /fix мало кто доходил (25.10.2026).
+const failed = new Set();
+
+/** Дорога не довела до сервера — сама, а не потому что сервер занят. */
+export function routeFailed(b = base) { failed.add(b); }
+
+const kindOf = b => (b === MIRROR ? 'mirror' : b === HOME ? 'direct' : '');
+
+/**
+ * Что сказать серверу о дорогах: какие не довели и какая ответила. Пусто,
+ * если всё прошло с первой попытки, — тогда и менять нечего.
+ */
+export function routeReport() {
+  const bad = [...failed].map(kindOf).filter(Boolean);
+  if (!bad.length) return null;
+  return { failed: bad, works: kindOf(base) };
+}
+
 // Совместимость: адрес, с которого начали. Для новых мест — apiBase().
 export const API_BASE = base;
 
@@ -120,4 +140,4 @@ export const API_BASE = base;
 // свежую ли страницу открыл человек: Telegram кеширует мини-приложения
 // по своим правилам, и «у меня ничего не поменялось» разбирается
 // сравнением этой строки, а не на слово.
-export const BUILD = '087a01af';
+export const BUILD = '6a7ac3d4';
