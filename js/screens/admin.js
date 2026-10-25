@@ -122,8 +122,16 @@ export default async function adminScreen() {
 }
 
 async function paint(pane) {
+  pane.onclick = null;
   try {
-    if (tab === 'stats') pane.innerHTML = await statsPane();
+    if (tab === 'stats') {
+      pane.innerHTML = await statsPane();
+      // Люди с ОРИОКС — тап ведёт в карточку, как во вкладке «Юзеры».
+      pane.onclick = e => {
+        const row = e.target.closest('[data-user]');
+        if (row) go('adminUser', { id: +row.dataset.user });
+      };
+    }
     else if (tab === 'days') await daysPane(pane);
     else if (tab === 'users') await usersPane(pane);
     else if (tab === 'raffle') await rafflePane(pane);
@@ -192,6 +200,32 @@ async function statsPane() {
     title: x.name, value: String(x.count),
   }))) : emptyState('Группу пока никто не выбрал', 'users');
 
+  const o = s.orioks || { people: [] };
+  const oTiles = [
+    [o.linked ?? 0, 'Подключили ОРИОКС'],
+    [o.web ?? 0, 'С входом на сайт'],
+    [o.notify ?? 0, 'Уведомления включены'],
+    [o.watchers ?? 0, 'Под присмотром сторожа'],
+  ];
+  const ol = o.last || {};
+  const oNote = `Баллы проверяются раз в ${o.every_min ?? 30} мин, объявления — раз в ${o.news_every_min ?? 90} мин, с 8 до 22 по Москве.`
+    + (ol.at ? ` Последний обход: ${esc(ol.at)}, ${ol.people} чел. за ${ol.secs} с${ol.told ? `, уведомлений ${ol.told}` : ''}.` : '');
+  const oRow = p => `
+    <div class="list-row tap" data-user="${p.id}">
+      ${avatar(p)}
+      <div class="list-row-body">
+        <div class="row-title">${esc(fullName(p))}${p.username ? ` · <span class="muted-name">@${esc(p.username)}</span>` : ''}</div>
+        <div class="row-subtitle">${p.group ? esc(p.group) + ' · ' : ''}подключил ${esc(ago(p.linked_at))}${p.web ? '' : ' · без сайта'}${p.notify ? '' : ' · без уведомлений'}</div>
+      </div>
+      <span class="chevron">${icon('chevronRight', 18)}</span>
+    </div>`;
+  const orioksBlock = `
+    <div class="section-head"><div class="section-title">ОРИОКС</div></div>
+    <p class="section-note">${oNote}</p>
+    <div class="kpi-grid">${oTiles.map(([n, l]) => kpi(n, l)).join('')}</div>
+    ${o.people.length ? `<div style="margin-top:10px">${listCard(o.people.map(oRow))}</div>`
+    : emptyState('ОРИОКС ещё никто не подключил', 'users')}`;
+
   const cmds = s.bot_commands.length ? listCard(s.bot_commands.map(x => listRow({
     title: x.name, value: String(x.count),
   }))) : '';
@@ -202,6 +236,8 @@ async function statsPane() {
     <div class="section-head"><div class="section-title">Лента</div></div>
     <p class="section-note">Посты людей, новости с сайта и что с ними делают.</p>
     <div class="kpi-grid">${feedTiles.map(([n, l]) => kpi(n, l)).join('')}</div>
+
+    ${orioksBlock}
 
     <div class="section-head"><div class="section-title">Помощь в заданиях</div></div>
     <div class="kpi-grid">${helpTiles.map(([n, l]) => kpi(n, l)).join('')}</div>

@@ -25,7 +25,7 @@
 
 **Молчание ОРИОКС — не повод стирать доступ.** Сессию убирает только
 явный отказ (`SessionExpired`), любая другая ошибка означает «попробуем
-через полтора часа». Иначе человек вводил бы пароль после каждой заминки
+через полчаса». Иначе человек вводил бы пароль после каждой заминки
 института — на эти грабли проект уже наступал.
 """
 from __future__ import annotations
@@ -41,9 +41,18 @@ from .render import esc
 
 log = logging.getLogger("miet.orioks.watch")
 
-# Полтора часа. Объявление пишут к занятию, а не к минуте: приходить
-# чаще значит дёргать сервер института ради того же самого ответа.
-EVERY = 90 * 60
+# Баллы — раз в полчаса: их ждут, и полтора часа после «поставили» —
+# это долго (25.10.2026). Объявления — по-прежнему раз в полтора часа,
+# то есть каждый третий круг: их пишут к занятию, а не к минуте, и
+# берутся они со страниц сайта — это вдвое больше запросов, чем баллы.
+EVERY = 30 * 60
+NEWS_EVERY = 3
+
+# Людей обходим по одному, с паузой, поэтому ОРИОКС при любом их числе
+# получает от нас не больше одного запроса за раз. Растёт только круг:
+# при сотнях людей он может оказаться длиннее EVERY — тогда следующий
+# начинается не раньше, чем через REST, и проверки сами становятся реже.
+REST = 5 * 60
 
 # Дневное окно по Москве. Начало — до первой пары, конец — раньше, чем
 # человек ложится: сообщение о домашнем задании в час ночи ничего не
@@ -58,6 +67,35 @@ IN_MESSAGE = 3
 # но узкое место здесь не он, а ОРИОКС: обход одного студента — это по
 # запросу на каждую его дисциплину.
 BETWEEN = 2.0
+
+
+def stats() -> dict:
+    """
+    Кто подключил ОРИОКС — для админки: сколько, с какими доступами и
+    поспевает ли сторож.
+    """
+    rows = conn().execute(
+        "SELECT l.user_id, l.linked_at, "
+        "COALESCE(l.web_cookie, '') <> '', COALESCE(l.notify, 1), "
+        "u.username, u.first_name, u.last_name, u.photo_url, u.group_name, "
+        "u.last_seen "
+        "FROM orioks_links l LEFT JOIN users u ON u.user_id = l.user_id "
+        "WHERE l.token IS NOT NULL AND l.token <> '' "
+        "ORDER BY l.linked_at DESC").fetchall()
+    people = [{"id": r[0], "linked_at": r[1], "web": bool(r[2]),
+               "notify": bool(r[3]), "username": r[4], "first_name": r[5],
+               "last_name": r[6], "photo_url": r[7], "group": r[8],
+               "last_seen": r[9]} for r in rows]
+    return {
+        "linked": len(people),
+        "web": sum(p["web"] for p in people),
+        "notify": sum(p["notify"] for p in people),
+        "watchers": len(watchers()),
+        "every_min": EVERY // 60,
+        "news_every_min": EVERY * NEWS_EVERY // 60,
+        "last": dict(last),
+        "people": people,
+    }
 
 
 def msk_now() -> dt.datetime:
@@ -256,11 +294,18 @@ def check_grades(user_id: int, send: bool = True) -> list:
     return changed
 
 
-def round_once(send: bool = True) -> int:
+# Последний круг — для админки: по нему видно, успевает ли сторож.
+last = {"at": "", "people": 0, "secs": 0, "told": 0, "news": False}
+
+
+def round_once(send: bool = True, news: bool = True) -> int:
     """Обход всех, кто подписан. Возвращает, скольким ушло."""
     told = 0
-    for uid in watchers():
-        for step in (check_grades, check_user):
+    started = time.time()
+    people = watchers()
+    steps = (check_grades, check_user) if news else (check_grades,)
+    for uid in people:
+        for step in steps:
             # Шаги независимы: сломался разбор объявлений — баллы
             # всё равно должны дойти, и наоборот.
             try:
@@ -269,6 +314,9 @@ def round_once(send: bool = True) -> int:
             except Exception:                              # noqa: BLE001
                 log.exception("сторож ОРИОКС споткнулся на %s", uid)
         time.sleep(BETWEEN)
+    if send:
+        last.update(at=msk_now().strftime("%d.%m %H:%M"), people=len(people),
+                    secs=round(time.time() - started), told=told, news=news)
     return told
 
 
@@ -279,13 +327,16 @@ def run_in_background() -> threading.Thread:
         # должен подняться опрос Telegram и справочник, а объявления
         # минутой раньше или позже никого не спасают.
         time.sleep(120)
+        turn = 0
         while True:
+            started = time.time()
             try:
                 if daytime():
-                    round_once()
+                    round_once(news=turn % NEWS_EVERY == 0)
+                    turn += 1
             except Exception:
                 log.exception("обход ОРИОКС сорвался")
-            time.sleep(EVERY)
+            time.sleep(max(REST, EVERY - (time.time() - started)))
 
     t = threading.Thread(target=loop, name="orioks-watch", daemon=True)
     t.start()

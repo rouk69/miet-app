@@ -1399,6 +1399,23 @@ FEED["items"] = [news(22, "Ещё одно")] + FEED["items"]
 check("круг обхода доносит новое", orioks_watch.round_once() == 1
       and len(SENT) == 1, SENT)
 
+# Круг только по баллам объявлений не трогает: они раз в три круга.
+FEED["items"] = [news(23, "Третье")] + FEED["items"]
+SENT.clear()
+orioks_watch.round_once(news=False)
+check("круг без объявлений их не шлёт", not SENT, SENT)
+check("а следующий полный — шлёт", orioks_watch.round_once() == 1, SENT)
+check("последний обход записан", orioks_watch.last["people"] >= 1
+      and orioks_watch.last["news"], orioks_watch.last)
+
+# Админка видит, кто подключил ОРИОКС.
+code, st = api.handle("GET", "/api/admin/stats", {}, {}, ADMIN)
+ost = st.get("orioks") or {}
+check("в статистике есть ОРИОКС", code == 200 and ost.get("linked", 0) >= 1
+      and any(x["id"] == 42 for x in ost.get("people", [])), ost)
+check("и частота проверок", ost.get("every_min") == 30
+      and ost.get("news_every_min") == 90, ost)
+
 # Отключение ОРИОКС уносит память об объявлениях: иначе повторное
 # подключение молча съело бы первую рассылку.
 api.handle("POST", "/api/orioks/unlink", {}, {}, USER)

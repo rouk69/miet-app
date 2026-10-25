@@ -945,6 +945,7 @@ def _admin(path: str, method: str, query: dict, body: dict, uid: int, me: dict):
         # поползло вверх, значит прямой путь до нас портится, и об этом
         # надо знать раньше, чем придут жаловаться.
         out["mirror_users"] = storage.mirror_users()
+        out["orioks"] = orioks_watch.stats()
         return 200, out
 
     if path == "/api/admin/settings":
