@@ -578,6 +578,38 @@ def _learn_entry(uid: int, entry) -> None:
     want = works == "mirror"
     if ("mirror" if not want else "direct") not in failed:
         return
+    _set_entry(uid, want)
+
+
+def learn_route(headers, init_data: str) -> None:
+    """
+    Тот же подбор входа — по самому запросу, без отчёта приложения.
+
+    Нужен тем, у кого открывается старая копия приложения из памяти
+    телефона: прямой путь закрыт, свежая страница не приезжает, и
+    отчитаться о дорогах ей нечем — а данные она уже берёт через
+    зеркало. Так это и видно: запрос пришёл через воркер (Cloudflare
+    ставит его подзапросам заголовок CF-Worker), а страница, судя по
+    Origin, открыта прямым адресом. Значит, прямой у человека не довёл.
+    И наоборот: страница с зеркала, а запрос пришёл прямо (25.10.2026).
+    """
+    mirror = webapp_watch.mirror_url()
+    origin = (headers.get("Origin") or "").rstrip("/")
+    if not mirror or not origin:
+        return
+    via_mirror = bool(headers.get("CF-Worker"))
+    if via_mirror and origin == webapp_watch.app_url():
+        want = True
+    elif not via_mirror and origin == mirror:
+        want = False
+    else:
+        return
+    user, _ = auth.check_init_data(init_data, os.environ.get("BOT_TOKEN", "").strip())
+    if user and user.get("id"):
+        _set_entry(int(user["id"]), want)
+
+
+def _set_entry(uid: int, want: bool) -> None:
     if storage.mirror_on(uid) == want:
         return
     storage.set_mirror(uid, want)
@@ -1399,6 +1431,14 @@ class Handler(BaseHTTPRequestHandler):
             # вместе с админкой замолчит и приём событий.
             log.exception("ошибка обработки %s %s", method, url.path)
             status, payload = 500, {"error": "Внутренняя ошибка"}
+        if url.path == "/api/health":
+            # Каким входом дошёл этот запрос — проверка зеркала снаружи.
+            payload = {**payload, "via": "mirror" if self.headers.get("CF-Worker") else "direct"}
+        elif status == 200 and url.path.startswith("/api/"):
+            try:
+                learn_route(self.headers, self.headers.get("X-Init-Data", ""))
+            except Exception:                           # noqa: BLE001
+                log.exception("вход по запросу не подобрался")
         self._send(status, payload)
 
     def log_message(self, fmt, *args) -> None:
