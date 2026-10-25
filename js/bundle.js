@@ -1,5 +1,5 @@
 /* Собрано tools/stamp.py из js/*.js — не правьте здесь.
-   Версия e825676b. Исходники лежат рядом и остаются модулями. */
+   Версия eaab140e. Исходники лежат рядом и остаются модулями. */
 var __mod = {};
 /* ==== js\config.js ==== */
 __mod['js/config.js'] = (function () {
@@ -145,7 +145,7 @@ const API_BASE = base;
 // свежую ли страницу открыл человек: Telegram кеширует мини-приложения
 // по своим правилам, и «у меня ничего не поменялось» разбирается
 // сравнением этой строки, а не на слово.
-const BUILD = 'e825676b';
+const BUILD = 'eaab140e';
 
 return {'MIRROR': MIRROR, 'rememberRoute': rememberRoute, 'apiBase': apiBase, 'fallBackToHome': fallBackToHome, 'switchRoute': switchRoute, 'routeFailed': routeFailed, 'routeReport': routeReport, 'API_BASE': API_BASE, 'BUILD': BUILD};
 })();
@@ -9212,7 +9212,7 @@ async function tasksScreen() {
             <div class="row-subtitle">
               Бот напишет в личку, когда поставят баллы${web
     ? ' или преподаватель выложит объявление' : ''}.
-              Проверяет днём, раз в полтора часа.
+              Баллы проверяет раз в полчаса, объявления — раз в полтора, днём.
             </div>
           </div>
           ${toggle(data.notify !== false, 'watch')}

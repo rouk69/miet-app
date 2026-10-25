@@ -812,7 +812,7 @@ export default async function tasksScreen() {
             <div class="row-subtitle">
               Бот напишет в личку, когда поставят баллы${web
     ? ' или преподаватель выложит объявление' : ''}.
-              Проверяет днём, раз в полтора часа.
+              Баллы проверяет раз в полчаса, объявления — раз в полтора, днём.
             </div>
           </div>
           ${toggle(data.notify !== false, 'watch')}
