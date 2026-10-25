@@ -126,7 +126,12 @@ def probe_mirror() -> bool | None:
         return None
     try:
         opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
-        with opener.open(mirror + "/api/health", timeout=TIMEOUT) as r:
+        # Без своего User-Agent Cloudflare отвечает 403 на «Python-urllib»,
+        # и живое зеркало считалось мёртвым — запасной вход не выдавался
+        # никому (25.10.2026).
+        req = urllib.request.Request(mirror + "/api/health",
+                                     headers={"User-Agent": "miet-bot/1.0"})
+        with opener.open(req, timeout=TIMEOUT) as r:
             body = r.read(512).decode("utf-8", "replace")
         return '"ok": true' in body or '"ok":true' in body
     except (urllib.error.URLError, OSError, ValueError) as e:
